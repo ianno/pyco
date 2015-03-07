@@ -1,0 +1,5 @@
+*.pyc
+*.out
+*.swp
+*.ltl
+tags

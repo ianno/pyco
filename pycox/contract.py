@@ -8,8 +8,8 @@
 '''
 
 from pyco.contract import Port as BasePort, Contract as BaseContract
-
 import logging
+from pycox.solver_interface import SMT_PORT_MANAGER
 
 LOG = logging.getLogger()
 
@@ -26,7 +26,7 @@ class Port(BasePort):
         Override initializer. Add SMT port model
         '''
         super(Port, self).__init__(base_name, literal, context)
-        
+        self.smt_model = SMT_PORT_MANAGER.register_port(self)
 
 
 class Contract(BaseContract):
@@ -41,3 +41,4 @@ class Contract(BaseContract):
         '''
 
         super(Contract, self).__init__(*args, **kwargs)
+        self.smt_model = SMT_PORT_MANAGER.register_contract(self)

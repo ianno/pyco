@@ -14,7 +14,36 @@ class ContractLibrary(object):
         '''
         initializer
         '''
-        pass
+        self.components = []
+
+    def add(self, library_component):
+        '''
+        add a library_component to the library object
+        '''
+        if library_component in self.components:
+            raise ValueError()
+
+        self.components.append(library_component)
+
+    def verify_library(self):
+        '''
+        Verifies that all the relations in the library are consistent
+        '''
+        for component in self.components:
+            try:
+                component.verify_refinement_assetions()
+            except NotARefinementError as error:
+                raise error
+
+    def __contains__(self, item):
+        '''
+        Overrides 'in' operator
+        '''
+        if item in self.components:
+            return True
+        else:
+            return False
+
 
 
 class LibraryComponent(object):
@@ -26,12 +55,14 @@ class LibraryComponent(object):
     the refinement information once inferred)
     '''
 
-    def __init__(self):
+    def __init__(self, library):
         '''
         initialize component
         '''
+        self.library = library
         self.contracts = {}
-        self.connections = []
+        self.connections = set()
+        self.refinement_assertions = set()
 
     def add_contract_instance(self, contract):
         '''
@@ -47,19 +78,59 @@ class LibraryComponent(object):
                 contract_b not in self.contracts.values()):
             raise KeyError()
 
-        self.connections.append(ConnectionConstraint(contract_a, contract_b, port_a, port_b))
+        self.connections.add(ConnectionConstraint(contract_a, contract_b, port_a, port_b))
 
         #connect the contracts
-        contract_b.connect(port_b, contract_a, port_a)
+        contract_b.connect_to_port(port_b, contract_a, port_a)
+
+    def add_refinement_assertion(self, abstract_library_component, force_add=False):
+        '''
+        Add a refinement assetion.
+        If force_add is True, this method raises an exception if abstract_library_component
+        is not already in the library, otherwise it will be automatically added.
+        '''
+        #verify refinement before asserting
+        local_composition = self.instantiate_composed_component()
+        other_composition = abstract_library_component.instantiate_composed_component()
+
+        if local_composition.is_refinement(other_composition):
+
+            #if the refinement is verified, we can check we have the block in the library
+            if abstract_library_component not in self.library:
+                if force_add:
+                    self.library.add(abstract_library_component)
+                else:
+                    raise ValueError()
+
+            self.refinement_assertions.add(abstract_library_component)
+
+        else:
+            raise NotARefinementError((self, abstract_library_component))
 
     def instantiate_composed_component(self):
         '''
         Create an instance of the library component
         '''
-        composed = reduce(lambda x, y: x.compose(y), self.contracts.values())
+        if len(self.contracts) == 1:
+            composed = self.contracts[0]
+        else:
+            composed = reduce(lambda x, y: x.compose(y), self.contracts.values())
+
         return composed
 
+    def verify_refinement_assertions(self):
+        '''
+        Runs a verification of all the refinement registered assertions
+        '''
 
+        local_composition = self.instantiate_composed_component()
+
+        for abstract in self.refinement_assertions:
+
+            if not local_composition.is_refinement(abstract.instantiate_commposed_component()):
+                raise NotARefinementError((self, abstract))
+
+        return True
 
 class ConnectionConstraint(object):
     '''
@@ -81,3 +152,8 @@ class ConnectionConstraint(object):
         '''
         return (self.contract_a.unique_name, self.contract_b.unique_name)
 
+class NotARefinementError(Exception):
+    '''
+    Raised in case of wrong refinement assertion
+    '''
+    pass

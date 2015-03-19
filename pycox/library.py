@@ -45,6 +45,28 @@ class ContractLibrary(object):
             return False
 
 
+    def verify_property(self, design_contract, property_contract, port_mapping):
+        '''
+        Returns True if design_contract refines property_contract, according to
+        the given mapping.
+        Implements RCPL algorithm
+        '''
+        pass
+
+    def verify_property_RCP(self, design_contract, property_contract, port_mapping):
+        '''
+        Low efficiency version of verify_property. Implememtns the RCP algorithm
+        '''
+        pass
+
+    def synthesize_design(self, partial_design, property_contract, port_mapping):
+        '''
+        Returns a new composition of contracts from the library which
+        is consistent and compatible and refines property_contract
+        '''
+        pass
+
+
 
 class LibraryComponent(object):
     '''

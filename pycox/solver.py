@@ -50,3 +50,35 @@ def synthesize_design(spec_contract, partial_design_contract, library):
              or None if no solution is found
     '''
     pass
+
+
+class MappingEnumerator(object):
+    '''
+    This class keeps track of possible mappings between a set
+    of ports of a contract and another contract.
+    It is also possible request the generation of a new mapping
+    not used before.
+    '''
+
+    def __init__(self, contract, candidate_contract, ports=None):
+        '''
+        init.
+        If ports is None, all the ports are going to be mapped
+        '''
+        if ports is None:
+            self.ports = []
+        else:
+            self.ports = ports
+
+        self.contract = contract
+        self.candidate_contract = candidate_contract
+
+        self.mapping_history = []
+
+    def new_mapping(self):
+        '''
+        Returns a new mapping
+        '''
+
+        #call method from solver_interface
+        pass

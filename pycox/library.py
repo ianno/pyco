@@ -4,6 +4,10 @@ to the concept of library of contracts
 
 Author: Antonio Iannopollo
 '''
+import logging
+
+LOG = logging.getLogger()
+LOG.debug('in library')
 
 class ContractLibrary(object):
     '''
@@ -53,7 +57,7 @@ class ContractLibrary(object):
         '''
         pass
 
-    def verify_property_RCP(self, design_contract, property_contract, port_mapping):
+    def verify_property_rcp(self, design_contract, property_contract, port_mapping):
         '''
         Low efficiency version of verify_property. Implememtns the RCP algorithm
         '''

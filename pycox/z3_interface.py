@@ -7,7 +7,6 @@ Author: Antonio Iannopollo
 import logging
 from pycox.smt_factory import SMTModelFactory
 import z3
-from pycox.solver_interface import SMT_PORT_MANAGER, SMT_CONTRACT_MANAGER
 
 LOG = logging.getLogger()
 LOG.debug('in z3_interface')

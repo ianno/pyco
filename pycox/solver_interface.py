@@ -10,22 +10,24 @@ from pycox.z3_interface import Z3
 LOG = logging.getLogger()
 LOG.debug('In solver_interface')
 
-class SMTPortManager(object):
+class SMTNameManager(object):
     '''
     Manage the interface between Ports and SMT
     '''
 
-    port_base_names = {}
-    port_unique_names = {}
-    contract_base_names = {}
-    contract_unique_names = {}
 
-    def __init__(self):
+
+    def __init__(self, solver=Z3):
         '''
         Defines init behavior, e.g. where to save list
         of parameters
         '''
-        pass
+        self.port_base_names = {}
+        self.port_unique_names = {}
+        self.contract_base_names = {}
+        self.contract_unique_names = {}
+        self.solver = solver
+
 
 
     def register_port(self, port):
@@ -38,7 +40,6 @@ class SMTPortManager(object):
         self.port_base_names[port] = port.base_name
         self.port_unique_names[port] = port.unique_name
 
-        return Z3.create_port_model(port)
 
     def register_contract(self, contract):
         '''
@@ -51,6 +52,18 @@ class SMTPortManager(object):
         self.contract_base_names[contract] = contract.base_name
         self.contract_unique_names[contract] = contract.unique_name
 
+    def get_port_model(self, port):
+        '''
+        returns port model
+        '''
+        return self.solver.create_port_model(port)
+
+    def get_contract_model(self, contract):
+        '''
+        returns contract model
+        '''
+        return self.solver.create_contract_model(contract)
+
 
 class UnregisteredPortError(Exception):
     '''
@@ -58,4 +71,4 @@ class UnregisteredPortError(Exception):
     '''
 
 #default interface
-SMT_PORT_MANAGER = SMTPortManager()
+SMT_PORT_MANAGER = SMTNameManager()

@@ -5,6 +5,8 @@ to the concept of library of contracts
 Author: Antonio Iannopollo
 '''
 import logging
+from pyco.attribute import Attribute
+from pycox.contract import ContractMapping
 
 LOG = logging.getLogger()
 LOG.debug('in library')
@@ -14,11 +16,13 @@ class ContractLibrary(object):
     Implementation of the library of contracts
     '''
 
-    def __init__(self):
+    def __init__(self, base_name, context=None):
         '''
         initializer
         '''
         self.components = []
+        self.context = context
+        self.name_attribute = Attribute(base_name, context)
 
     def add(self, library_component):
         '''
@@ -27,6 +31,7 @@ class ContractLibrary(object):
         if library_component in self.components:
             raise ValueError()
 
+        library_component.register_to_library(self)
         self.components.append(library_component)
 
     def verify_library(self):
@@ -81,14 +86,22 @@ class LibraryComponent(object):
     the refinement information once inferred)
     '''
 
-    def __init__(self, library):
+    def __init__(self, base_name='', context=None):
         '''
         initialize component
         '''
-        self.library = library
+        self.library = None
         self.contracts = {}
         self.connections = set()
         self.refinement_assertions = set()
+        self.context = context
+        self.name_attribute = Attribute(base_name, context)
+
+    def register_to_library(self, library):
+        '''
+        Track who uses it
+        '''
+        self.library = library
 
     def add_contract_instance(self, contract):
         '''
@@ -109,15 +122,22 @@ class LibraryComponent(object):
         #connect the contracts
         contract_b.connect_to_port(port_b, contract_a, port_a)
 
-    def add_refinement_assertion(self, abstract_library_component, force_add=False):
+    def add_refinement_assertion(self, abstract_library_component, port_mapping = None, force_add=False):
         '''
         Add a refinement assetion.
         If force_add is True, this method raises an exception if abstract_library_component
         is not already in the library, otherwise it will be automatically added.
         '''
-        #verify refinement before asserting
+        if port_mapping is None:
+            port_mapping = []
+
+        #verify refinement before asserting.
+        #instantiate_composed_component returns copies
         local_composition = self.instantiate_composed_component()
         other_composition = abstract_library_component.instantiate_composed_component()
+
+        #connect ports according to mapping relation
+        
 
         if local_composition.is_refinement(other_composition):
 
@@ -142,7 +162,7 @@ class LibraryComponent(object):
         else:
             composed = reduce(lambda x, y: x.compose(y), self.contracts.values())
 
-        return composed
+        return composed.copy()
 
     def verify_refinement_assertions(self):
         '''
@@ -157,6 +177,7 @@ class LibraryComponent(object):
                 raise NotARefinementError((self, abstract))
 
         return True
+
 
 class ConnectionConstraint(object):
     '''
@@ -177,6 +198,8 @@ class ConnectionConstraint(object):
         returns a tuple containing the names of connected contracts
         '''
         return (self.contract_a.unique_name, self.contract_b.unique_name)
+
+
 
 class NotARefinementError(Exception):
     '''

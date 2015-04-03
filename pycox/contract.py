@@ -27,7 +27,8 @@ class Port(BasePort):
         Override initializer. Add SMT port model
         '''
         super(Port, self).__init__(base_name, literal, context)
-        self.smt_model = SMT_PORT_MANAGER.register_port(self)
+        SMT_PORT_MANAGER.register_port(self)
+        self.smt_model = SMT_PORT_MANAGER.get_port_model(self)
 
 
 class Contract(BaseContract):
@@ -60,8 +61,9 @@ class Contract(BaseContract):
                                        assume_formula, guarantee_formula,
                                        symbol_set_cls, context,
                                        saturated)
-        self.smt_model = SMT_PORT_MANAGER.register_contract(self)
 
+        SMT_PORT_MANAGER.register_contract(self)
+        self.smt_model = SMT_PORT_MANAGER.get_contract_model(self)
 
 
 class ContractMapping(object):
@@ -85,7 +87,7 @@ class ContractMapping(object):
         self.contract_a = contract_a
         self.contract_b = contract_b
 
-        self.mapping = []
+        self.mapping = set()
         '''
         mapping is a list of pairs, which are port
         base_names who needs to be equivalent.
@@ -98,10 +100,11 @@ class ContractMapping(object):
         :param base_name_a: base_name of port in contract_a
         :param base_name_b: base_name of port in contract_b
         '''
+        #redundant check...
         if (base_name_a, base_name_b) in self.mapping:
             raise RedundantMappingError((base_name_a, base_name_b))
 
-        self.mapping.append((base_name_a, base_name_b))
+        self.mapping.add((base_name_a, base_name_b))
 
 
 

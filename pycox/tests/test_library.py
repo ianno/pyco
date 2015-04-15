@@ -7,7 +7,7 @@ Author: Antonio Iannopollo
 import pytest
 from pycox.contract import Contract
 from pycox.library import (LibraryComponent, ContractLibrary, RefinementPortMapping,
-                           RefinementAssertionError, NotARefinementError)
+                           RefinementAssertionError, NotARefinementError, EquivalentComponentError)
 from pycox.tests.test_contracts import (TrueContract, FalseContract,
                                         FutureContract, NextContract)
 import logging
@@ -175,6 +175,20 @@ def test_not_in_lib(future_component, next_component, library):
 
     with pytest.raises(ValueError):
         next_component.add_refinement_assertion(future_component, mapping)
+
+def test_equivalent(next_component, library):
+    '''
+    Assert a true refinement relation and verifies it
+    '''
+    library.add(next_component)
+
+    mapping = RefinementPortMapping(next_component.contract, next_component.contract)
+    mapping.add(next_component.contract.a, next_component.contract.a)
+    mapping.add(next_component.contract.b, next_component.contract.b)
+
+    with pytest.raises(EquivalentComponentError):
+        next_component.add_refinement_assertion(next_component, mapping)
+
 
 def test_verify_library(minimal_library):
     '''

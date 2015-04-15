@@ -125,9 +125,11 @@ class LibraryComponent(object):
     #    #contract_b.connect_to_port(port_b, contract_a, port_a)
 
 
-    def verify_refinement(self, assertion):
+    def verify_refinement(self, assertion, enforce_strict=False):
         '''
-        verify a refinement assertion
+        verify a refinement assertion.
+        If enforce_strict is true, a EquivalentComponentError will be raised
+        if the two contracts are equivalent
         '''
 
         if self is not assertion.component:
@@ -150,6 +152,11 @@ class LibraryComponent(object):
         if not local_contract.is_refinement(other_contract):
             raise NotARefinementError(assertion)
 
+        if enforce_strict:
+            #error if refinemen also in the other direction
+            if other_contract.is_refinement(local_contract):
+                raise EquivalentComponentError(assertion)
+
         return
 
 
@@ -169,8 +176,10 @@ class LibraryComponent(object):
         assertion = RefinementAssertion(self, abstract_component, port_mapping)
 
         try:
-            self.verify_refinement(assertion)
+            self.verify_refinement(assertion, enforce_strict=True)
         except NotARefinementError as err:
+            raise err
+        except EquivalentComponentError as err:
             raise err
         else:
             #if the refinement is verified, we can check we have the block in the library
@@ -368,5 +377,12 @@ class NotARefinementError(Exception):
 class RefinementAssertionError(Exception):
     '''
     Raised in case of errors related to refinement assertions
+    '''
+    pass
+
+class EquivalentComponentError(Exception):
+    '''
+    Raised if a component is equivalent to the another one in defining
+    a refinement assertion
     '''
     pass

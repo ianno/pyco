@@ -6,7 +6,7 @@ Author: Antonio Iannopollo
 '''
 import logging
 from pyco.attribute import Attribute
-from pycox.contract import ContractMapping
+from pycox.contract import ContractMapping, PortMappingError, PortMapping
 
 LOG = logging.getLogger()
 LOG.debug('in library')
@@ -86,13 +86,12 @@ class LibraryComponent(object):
     the refinement information once inferred)
     '''
 
-    def __init__(self, base_name='', context=None):
+    def __init__(self, base_name, contract, context=None):
         '''
         initialize component
         '''
         self.library = None
-        self.contracts = {}
-        self.connections = set()
+        self.contract = contract
         self.refinement_assertions = set()
         self.context = context
         self.name_attribute = Attribute(base_name, context)
@@ -103,106 +102,244 @@ class LibraryComponent(object):
         '''
         self.library = library
 
-    def add_contract_instance(self, contract):
-        '''
-        Add a contract instance to the library component
-        '''
-        self.contracts[contract.unique_name] = contract
+    #def add_contract_instance(self, contract):
+    #    '''
+    #    Add a contract instance to the library component
+    #    '''
+    #    self.contracts[contract.unique_name] = contract
 
-    def add_connection(self, contract_a, contract_b, port_a, port_b):
+    #def add_connection(self, port_a, port_b):
+    #    '''
+    #    Define a new connection between two contracts
+    #    '''
+    #    if (port_a.contract not in self.contracts.values() or
+    #            port_b.contract not in self.contracts.values()):
+    #        raise KeyError()
+
+    #    self.connections.add(port_a, port_b)
+
+    #    #connect the contracts
+    #    #not now, done once we request a new instance
+    #    #contract_b.connect_to_port(port_b, contract_a, port_a)
+
+
+    def verify_refinement_assertion(self, assertion):
         '''
-        Define a new connection between two contracts
+        verify a refinement assertion
         '''
-        if (contract_a not in self.contracts.values() or
-                contract_b not in self.contracts.values()):
-            raise KeyError()
 
-        self.connections.add(ConnectionConstraint(contract_a, contract_b, port_a, port_b))
+        if self is not assertion.component:
+            raise RefinementAssertionError(assertion)
 
-        #connect the contracts
-        contract_b.connect_to_port(port_b, contract_a, port_a)
+        port_mapping = assertion.port_mapping
+        contract = assertion.component.contract
+        abstract_contract = assertion.abstract_component.contract
 
-    def add_refinement_assertion(self, abstract_library_component, port_mapping = None, force_add=False):
+        #get copies
+        new_contracts, new_mapping = port_mapping.get_mapping_copies()
+
+        local_contract = new_contracts[contract]
+        other_contract = new_contracts[abstract_contract]
+
+        #connect ports according to mapping relation
+        for (port_a, port_b) in new_mapping.mapping:
+            port_a.contract.connect_to_port(port_a, port_b)
+
+        if not local_contract.is_refinement(other_contract):
+            raise NotARefinementError(assertion)
+
+        return
+
+
+    def add_refinement_assertion(self, abstract_component, port_mapping=None, force_add=False):
         '''
         Add a refinement assetion.
         If force_add is True, this method raises an exception if abstract_library_component
         is not already in the library, otherwise it will be automatically added.
         '''
         if port_mapping is None:
-            port_mapping = []
+            port_mapping = RefinementPortMapping(self.contract, abstract_component.contract)
 
-        #verify refinement before asserting.
-        #instantiate_composed_component returns copies
-        local_composition = self.instantiate_composed_component()
-        other_composition = abstract_library_component.instantiate_composed_component()
+        if ((self.contract not in port_mapping.contracts) or
+                (abstract_component.contract not in port_mapping.contracts)):
+            raise PortMappingError(port_mapping)
 
-        #connect ports according to mapping relation
-        
+        assertion = RefinementAssertion(self, abstract_component, port_mapping)
 
-        if local_composition.is_refinement(other_composition):
-
+        try:
+            self.verify_refinement_assertion(assertion)
+        except NotARefinementError as err:
+            raise err
+        else:
             #if the refinement is verified, we can check we have the block in the library
-            if abstract_library_component not in self.library:
+            if abstract_component not in self.library:
                 if force_add:
-                    self.library.add(abstract_library_component)
+                    self.library.add(abstract_component)
                 else:
                     raise ValueError()
 
-            self.refinement_assertions.add(abstract_library_component)
+            #save assertion
+            self.refinement_assertions.add(assertion)
 
-        else:
-            raise NotARefinementError((self, abstract_library_component))
+#    def instantiate_composed_component(self):
+#        '''
+#        Create an instance of the library component
+#        '''
+#        #new_instances = [comp.copy() for comp in self.contracts.values()]
+#
+#        #new_contracts = {}
+#        nctew_connections = set()
+#        for unique_name,contract in self.contracts.items():
+#            new_contracts[unique_name] = contract.copy()
+#
+#        for port_a, port_b in self.connections:
+#            contract_uname_a = port_a.contract.unique_name
+#            contract_uname_b = port_b.contract.unique_name
+#
+#            #get port for the new contract a and b
+#            new_port_a = new_contracts[contract_uname_a].ports_dict[port_a.base_name]
+#            new_port_b = new_contracts[contract_uname_b].ports_dict[port_b.base_name]
+#
+#            new_connections.add(new_port_a, new_port_b)
+#
+#        return (new_contracts, new_connections)
 
-    def instantiate_composed_component(self):
-        '''
-        Create an instance of the library component
-        '''
-        if len(self.contracts) == 1:
-            composed = self.contracts[0]
-        else:
-            composed = reduce(lambda x, y: x.compose(y), self.contracts.values())
+        #connect instances according to connection mapping
+        #we need to reassign ports
+        #...
+#        composed = reduce(lambda x, y: x.compose(y), )
 
-        return composed.copy()
+#       return composed.copy()
 
     def verify_refinement_assertions(self):
         '''
         Runs a verification of all the refinement registered assertions
         '''
 
-        local_composition = self.instantiate_composed_component()
+        for assertion in self.refinement_assertions:
+            try:
+                self.verify_refinement_assertion(assertion)
+            except NotARefinementError as err:
+                raise err
 
-        for abstract in self.refinement_assertions:
-
-            if not local_composition.is_refinement(abstract.instantiate_commposed_component()):
-                raise NotARefinementError((self, abstract))
-
-        return True
+        return
 
 
-class ConnectionConstraint(object):
+class RefinementAssertion(object):
     '''
-    Store info related to a connection constraint
+    Store a refinement assertion
     '''
 
-    def __init__(self, contract_a, contract_b, port_a_name, port_b_name):
+    def __init__(self, component, abstract_component, port_mapping):
         '''
-        initialize
+        Stores the information
         '''
-        self.contract_a = contract_a
-        self.contract_b = contract_b
-        self.port_a = port_a_name
-        self.port_b = port_b_name
+        self.component = component
+        self.abstract_component = abstract_component
+        self.port_mapping = port_mapping
 
-    def connected_contract_unique_names(self):
+        self.verify_assertion()
+
+    def verify_assertion(self):
         '''
-        returns a tuple containing the names of connected contracts
+        verify valid assertion.
+        Raises an exception in case of malformed assertion
         '''
-        return (self.contract_a.unique_name, self.contract_b.unique_name)
+
+        if ((self.component.contract not in self.port_mapping.contracts) or
+                (self.abstract_component.contract not in self.port_mapping.contracts)):
+
+            raise PortMappingError(self)
+
+class RefinementPortMapping(object):
+    '''
+    Defines a port mapping to be used in checking refinement in library
+    '''
+
+    def __init__(self, contract, other_contract):
+        '''
+        initialize data structures
+        '''
+        self.contract = contract
+        self.other_contract = other_contract
+
+        self.contracts = (contract, other_contract)
+
+        self.mapping = set()
+
+    def _validate_port(self, port):
+        '''
+        Check if a port is properly assigned to the mapping
+        '''
+        if port.contract not in self.contracts:
+            raise PortMappingError(port)
+
+    def add(self, port_a, port_b):
+        '''
+        add a mapping pair to the list
+        '''
+        self._validate_port(port_a)
+        self._validate_port(port_b)
+
+        self.add((port_a, port_b))
+
+
+    def get_mapping_copies(self):
+        '''
+        returns a copy of the contracts and an updated
+        RefinementPortMapping object related to those copies
+
+        :returns: a pair, in which the first element is a dictionary containing a reference
+                  to the copied contracts, and a RefinementPortMapping object
+        '''
+
+        new_contracts = {}
+        new_contracts[self.contract] = self.contract.copy()
+        new_contracts[self.other_contract] = self.other_contract.copy()
+
+        new_mapping = RefinementPortMapping(new_contracts[self.contract],
+                                            new_contracts[self.other_contract])
+
+        for (port_a, port_b) in self.mapping:
+            new_mapping.add(new_contracts[port_a.contract].ports_dict[port_a.base_name],
+                            new_contracts[port_b.contract].ports_dict[port_b.base_name])
+
+        return (new_contracts, new_mapping)
+
+
+PortMapping.register(RefinementPortMapping)
+
+
+#class ConnectionConstraint(object):
+#    '''
+#    Store info related to a connection constraint
+#    '''
+#
+#    def __init__(self, port_a, port_b):
+#        '''
+#        initialize
+#        '''
+#        self.contract_a = port_a.contract
+#        self.contract_b = port_b.contract
+#        self.port_a = port_a
+#        self.port_b = port_b
+#
+#    def connected_contract_unique_names(self):
+#        '''
+#        returns a tuple containing the names of connected contracts
+#        '''
+#        return (self.contract_a.unique_name, self.contract_b.unique_name)
 
 
 
 class NotARefinementError(Exception):
     '''
     Raised in case of wrong refinement assertion
+    '''
+    pass
+
+class RefinementAssertionError(Exception):
+    '''
+    Raised in case of errors related to refinement assertions
     '''
     pass

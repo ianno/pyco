@@ -22,11 +22,11 @@ class Port(BasePort):
     In addition to the base class, here every Port has a related SMT object.
     '''
 
-    def __init__(self, base_name, literal=None, context=None):
+    def __init__(self, base_name, contract=None, literal=None, context=None):
         '''
         Override initializer. Add SMT port model
         '''
-        super(Port, self).__init__(base_name, literal, context)
+        super(Port, self).__init__(base_name, contract, literal, context)
         SMT_PORT_MANAGER.register_port(self)
         self.smt_model = SMT_PORT_MANAGER.get_port_model(self)
 
@@ -93,27 +93,30 @@ class ContractMapping(object):
         base_names who needs to be equivalent.
         '''
 
-    def add(self, base_name_a, base_name_b):
+    def _validate_ports(self, port_a, port_b):
+        '''
+        raises an exception if port is not related to one of the mapped contract
+        '''
+        if (port_a.contract is not self.contract_a) or (port_b.contract is not self.contract_b):
+            raise PortMappingError()
+
+    def add(self, port_a, port_b):
         '''
         Add a map constraint between ports in contract_a and contract_b.
 
         :param base_name_a: base_name of port in contract_a
         :param base_name_b: base_name of port in contract_b
         '''
-        #redundant check...
-        if (base_name_a, base_name_b) in self.mapping:
-            raise RedundantMappingError((base_name_a, base_name_b))
-
-        self.mapping.add((base_name_a, base_name_b))
+        self._validate_ports(port_a, port_b)
+        self.mapping.add((port_a, port_b))
 
 
 
-class RedundantMappingError(Exception):
+class PortMappingError(Exception):
     '''
     Raised if a mapping constraint is add more than once
     '''
     pass
-
 
 
 

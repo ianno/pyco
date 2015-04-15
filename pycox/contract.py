@@ -7,7 +7,7 @@
 
 '''
 
-from pyco.contract import Port as BasePort, Contract as BaseContract
+from pyco.contract import Port as BasePort, Contract as BaseContract, PortMapping
 from pyco.parser.lexer import BaseSymbolSet
 import logging
 from pycox.solver_interface import SMT_PORT_MANAGER

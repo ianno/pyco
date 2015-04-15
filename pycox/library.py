@@ -40,8 +40,10 @@ class ContractLibrary(object):
         '''
         for component in self.components:
             try:
-                component.verify_refinement_assetions()
+                component.verify_refinement_assertions()
             except NotARefinementError as error:
+                LOG.debug('in verify_library')
+                LOG.debug(error)
                 raise error
 
     def __contains__(self, item):
@@ -123,7 +125,7 @@ class LibraryComponent(object):
     #    #contract_b.connect_to_port(port_b, contract_a, port_a)
 
 
-    def verify_refinement_assertion(self, assertion):
+    def verify_refinement(self, assertion):
         '''
         verify a refinement assertion
         '''
@@ -167,7 +169,7 @@ class LibraryComponent(object):
         assertion = RefinementAssertion(self, abstract_component, port_mapping)
 
         try:
-            self.verify_refinement_assertion(assertion)
+            self.verify_refinement(assertion)
         except NotARefinementError as err:
             raise err
         else:
@@ -218,11 +220,26 @@ class LibraryComponent(object):
 
         for assertion in self.refinement_assertions:
             try:
-                self.verify_refinement_assertion(assertion)
+                self.verify_refinement(assertion)
             except NotARefinementError as err:
+                LOG.debug('here')
+                LOG.debug(assertion)
                 raise err
 
         return
+
+    def __getattr__(self, port_name):
+        '''
+        Checks if port_name is in ports_dict and consider it as a Contract attribute.
+        IF it is present, returns the
+        requested port, otherwise raises a AttributeError exception
+        '''
+
+        if port_name in self.contract.ports_dict:
+            return self.contract.ports_dict[port_name]
+        else:
+            raise AttributeError
+
 
 
 class RefinementAssertion(object):
@@ -251,6 +268,8 @@ class RefinementAssertion(object):
 
             raise PortMappingError(self)
 
+
+
 class RefinementPortMapping(object):
     '''
     Defines a port mapping to be used in checking refinement in library
@@ -260,10 +279,18 @@ class RefinementPortMapping(object):
         '''
         initialize data structures
         '''
-        self.contract = contract
-        self.other_contract = other_contract
 
-        self.contracts = (contract, other_contract)
+        if type(contract) is LibraryComponent:
+            self.contract = contract.contract
+        else:
+            self.contract = contract
+
+        if type(other_contract) is LibraryComponent:
+            self.other_contract = other_contract.contract
+        else:
+            self.other_contract = other_contract
+
+        self.contracts = (self.contract, self.other_contract)
 
         self.mapping = set()
 
@@ -281,7 +308,7 @@ class RefinementPortMapping(object):
         self._validate_port(port_a)
         self._validate_port(port_b)
 
-        self.add((port_a, port_b))
+        self.mapping.add((port_a, port_b))
 
 
     def get_mapping_copies(self):

@@ -25,6 +25,24 @@ class FalseContract(Contract):
     INPUT_PORTS = ['c']
     OUTPUT_PORTS = ['d']
 
+class FutureContract(Contract):
+    '''
+    A contract that assumes Fa and guarantees Fx
+    '''
+    ASSUMPTIONS = 'Fa'
+    GUARANTEES = 'Fx'
+    INPUT_PORTS = ['a']
+    OUTPUT_PORTS = ['x']
+
+class NextContract(Contract):
+    '''
+    A contract that assumes everything and guarantees Xb
+    '''
+    ASSUMPTIONS = 'true'
+    GUARANTEES = 'Xb'
+    INPUT_PORTS = ['a']
+    OUTPUT_PORTS = ['b']
+
 @pytest.fixture(scope='module', params=[TrueContract, FalseContract])
 def inst_contract(request):
     '''

@@ -6,7 +6,7 @@ Author: Antonio Iannopollo
 '''
 import logging
 from pyco.attribute import Attribute
-from pycox.contract import ContractMapping, PortMappingError, PortMapping
+from pycox.contract import ContractMapping, PortMappingError, PortMapping, CompositionMapping
 
 LOG = logging.getLogger()
 LOG.debug('in library')
@@ -88,15 +88,28 @@ class LibraryComponent(object):
     the refinement information once inferred)
     '''
 
-    def __init__(self, base_name, contract, context=None):
+    def __init__(self, base_name, components, mapping=None, context=None):
         '''
         initialize component
         '''
         self.library = None
-        self.contract = contract
+        self.mapping = mapping
+        try:
+            self.components = set(components)
+            self._contracts = None
+            self.contract = self.get_composite_instance()
+        except TypeError:
+            #it is a single contract instead of a list
+            self._contracts = set()
+            self._contracts.add(components)
+            self.contract = components.copy()
+            self.components = None
+
         self.refinement_assertions = set()
         self.context = context
-        self.name_attribute = Attribute(base_name, context)
+
+        self.name_attribute = Attribute(base_name, self.context)
+
 
     def register_to_library(self, library):
         '''
@@ -104,12 +117,25 @@ class LibraryComponent(object):
         '''
         self.library = library
 
+    def get_composite_instance(self):
+        '''
+        Returns a new contract created by composing all
+        the contracts associated to the component
+        '''
+        (new_contracts, new_mapping) = self.mapping.get_mapping_copies()
+
+        contracts = new_contracts.viewvalues()
+
+        root = contracts.pop()
+
+        return root.compose(contracts, composition_mapping=new_mapping)
+
     #def add_contract_instance(self, contract):
     #    '''
     #    Add a contract instance to the library component
-    #    '''
     #    self.contracts[contract.unique_name] = contract
 
+    #    self.contracts[contract.unique_name] = contract
     #def add_connection(self, port_a, port_b):
     #    '''
     #    Define a new connection between two contracts
@@ -167,7 +193,7 @@ class LibraryComponent(object):
         is not already in the library, otherwise it will be automatically added.
         '''
         if port_mapping is None:
-            port_mapping = RefinementPortMapping(self.contract, abstract_component.contract)
+            port_mapping = LibraryPortMapping(self.contract, abstract_component.contract)
 
         if ((self.contract not in port_mapping.contracts) or
                 (abstract_component.contract not in port_mapping.contracts)):
@@ -237,6 +263,16 @@ class LibraryComponent(object):
 
         return
 
+    @property
+    def contracts(self):
+        '''
+        Returns a set of contracts taken from the associate components
+        '''
+        if self._contracts is None:
+            self.contracts = set([comp.contract for comp in self.components])
+
+        return self._contracts
+
     def __getattr__(self, port_name):
         '''
         Checks if port_name is in ports_dict and consider it as a Contract attribute.
@@ -279,27 +315,63 @@ class RefinementAssertion(object):
 
 
 
-class RefinementPortMapping(object):
+class LibraryCompositionMapping(object):
+    '''
+    Adapts CompositionMapping for library and components
+    '''
+
+    def __init__(self, components, context=None):
+        '''
+        Extract contracts from components
+        '''
+        self.components = components
+
+        self.composition_mapping = CompositionMapping([component.contract
+                                                       for component in components],
+                                                      context)
+        return
+
+
+    def get_mapping_copies(self):
+        '''
+        returns a copy of the contracts and an updated
+        LibraryPortMapping object related to those copies
+
+        :returns: a pair, in which the first element is a dictionary containing a reference
+                  to the copied contracts, and a LibraryPortMapping object
+        '''
+
+        new_contracts = {contract: contract.copy()
+                         for contract in self.composition_mapping.contracts}
+
+        new_mapping = CompositionMapping(new_contracts.viewvalues())
+
+        for (port_a, port_b) in self.composition_mapping.mapping:
+            new_mapping.add(new_contracts[port_a.contract].ports_dict[port_a.base_name],
+                            new_contracts[port_b.contract].ports_dict[port_b.base_name])
+
+        return (new_contracts, new_mapping)
+
+
+
+
+class LibraryPortMapping(ContractMapping):
     '''
     Defines a port mapping to be used in checking refinement in library
     '''
 
-    def __init__(self, contract, other_contract):
+    def __init__(self, *args):
         '''
         initialize data structures
         '''
 
-        if type(contract) is LibraryComponent:
-            self.contract = contract.contract
-        else:
-            self.contract = contract
+        self.contracts = set()
 
-        if type(other_contract) is LibraryComponent:
-            self.other_contract = other_contract.contract
-        else:
-            self.other_contract = other_contract
-
-        self.contracts = (self.contract, self.other_contract)
+        for arg in args:
+            if type(arg) is LibraryComponent:
+                self.contracts.add(arg.contract)
+            else:
+                self.contracts.add(arg)
 
         self.mapping = set()
 
@@ -323,18 +395,15 @@ class RefinementPortMapping(object):
     def get_mapping_copies(self):
         '''
         returns a copy of the contracts and an updated
-        RefinementPortMapping object related to those copies
+        LibraryPortMapping object related to those copies
 
         :returns: a pair, in which the first element is a dictionary containing a reference
-                  to the copied contracts, and a RefinementPortMapping object
+                  to the copied contracts, and a LibraryPortMapping object
         '''
 
-        new_contracts = {}
-        new_contracts[self.contract] = self.contract.copy()
-        new_contracts[self.other_contract] = self.other_contract.copy()
+        new_contracts = {contract: contract.copy() for contract in self.contracts}
 
-        new_mapping = RefinementPortMapping(new_contracts[self.contract],
-                                            new_contracts[self.other_contract])
+        new_mapping = LibraryPortMapping(*new_contracts)
 
         for (port_a, port_b) in self.mapping:
             new_mapping.add(new_contracts[port_a.contract].ports_dict[port_a.base_name],
@@ -343,7 +412,7 @@ class RefinementPortMapping(object):
         return (new_contracts, new_mapping)
 
 
-PortMapping.register(RefinementPortMapping)
+PortMapping.register(LibraryPortMapping)
 
 
 #class ConnectionConstraint(object):

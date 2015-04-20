@@ -7,7 +7,8 @@
 
 '''
 
-from pyco.contract import Port as BasePort, Contract as BaseContract, PortMapping
+from pyco.contract import (Port as BasePort, Contract as BaseContract, PortMapping,
+                           CompositionMapping)
 from pyco.parser.lexer import BaseSymbolSet
 import logging
 from pycox.solver_interface import SMT_PORT_MANAGER
@@ -69,7 +70,7 @@ class Contract(BaseContract):
 class ContractMapping(object):
     '''
     This class stores the information about mapping a certain number
-    of ports of a contract to another.
+    of ports among a set of contracts.
     This can be seen as a generalization of the concept of port conncetion.
     The main difference is that while the connection is a strong bond among
     contracts (e.g. a design constraint), a mapping relation is a loose
@@ -77,15 +78,13 @@ class ContractMapping(object):
     a absolute constraint and can be modified or deleted.
     '''
 
-    def __init__(self, contract_a, contract_b):
+    def __init__(self, *args):
         '''
         Instantiate a mapping constraint.
 
-        :param contract_a: instance or class of type Contract
-        :param contract_b: instance or class of type Contract
+        :param *args: instances of type Contract
         '''
-        self.contract_a = contract_a
-        self.contract_b = contract_b
+        self.contracts = set(args)
 
         self.mapping = set()
         '''
@@ -93,11 +92,11 @@ class ContractMapping(object):
         base_names who needs to be equivalent.
         '''
 
-    def _validate_ports(self, port_a, port_b):
+    def _validate_port(self, port):
         '''
         raises an exception if port is not related to one of the mapped contract
         '''
-        if (port_a.contract is not self.contract_a) or (port_b.contract is not self.contract_b):
+        if port.contract is not self.contracts:
             raise PortMappingError()
 
     def add(self, port_a, port_b):
@@ -107,9 +106,11 @@ class ContractMapping(object):
         :param base_name_a: base_name of port in contract_a
         :param base_name_b: base_name of port in contract_b
         '''
-        self._validate_ports(port_a, port_b)
+        self._validate_port(port_a)
+        self._validate_port(port_b)
         self.mapping.add((port_a, port_b))
 
+PortMapping.register(ContractMapping)
 
 
 class PortMappingError(Exception):

@@ -72,7 +72,7 @@ def comp_ab(comp_a, comp_b):
        [B] -b2-
     '''
     mapping = LibraryCompositionMapping((comp_a, comp_b))
-    mapping.composition_mapping.connect(comp_a.a, comp_b.b)
+    mapping.composition_mapping.connect(comp_a.a, comp_b.a)
     mapping.composition_mapping.add(comp_a.b, 'b1')
     mapping.composition_mapping.add(comp_b.b, 'b2')
 
@@ -125,10 +125,12 @@ def test_populate(comp_a, comp_b, comp_ab, comp_meta, library):
     #add refinement assertion
     mapping = LibraryPortMapping([comp_ab, comp_meta])
     mapping.add(comp_ab.a, comp_meta.a)
-    mapping.add(comp_ab.b1, comp_meta.b)
+    mapping.add(comp_ab.b2, comp_meta.b)
 
-    comp_ab.add_refinement_assertion(comp_meta, mapping)
+    LOG.debug(comp_ab.contract)
 
+    with pytest.raises(NotARefinementError):
+        comp_ab.add_refinement_assertion(comp_meta, mapping)
     library.verify_library()
     assert True
 

@@ -45,7 +45,7 @@ class Contract(BaseContract):
     def __init__(self, base_name, input_ports=None, output_ports=None,
                  assume_formula=None, guarantee_formula=None,
                  symbol_set_cls=BaseSymbolSet, context=None,
-                 saturated=True):
+                 saturated=False):
         '''
         Initialization
         '''

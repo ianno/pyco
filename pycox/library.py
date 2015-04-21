@@ -124,7 +124,7 @@ class LibraryComponent(object):
         '''
         (new_contracts, new_mapping) = self.mapping.get_mapping_copies()
 
-        contracts = new_contracts.viewvalues()
+        contracts = set(new_contracts.viewvalues())
 
         root = contracts.pop()
 
@@ -193,7 +193,7 @@ class LibraryComponent(object):
         is not already in the library, otherwise it will be automatically added.
         '''
         if port_mapping is None:
-            port_mapping = LibraryPortMapping(self.contract, abstract_component.contract)
+            port_mapping = LibraryPortMapping([self.contract, abstract_component.contract])
 
         if ((self.contract not in port_mapping.contracts) or
                 (abstract_component.contract not in port_mapping.contracts)):
@@ -217,36 +217,6 @@ class LibraryComponent(object):
 
             #save assertion
             self.refinement_assertions.add(assertion)
-
-#    def instantiate_composed_component(self):
-#        '''
-#        Create an instance of the library component
-#        '''
-#        #new_instances = [comp.copy() for comp in self.contracts.values()]
-#
-#        #new_contracts = {}
-#        nctew_connections = set()
-#        for unique_name,contract in self.contracts.items():
-#            new_contracts[unique_name] = contract.copy()
-#
-#        for port_a, port_b in self.connections:
-#            contract_uname_a = port_a.contract.unique_name
-#            contract_uname_b = port_b.contract.unique_name
-#
-#            #get port for the new contract a and b
-#            new_port_a = new_contracts[contract_uname_a].ports_dict[port_a.base_name]
-#            new_port_b = new_contracts[contract_uname_b].ports_dict[port_b.base_name]
-#
-#            new_connections.add(new_port_a, new_port_b)
-#
-#        return (new_contracts, new_connections)
-
-        #connect instances according to connection mapping
-        #we need to reassign ports
-        #...
-#        composed = reduce(lambda x, y: x.compose(y), )
-
-#       return composed.copy()
 
     def verify_refinement_assertions(self):
         '''
@@ -346,9 +316,11 @@ class LibraryCompositionMapping(object):
 
         new_mapping = CompositionMapping(new_contracts.viewvalues())
 
-        for (port_a, port_b) in self.composition_mapping.mapping:
-            new_mapping.add(new_contracts[port_a.contract].ports_dict[port_a.base_name],
-                            new_contracts[port_b.contract].ports_dict[port_b.base_name])
+
+        for mapped_name, ports in self.composition_mapping.mapping.viewitems():
+            for port in ports:
+                new_mapping.add(new_contracts[port.contract].ports_dict[port.base_name],
+                                mapped_name)
 
         return (new_contracts, new_mapping)
 
@@ -360,18 +332,24 @@ class LibraryPortMapping(ContractMapping):
     Defines a port mapping to be used in checking refinement in library
     '''
 
-    def __init__(self, *args):
+    def __init__(self, components):
         '''
         initialize data structures
         '''
 
         self.contracts = set()
 
-        for arg in args:
-            if type(arg) is LibraryComponent:
-                self.contracts.add(arg.contract)
+        try:
+            iterator = iter(components)
+        except TypeError:
+            #if there is only one element
+            iterator = iter([components])
+
+        for component in iterator:
+            if type(component) is LibraryComponent:
+                self.contracts.add(component.contract)
             else:
-                self.contracts.add(arg)
+                self.contracts.add(component)
 
         self.mapping = set()
 
@@ -403,8 +381,7 @@ class LibraryPortMapping(ContractMapping):
 
         new_contracts = {contract: contract.copy() for contract in self.contracts}
 
-        new_mapping = LibraryPortMapping(*new_contracts)
-
+        new_mapping = LibraryPortMapping(new_contracts.values())
         for (port_a, port_b) in self.mapping:
             new_mapping.add(new_contracts[port_a.contract].ports_dict[port_a.base_name],
                             new_contracts[port_b.contract].ports_dict[port_b.base_name])

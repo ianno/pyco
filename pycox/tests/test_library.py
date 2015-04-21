@@ -76,35 +76,35 @@ def minimal_library(library, library_component, false_component, next_component,
     library.add(next_component)
     library.add(future_component)
 
-    mapping = LibraryPortMapping(next_component.contract, future_component.contract)
+    mapping = LibraryPortMapping([next_component.contract, future_component.contract])
     mapping.add(next_component.contract.a, future_component.contract.a)
     mapping.add(next_component.contract.b, future_component.contract.x)
 
     next_component.add_refinement_assertion(future_component, mapping)
 
     #everything refines the TrueContract
-    mapping_1 = LibraryPortMapping(false_component, library_component)
+    mapping_1 = LibraryPortMapping([false_component, library_component])
     mapping_1.add(library_component.a, false_component.c)
     mapping_1.add(library_component.b, false_component.d)
     false_component.add_refinement_assertion(library_component, mapping_1)
 
-    mapping_2 = LibraryPortMapping(next_component, library_component)
+    mapping_2 = LibraryPortMapping([next_component, library_component])
     mapping_2.add(next_component.a, library_component.a)
     mapping_2.add(next_component.b, library_component.b)
     next_component.add_refinement_assertion(library_component, mapping_2)
 
-    mapping_3 = LibraryPortMapping(future_component, library_component)
+    mapping_3 = LibraryPortMapping([future_component, library_component])
     mapping_3.add(future_component.a, library_component.a)
     mapping_3.add(future_component.x, library_component.b)
     future_component.add_refinement_assertion(library_component, mapping_3)
 
     #FalseContract refines everything
-    mapping_4 = LibraryPortMapping(false_component, next_component)
+    mapping_4 = LibraryPortMapping([false_component, next_component])
     mapping_4.add(false_component.c, next_component.a)
     mapping_4.add(false_component.d, next_component.b)
     false_component.add_refinement_assertion(next_component, mapping_4)
 
-    mapping_5 = LibraryPortMapping(false_component, future_component)
+    mapping_5 = LibraryPortMapping([false_component, future_component])
     mapping_5.add(false_component.c, future_component.a)
     mapping_5.add(false_component.d, future_component.x)
     false_component.add_refinement_assertion(future_component, mapping_5)
@@ -137,7 +137,7 @@ def test_refinement(future_component, next_component, library):
     library.add(future_component)
     library.add(next_component)
 
-    mapping = LibraryPortMapping(next_component.contract, future_component.contract)
+    mapping = LibraryPortMapping([next_component.contract, future_component.contract])
     mapping.add(next_component.contract.a, future_component.contract.a)
     mapping.add(next_component.contract.b, future_component.contract.x)
 
@@ -156,7 +156,7 @@ def test_false_refinement(future_component, next_component, library):
     library.add(future_component)
     library.add(next_component)
 
-    mapping = LibraryPortMapping(next_component.contract, future_component.contract)
+    mapping = LibraryPortMapping([next_component.contract, future_component.contract])
     mapping.add(next_component.contract.a, future_component.contract.a)
     mapping.add(next_component.contract.b, future_component.contract.x)
 
@@ -169,7 +169,7 @@ def test_not_in_lib(future_component, next_component, library):
     '''
     library.add(next_component)
 
-    mapping = LibraryPortMapping(next_component.contract, future_component.contract)
+    mapping = LibraryPortMapping([next_component.contract, future_component.contract])
     mapping.add(next_component.contract.a, future_component.contract.a)
     mapping.add(next_component.contract.b, future_component.contract.x)
 
@@ -182,7 +182,7 @@ def test_equivalent(next_component, library):
     '''
     library.add(next_component)
 
-    mapping = LibraryPortMapping(next_component.contract, next_component.contract)
+    mapping = LibraryPortMapping([next_component.contract, next_component.contract])
     mapping.add(next_component.contract.a, next_component.contract.a)
     mapping.add(next_component.contract.b, next_component.contract.b)
 

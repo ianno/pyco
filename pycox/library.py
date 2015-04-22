@@ -6,7 +6,8 @@ Author: Antonio Iannopollo
 '''
 import logging
 from pyco.attribute import Attribute
-from pycox.contract import ContractMapping, PortMappingError, PortMapping, CompositionMapping
+from pycox.contract import (ContractMapping, PortMappingError, PortMapping,
+                            CompositionMapping, NotARefinementError)
 
 LOG = logging.getLogger()
 LOG.debug('in library')
@@ -165,22 +166,12 @@ class LibraryComponent(object):
         contract = assertion.component.contract
         abstract_contract = assertion.abstract_component.contract
 
-        #get copies
-        new_contracts, new_mapping = port_mapping.get_mapping_copies()
-
-        local_contract = new_contracts[contract]
-        other_contract = new_contracts[abstract_contract]
-
-        #connect ports according to mapping relation
-        for (port_a, port_b) in new_mapping.mapping:
-            port_a.contract.connect_to_port(port_a, port_b)
-
-        if not local_contract.is_refinement(other_contract):
+        if not contract.is_refinement(abstract_contract, refinement_mapping=port_mapping):
             raise NotARefinementError(assertion)
 
         if enforce_strict:
             #error if refinemen also in the other direction
-            if other_contract.is_refinement(local_contract):
+            if abstract_contract.is_refinement(contract, refinement_mapping=port_mapping):
                 raise EquivalentComponentError(assertion)
 
         return
@@ -336,8 +327,7 @@ class LibraryPortMapping(ContractMapping):
         '''
         initialize data structures
         '''
-
-        self.contracts = set()
+        self.components = set()
 
         try:
             iterator = iter(components)
@@ -345,48 +335,16 @@ class LibraryPortMapping(ContractMapping):
             #if there is only one element
             iterator = iter([components])
 
+        contracts = set()
+
         for component in iterator:
             if type(component) is LibraryComponent:
-                self.contracts.add(component.contract)
+                contracts.add(component.contract)
+                self.components.add(component)
             else:
-                self.contracts.add(component)
+                contracts.add(component)
 
-        self.mapping = set()
-
-    def _validate_port(self, port):
-        '''
-        Check if a port is properly assigned to the mapping
-        '''
-        if port.contract not in self.contracts:
-            raise PortMappingError(port)
-
-    def add(self, port_a, port_b):
-        '''
-        add a mapping pair to the list
-        '''
-        self._validate_port(port_a)
-        self._validate_port(port_b)
-
-        self.mapping.add((port_a, port_b))
-
-
-    def get_mapping_copies(self):
-        '''
-        returns a copy of the contracts and an updated
-        LibraryPortMapping object related to those copies
-
-        :returns: a pair, in which the first element is a dictionary containing a reference
-                  to the copied contracts, and a LibraryPortMapping object
-        '''
-
-        new_contracts = {contract: contract.copy() for contract in self.contracts}
-
-        new_mapping = LibraryPortMapping(new_contracts.values())
-        for (port_a, port_b) in self.mapping:
-            new_mapping.add(new_contracts[port_a.contract].ports_dict[port_a.base_name],
-                            new_contracts[port_b.contract].ports_dict[port_b.base_name])
-
-        return (new_contracts, new_mapping)
+        super(LibraryPortMapping, self).__init__(contracts)
 
 
 PortMapping.register(LibraryPortMapping)
@@ -413,12 +371,6 @@ PortMapping.register(LibraryPortMapping)
 #        return (self.contract_a.unique_name, self.contract_b.unique_name)
 
 
-
-class NotARefinementError(Exception):
-    '''
-    Raised in case of wrong refinement assertion
-    '''
-    pass
 
 class RefinementAssertionError(Exception):
     '''

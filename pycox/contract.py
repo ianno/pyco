@@ -8,7 +8,8 @@
 '''
 
 from pyco.contract import (Port as BasePort, Contract as BaseContract, PortMapping,
-                           CompositionMapping)
+                           CompositionMapping, RefinementMapping as ContractMapping,
+                           NotARefinementError)
 from pyco.parser.lexer import BaseSymbolSet
 import logging
 from pycox.solver_interface import SMT_PORT_MANAGER
@@ -67,50 +68,6 @@ class Contract(BaseContract):
         self.smt_model = SMT_PORT_MANAGER.get_contract_model(self)
 
 
-class ContractMapping(object):
-    '''
-    This class stores the information about mapping a certain number
-    of ports among a set of contracts.
-    This can be seen as a generalization of the concept of port conncetion.
-    The main difference is that while the connection is a strong bond among
-    contracts (e.g. a design constraint), a mapping relation is a loose
-    reference, used in verification and synthesis, where a connection is not
-    a absolute constraint and can be modified or deleted.
-    '''
-
-    def __init__(self, *args):
-        '''
-        Instantiate a mapping constraint.
-
-        :param *args: instances of type Contract
-        '''
-        self.contracts = set(args)
-
-        self.mapping = set()
-        '''
-        mapping is a list of pairs, which are port
-        base_names who needs to be equivalent.
-        '''
-
-    def _validate_port(self, port):
-        '''
-        raises an exception if port is not related to one of the mapped contract
-        '''
-        if port.contract is not self.contracts:
-            raise PortMappingError()
-
-    def add(self, port_a, port_b):
-        '''
-        Add a map constraint between ports in contract_a and contract_b.
-
-        :param base_name_a: base_name of port in contract_a
-        :param base_name_b: base_name of port in contract_b
-        '''
-        self._validate_port(port_a)
-        self._validate_port(port_b)
-        self.mapping.add((port_a, port_b))
-
-PortMapping.register(ContractMapping)
 
 
 class PortMappingError(Exception):

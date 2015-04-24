@@ -5,7 +5,7 @@ Author: Antonio Iannopollo
 '''
 
 import pytest
-from pycox.contract import Contract, Port
+from pycox.contract import Contract
 
 class TrueContract(Contract):
     '''

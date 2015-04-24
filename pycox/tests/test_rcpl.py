@@ -5,7 +5,7 @@ Author: Antonio Iannopollo
 '''
 
 import pytest
-from pycox.contract import Contract, NotARefinementError
+from pycox.contract import Contract, NotARefinementError, CompositionMapping, RefinementMapping
 from pycox.library import (LibraryComponent, ContractLibrary, LibraryPortMapping,
                            RefinementAssertionError,
                            EquivalentComponentError, LibraryCompositionMapping)
@@ -50,7 +50,7 @@ class Spec(Contract):
     INPUT_PORTS = ['a']
     OUTPUT_PORTS = ['c', 'd']
     ASSUMPTIONS = 'true'
-    GUARANTEES = 'G(a -> (Fc & F!d )'
+    GUARANTEES = 'G(a -> (Fc & F!d ))'
 
 
 @pytest.fixture()
@@ -127,11 +127,17 @@ def valid_manual_design():
     '''
     use basic contracts to define design satisfiyng spec
     '''
-    spec = Spec('spec')
     c_a = A('a_des')
     c_b = B('b_des')
-    
-    #c_a.connect_to_port()
+
+    mapping = CompositionMapping([c_a, c_b])
+    mapping.connect(c_a.a, c_b.a)
+    mapping.add(c_a.b, 'b_a')
+    mapping.add(c_b.b, 'b_b')
+
+    c_ab = c_a.compose(c_b, new_name='design', composition_mapping=mapping)
+
+    return c_ab
 
 def test_populate_wrong(comp_a, comp_b, comp_ab, comp_meta, library):
     '''
@@ -175,5 +181,33 @@ def test_populate(comp_a, comp_b, comp_ab, comp_meta, library):
 
     library.verify_library()
     assert True
+
+def test_rcp(valid_manual_design):
+    '''
+    Check spec pver manual_design
+    '''
+    spec = Spec('Spec')
+
+    ref_map = RefinementMapping([spec, valid_manual_design])
+    ref_map.add(spec.a, valid_manual_design.a)
+    ref_map.add(spec.c, valid_manual_design.b_a)
+    ref_map.add(spec.d, valid_manual_design.b_b)
+
+    assert valid_manual_design.is_refinement(spec, ref_map)
+
+def test_rcp_faulty_connection(valid_manual_design):
+    '''
+    Check spec pver manual_design
+    '''
+    spec = Spec('Spec')
+
+    ref_map = RefinementMapping([spec, valid_manual_design])
+    ref_map.add(spec.a, valid_manual_design.a)
+
+    #inverted
+    ref_map.add(spec.c, valid_manual_design.b_b)
+    ref_map.add(spec.d, valid_manual_design.b_a)
+
+    assert not valid_manual_design.is_refinement(spec, ref_map)
 
 

@@ -9,28 +9,34 @@
 
 from pyco.contract import (Port as BasePort, Contract as BaseContract, PortMapping,
                            CompositionMapping, RefinementMapping as ContractMapping,
-                           NotARefinementError)
+                           NotARefinementError, RefinementMapping)
 from pyco.parser.lexer import BaseSymbolSet
 import logging
-from pycox.solver_interface import SMT_PORT_MANAGER
 
 LOG = logging.getLogger()
 
 LOG.debug('In contract.py')
 
-class Port(BasePort):
-    '''
-    This class extends the Port class from pyco.
-    In addition to the base class, here every Port has a related SMT object.
-    '''
-
-    def __init__(self, base_name, contract=None, literal=None, context=None):
-        '''
-        Override initializer. Add SMT port model
-        '''
-        super(Port, self).__init__(base_name, contract, literal, context)
-        SMT_PORT_MANAGER.register_port(self)
-        self.smt_model = SMT_PORT_MANAGER.get_port_model(self)
+#class Port(BasePort):
+#    '''
+#    This class extends the Port class from pyco.
+#    In addition to the base class, here every Port has a related SMT object.
+#    '''
+#
+#    def __init__(self, base_name, contract=None, literal=None, context=None):
+#        '''
+#        Override initializer. Add SMT port model
+#        '''
+#        self.smt_model = None
+#
+#        super(Port, self).__init__(base_name, contract, literal, context)
+#
+#    def assign_to_solver(self, smt_manager):
+#        '''
+#        Registers port information to solver
+#        '''
+#        smt_manager.register_port(self)
+#        self.smt_model = smt_manager.get_port_model(self)
 
 
 class Contract(BaseContract):
@@ -59,14 +65,24 @@ class Contract(BaseContract):
         if guarantee_formula is None:
             guarantee_formula = self.GUARANTEES
 
+        self.smt_model = None
+
         super(Contract, self).__init__(base_name, input_ports, output_ports,
                                        assume_formula, guarantee_formula,
                                        symbol_set_cls, context,
                                        saturated)
 
-        SMT_PORT_MANAGER.register_contract(self)
-        self.smt_model = SMT_PORT_MANAGER.get_contract_model(self)
 
+    def assign_to_solver(self, smt_manager):
+        '''
+        Registers contract information to solver
+        '''
+        smt_manager.register_contract(self)
+        self.smt_model = smt_manager.get_contract_model(self)
+
+        for port in self.ports_dict.values():
+            smt_manager.register_port(port)
+            #port.assign_to_solver(smt_manager)
 
 
 

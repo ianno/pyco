@@ -30,3 +30,10 @@ class SMTModelFactory:
         Given a Contract object, create a SMT contract model
         '''
         pass
+
+    @abstractmethod
+    def create_component_model(self, component):
+        '''
+        Given a LibraryComponent object, creat a SMT component model
+        '''
+        pass

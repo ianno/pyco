@@ -9,6 +9,8 @@ from pyco.attribute import Attribute
 from pycox.contract import (ContractMapping, PortMappingError, PortMapping,
                             CompositionMapping, NotARefinementError)
 
+from pycox.solver_interface import SMTManager
+
 LOG = logging.getLogger()
 LOG.debug('in library')
 
@@ -25,6 +27,8 @@ class ContractLibrary(object):
         self.context = context
         self.name_attribute = Attribute(base_name, context)
 
+        self.smt_manager = SMTManager()
+
     def add(self, library_component):
         '''
         add a library_component to the library object
@@ -33,7 +37,10 @@ class ContractLibrary(object):
             raise ValueError()
 
         library_component.register_to_library(self)
+        library_component.assign_to_solver(self.smt_manager)
+
         self.components.append(library_component)
+
 
     def verify_library(self):
         '''
@@ -111,6 +118,33 @@ class LibraryComponent(object):
 
         self.name_attribute = Attribute(base_name, self.context)
 
+        self.smt_model = None
+
+    def assign_to_solver(self, smt_manager):
+        '''
+        Registers component information to solver
+        '''
+        smt_manager.register_component(self)
+        self.smt_model = smt_manager.get_component_model(self)
+
+        for contract in self.contracts:
+            contract.assign_to_solver(smt_manager)
+
+
+
+    @property
+    def base_name(self):
+        '''
+        returns component's base_name
+        '''
+        return self.name_attribute.base_name
+
+    @property
+    def unique_name(self):
+        '''
+        returns component's unique_name
+        '''
+        return self.name_attribute.unique_name
 
     def register_to_library(self, library):
         '''
@@ -230,7 +264,7 @@ class LibraryComponent(object):
         Returns a set of contracts taken from the associate components
         '''
         if self._contracts is None:
-            self.contracts = set([comp.contract for comp in self.components])
+            self._contracts = set([comp.contract for comp in self.components])
 
         return self._contracts
 

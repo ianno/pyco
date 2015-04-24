@@ -27,6 +27,7 @@ PortList = Datatype('PortList')
 PortList.declare('node', ('port', Port), ('port_list', PortList))
 PortList.declare('bottom')
 
+
 PortList = PortList.create()
 
 Component = Datatype('Component')

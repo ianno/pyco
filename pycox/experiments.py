@@ -36,32 +36,31 @@ if __name__ == '__main__':
     print fp.query(path(v3,v4)), "no we cannot reach v4 from v3"
     
 
-    #name = Datatype('name')
-    #name.declare('inst', ('code', IntSort()))
-    #name.declare('b', ('code', IntSort()))
-    #name.declare('c', ('code', IntSort()))
+    name = Datatype('name')
+    name.declare('a')
+    name.declare('b')
+    name.declare('c')
+    name.declare('q')
+    name.declare('w')
+    name.declare('e')
 
-    #name = name.create()
-
-    name = BitVecSort(3)
+    name = name.create()
 
     bname = Datatype('bname')
-    bname.declare('q', ('a', BitVecSort(3)), ('b', BitVecSort(3)))
-    bname.declare('w', ('a', BitVecSort(3)), ('b', BitVecSort(3)))
-    bname.declare('e', ('a', BitVecSort(3)), ('b', BitVecSort(3)))
+    bname.declare('cons', ('name', name), ('a', name), ('b', name))
     bname = bname.create()
 
     #match = Datatype('match')
     #match.declare('cons', ('a', name), ('b', name))
     #match = match.create()
-
+    
     match = Function('match', name, name, BoolSort())
     #mapp = Function('mapp', match, match, match)
     ref = Function('ref', bname, bname, BoolSort())
     x = Const('x', name)
     y = Const('y', name)
     w = Const('w', name)
-
+    
     t = Const('t', name)
     h = Const('h', name)
     u = Const('u', name)
@@ -73,30 +72,36 @@ if __name__ == '__main__':
     ww = Const('ww', bname)
     ee = Const('ee', bname)
 
+    #qq = bname.q(t,h)
+
     ff = Fixedpoint()
+    #ff.set(engine='datalog')
+    ff.set(generate_explanations=True)
 
     ff.register_relation(match, ref)
     ff.declare_var(x,y,w,t,h,u,j,p,l,qq,ww,ee)
 
+    ff.rule(match(x,w), match(w,x))
     ff.rule(match(x,w), [match(x,y), match(y,w)])
-    ff.rule(ref(qq,ww), [ref(qq,ee), ref(ee,ww), qq==bname.q(t,h), ww==bname.w(u,j), ee==bname.e(p,l), match(t,u), match(h,j)])
+    ff.rule(ref(qq,ww), [ref(qq,ee), ref(ee,ww), bname.a(qq)==t, bname.b(qq)==h, bname.a(ww)==p, bname.b(ww)==l, bname.a(ee)==u, bname.b(ee)==j, match(t,p), match(h,l)])
 
 
-    #a = name.inst(1)
-    #b = name.inst(2)
-    #c = name.inst(3)
+    a = name.a
+    b = name.b
+    c = name.c
+    q = name.q
+    w = name.w
+    e = name.e
 
-    a = BitVecVal(1,name)
-    b = BitVecVal(2,name)
-    c = BitVecVal(3,name)
-
-    q =bname.q(a,b)
-    w =bname.w(b,c)
-    e = bname.e(c,a)
-    ff.fact(match(a,c))
-    ff.fact(match(b,a))
+    q =bname.cons(q,a,b)
+    w =bname.cons(w,b,c)
+    e = bname.cons(e,c,a)
+    ff.fact(match(c,a))
     ff.fact(ref(q,w))
-    ff.fact(ref(w,e))
     print ff
-    print ff.query(match(a,c))
     print ff.query(ref(q,e))
+    ff.fact(ref(w,e))
+    print ff.query(ref(q,e))
+    ff.fact(match(b,a))
+    print ff.query(ref(q,e))
+    print ff.get_answer()

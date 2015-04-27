@@ -46,9 +46,9 @@ if __name__ == '__main__':
     name = BitVecSort(3)
 
     bname = Datatype('bname')
-    bname.declare('q', ('a', name), ('b', name))
-    bname.declare('w', ('a', name), ('b', name))
-    bname.declare('e', ('a', name), ('b', name))
+    bname.declare('q', ('a', BitVecSort(3)), ('b', BitVecSort(3)))
+    bname.declare('w', ('a', BitVecSort(3)), ('b', BitVecSort(3)))
+    bname.declare('e', ('a', BitVecSort(3)), ('b', BitVecSort(3)))
     bname = bname.create()
 
     #match = Datatype('match')
@@ -57,7 +57,7 @@ if __name__ == '__main__':
 
     match = Function('match', name, name, BoolSort())
     #mapp = Function('mapp', match, match, match)
-    ref = Function('ref', bname, name, name, bname, name, name, BoolSort())
+    ref = Function('ref', bname, bname, BoolSort())
     x = Const('x', name)
     y = Const('y', name)
     w = Const('w', name)
@@ -74,13 +74,12 @@ if __name__ == '__main__':
     ee = Const('ee', bname)
 
     ff = Fixedpoint()
-    ff.set(engine='datalog')
 
     ff.register_relation(match, ref)
     ff.declare_var(x,y,w,t,h,u,j,p,l,qq,ww,ee)
 
     ff.rule(match(x,w), [match(x,y), match(y,w)])
-    ff.rule(ref(qq,t,h,ww,u,j), [ref(qq,t,h,ee,p,l), ref(ee,p,l,ww,u,j), match(t,u), match(h,j)])
+    ff.rule(ref(qq,ww), [ref(qq,ee), ref(ee,ww), qq==bname.q(t,h), ww==bname.w(u,j), ee==bname.e(p,l), match(t,u), match(h,j)])
 
 
     #a = name.inst(1)
@@ -96,8 +95,8 @@ if __name__ == '__main__':
     e = bname.e(c,a)
     ff.fact(match(a,c))
     ff.fact(match(b,a))
-    ff.fact(ref(q,a,b,w,b,c))
-    ff.fact(ref(w,b,c,e,c,a))
+    ff.fact(ref(q,w))
+    ff.fact(ref(w,e))
     print ff
     print ff.query(match(a,c))
-    print ff.query(ref(q,a,b,e,c,a))
+    print ff.query(ref(q,e))

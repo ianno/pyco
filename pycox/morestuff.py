@@ -213,7 +213,7 @@ if __name__ == '__main__':
     solver.add(define_comp_has_port_name_total([c1, c2]))
     #solver.add(define_comp_has_port_name_constraints(c1, BaseNames[1]))
     #solver.add(define_list_has_port_name_constraints(port_list, BaseNames[2]))
-    solver.add(comp_has_port_base_name(x, BaseNames[2]))
+    #solver.add(comp_has_port_base_name(x, BaseNames[2]))
     #solver.add(list_has_port_with_base_name(port_list, BaseNames[2]))
 
     print solver.check()

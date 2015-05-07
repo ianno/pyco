@@ -106,7 +106,8 @@ class LibraryComponent(object):
             self.components = set(components)
             self._contracts = None
             self.contract = self.get_composite_instance()
-        except TypeError:
+        except TypeError as e:
+            #print e
             #it is a single contract instead of a list
             self._contracts = set()
             self._contracts.add(components)
@@ -125,11 +126,9 @@ class LibraryComponent(object):
         Registers component information to solver
         '''
         smt_manager.register_component(self)
-        self.smt_model = smt_manager.get_component_model(self)
+        #self.smt_model = smt_manager.get_component_model(self)
 
-        for contract in self.contracts:
-            contract.assign_to_solver(smt_manager)
-
+        self.contract.assign_to_solver(smt_manager)
 
 
     @property

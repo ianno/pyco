@@ -18,24 +18,63 @@ class Z3Interface(object):
     Extends the class SMTModelFactory
     '''
 
-    def __init__(self):
+    def __init__(self, library):
         '''
         init
         '''
-        self.ComponentBaseName = None
-        self.ComponentUniqueName = None
+
+        self.library = library
+
+        #self.ComponentBaseName = None
+
+        self.contracts_dict = {}
+        self.portc_types = {}
+        self.mapping_functions = {}
+        self.contract_models = {}
+        self.port_models = {}
+
+        #self.ComponentUniqueName = None
         self.PortBaseName = None
         self.PortUniqueName = None
         self.ContractBaseName = None
         self.ContractUniqueName = None
 
         self.ZPort = None
+        self.ZPortList = None
+        self.ZContract = None
+        self.ZContractList = None
+        #self.ZComponent = None
+
+        #self.component_has_contract_wbase_name = None
+        self.contract_has_port_wbase_name = None
+        self.contract_list_has_contract = None
+        self.port_list_has_port = None
+        self.port_list_has_port_with_base_name = None
+        self.port_list_has_port_with_unique_name = None
+
+        #TODO remember to include mapping
+        self.component_refinement = None
+
+        self.solver = None
+
+    def initiliaze_library(self):
+        '''
+        Create environment and models from library
+        '''
+
+        for component in self.library.components:
+
 
     def create_port_model(self, port):
         '''
         override from SMTModelFactory method
         '''
-        pass
+
+        model = self.ZPort.port(getattr(self.PortBaseName, port.base_name),
+                                getattr(self.PortUniqueName, port.unique))
+
+
+        return model
 
     def create_contract_model(self, contract):
         '''
@@ -53,75 +92,68 @@ class Z3Interface(object):
             z_port = self.create_port_model(port)
             output_list = self.ZPortList.node(z_port, output_list)
 
-        return  self.ZContract.contract(CBaseNames[0], CUniqueNames[0], port_list, PortList.bottom)
 
+        #declare ammissible names for each contract
+        #it's ok to store this data now
+        self.contracts_dict[contract.unique_name] = contract
+
+        dtype = z3.Datatype(contract.unique_name)
+        _ = [dtype.declare(port_base_name) for port_base_name in contract.ports_dict]
+        self.portc_types[contract.unique_name] = dtype.create()
+
+
+        model = self.ZContract.contract(getattr(self.ContractBaseName,
+                                                contract.base_name),
+                                        getattr(self.ContractUniqueName,
+                                                contract.unique_name),
+                                        input_list, output_list)
+
+
+        return model
 
     def create_component_model(self, component):
         '''
         override from SMTModelFactory method
         '''
-        pass
+        #create contract list
+        #c_list = self.ZContractList.bottom
 
-    def create_z3_environment(self, ports, contracts, components):
+        return self.create_contract_model(component.contract)
+
+    def create_z3_environment(self, ports, contracts, portc_names):
         '''
         Creates basic types for the current library instance
         '''
 
-        #component names
-        #(self.ComponentBaseName,
-        # self.ComponentBaseNames) = z3.EnumSort('ComponentBaseName', [name[0] for name in components])
-        #(self.ComponentUniqueName,
-        # self.ComponentUniqueNames) = z3.EnumSort('ComponentUniqueName', [name[1] for name in components])
-
-        #(self.ContractBaseName,
-        # self.ContractBaseNames) = z3.EnumSort('ContractBaseName', [name[0] for name in contracts])
-        #(self.ContractUniqueName,
-        # self.ContractUniqueNames) = z3.EnumSort('ContractUniqueName', [name[1] for name in contracts])
-
-        #(self.PortBaseName,
-        # self.PortBaseNames) = z3.EnumSort('PortBaseName', [name[0] for name in ports])
-        #(self.PortUniqueName,
-        # self.PortUniqueNames) = z3.EnumSort('PortUniqueName', [name[1] for name in ports])
-
-
-        #component names
-        (base_names, unique_names) = zip(*components)
-
-        self.ComponentBaseName = z3.Datatype('ComponentBaseName')
-        _ = [self.ComponentBaseName.declare(x) for x in set(base_names)]
-        self.ComponentBaseName = self.ComponentBaseName.create()
-
-        self.ComponentUniqueName = z3.Datatype('ComponentUniqueName')
-        _ = [self.ComponentUniqueName.declare(x) for x in set(unique_names)]
-        self.ComponentUnique = self.ComponentUniqueName.create()
-
         #contract names
-        (base_names, unique_names) = zip(*contracts)
+        
+        (c_base_names, c_unique_names) = zip(*contracts)
 
         self.ContractBaseName = z3.Datatype('ContractBaseName')
-        _ = [self.ContractBaseName.declare(x) for x in set(base_names)]
+        _ = [self.ContractBaseName.declare(x) for x in set(c_base_names)]
         self.ContractBaseName = self.ContractBaseName.create()
 
         self.ContractUniqueName = z3.Datatype('ContractUniqueName')
-        _ = [self.ContractUniqueName.declare(x) for x in set(unique_names)]
-        self.ContractUnique = self.ContractUniqueName.create()
+        _ = [self.ContractUniqueName.declare(x) for x in set(c_unique_names)]
+        self.ContractUniqueName = self.ContractUniqueName.create()
 
         #port names
-        (base_names, unique_names) = zip(*ports)
+        (p_base_names, p_unique_names) = zip(*ports)
 
         self.PortBaseName = z3.Datatype('PortBaseName')
-        _ = [self.PortBaseName.declare(x) for x in  set(base_names)]
+        _ = [self.PortBaseName.declare(x) for x in  set(p_base_names)]
         self.PortBaseName = self.PortBaseName.create()
 
         self.PortUniqueName = z3.Datatype('PortUniqueName')
-        _ = [self.PortUniqueName.declare(x) for x in set(unique_names)]
-        self.PortUnique = self.PortUniqueName.create()
+        _ = [self.PortUniqueName.declare(x) for x in set(p_unique_names)]
+        self.PortUniqueName = self.PortUniqueName.create()
 
 
         self.ZPort = z3.Datatype('ZPort')
-        self.ZPort.declare('port',
-                     ('base_name', self.PortBaseName),
-                     ('unique_name', self.PortUniqueName))
+        _ = [self.ZPort.declare()]
+        #self.ZPort.declare('port',
+        #             ('base_name', self.PortBaseName),
+        #             ('unique_name', self.PortUniqueName))
 
         self.ZPort = self.ZPort.create()
 
@@ -134,22 +166,26 @@ class Z3Interface(object):
 
         self.ZContract = z3.Datatype('ZContract')
         self.ZContract.declare('contract',
-                          ('base_name', self.ContractBaseName),
-                          ('unique_name', self.ContractUniqueName),
-                          ('input_ports', self.ZPortList),
-                          ('output_ports', self.ZPortList))
+                               ('base_name', self.ContractBaseName),
+                               ('unique_name', self.ContractUniqueName),
+                               ('num_input', z3.IntSort()),
+                               ('input_ports', self.ZPortList),
+                               ('num_output', z3.IntSort()),
+                               ('output_ports', self.ZPortList),
+                               ('hierarchy', z3.IntSort()))
 
         self.ZContract = self.ZContract.create()
 
-        self.ZContractList = z3.Datatype('ZContractList')
-        self.ZContractList.declare('node', ('elem', self.ZContract), ('tail', self.ZContractList))
-        self.ZContractList.declare('bottom')
+        #self.ZContractList = z3.Datatype('ZContractList')
+        #self.ZContractList.declare('node', ('elem', self.ZContract), ('tail', self.ZContractList))
+        #self.ZContractList.declare('bottom')
 
-        self.ZComponent = z3.Datatype('ZComponent')
-        self.ZComponent.declare('component',
-                           ('base_name', self.ComponentBaseName),
-                           ('unique_name', self.ComponentUniqueName),
-                           ('contracts', self.ZContractList))
+        #self.ZComponent = z3.Datatype('ZComponent')
+        #self.ZComponent.declare('component',
+        #                        ('base_name', self.ComponentBaseName),
+        #                        ('unique_name', self.ComponentUniqueName),
+        #                        ('contracts', self.ZContractList))
+
 
 
         self.solver = z3.Solver()
@@ -189,10 +225,10 @@ class Z3Interface(object):
                                                         self.ZContract,
                                                         self.PortBaseName,
                                                         z3.BoolSort())
-        self.component_has_contract_wbase_name = z3.Function('component_has_contract_wbase_name',
-                                                             self.ZComponent,
-                                                             self.ContractBaseName,
-                                                             z3.BoolSort())
+        #self.component_has_contract_wbase_name = z3.Function('component_has_contract_wbase_name',
+        #                                                     self.ZComponent,
+        #                                                     self.ContractBaseName,
+        #                                                     z3.BoolSort())
 #p = Const('p', Port)
 #l = Const('l', PortList)
 
@@ -247,8 +283,98 @@ class Z3Interface(object):
         return constraints
 
 
+    def define_port_mapping_function(self, contract_uname_a, contract_uname_b):
+        '''
+        define mapping function
+        '''
+        contract_a = self.contracts_dict[contract_uname_a]
+        contract_b = self.contracts_dict[contract_uname_b]
+
+        mapping_f = z3.Function('%s_%s' % (contract_uname_a, contract_uname_b),
+                                self.portc_types[contract_uname_a],
+                                self.portc_types[contract_uname_b],
+                                z3.BoolSort())
+
+        self.mapping_functions[(contract_a, contract_b)] = mapping_f
+        #and reverse
+        self.mapping_functions[(contract_b, contract_a)] = mapping_f
+
+        constraints = []
+
+        #no outputs ports connected together
+        for output_a in contract_a.output_ports_dict:
+            for output_b in contract_b.output_ports_dict:
+                constraints.append(mapping_f(output_a, output_b) == False)
+
+        return constraints
+
+    def synthetize(self, property_contract):
+        '''
+        perform synthesis process
+        '''
+
+        max_components = len(property_contract.output_ports_dict)
+
+        for n in range(1, max_components):
+            try:
+                res = self.synthesize_fixed_size(property_contract, n)
+            except NotSynthesizableError:
+                LOG.debug("size %d synthesis failed")
+            else:
+                return res
+
+        raise NotSynthesizableError
+
+
+    def synthesize_fixed_size(self, property_contract, size):
+        '''
+        synthesis for a fixed size
+        includes constraints:
+        we expect 'size' components and (size-1)! mappings.
+        1) We need to generate a candidate
+        2) We need to verify refinement
+
+        '''
+
+        while True:
+            try:
+                candidate = self.synthesize_candidate(property_contract, size)
+            except NotSynthesizableError as err:
+                raise err
+            else:
+                try:
+                    self.verify_candidate(candidate, property_contract)
+                except NotSynthesizableError as err:
+                    LOG.debug("candidate not valid")
+                else:
+                    return candidate
+
+    def synthesize_candidate(self, property_contract, size):
+        '''
+        1) We need to create this variables and assert the possibilities
+        2) We also need to create the mapping functions. Do we allow feedback? Not for now.
+        3) We need to define the refinement relations, where possible. Low priority
+        4) Verify and loop
+
+        '''
+        pass
+
+    def verify_candidate(self, candidate, property_contract):
+        '''
+        check if a candidate is valid or not
+        '''
+        pass
+
+
+
 SMTModelFactory.register(Z3Interface)
 
+
+class NotSynthesizableError(Exception):
+    '''
+    raised if it is not possible to synthesize a controller
+    '''
+    pass
 #instance a public interface
 Z3 = Z3Interface()
 

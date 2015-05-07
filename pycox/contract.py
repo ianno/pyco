@@ -78,7 +78,7 @@ class Contract(BaseContract):
         Registers contract information to solver
         '''
         smt_manager.register_contract(self)
-        self.smt_model = smt_manager.get_contract_model(self)
+        #self.smt_model = smt_manager.get_contract_model(self)
 
         for port in self.ports_dict.values():
             smt_manager.register_port(port)

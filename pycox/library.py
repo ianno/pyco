@@ -27,7 +27,7 @@ class ContractLibrary(object):
         self.context = context
         self.name_attribute = Attribute(base_name, context)
 
-        self.smt_manager = SMTManager()
+        self.smt_manager = SMTManager(self)
 
     def add(self, library_component):
         '''

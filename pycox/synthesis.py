@@ -6,6 +6,7 @@ Author: Antonio Iannopollo
 
 import itertools
 import logging
+from pycox.z3_interface import Z3Interface
 
 LOG = logging.getLogger()
 
@@ -23,6 +24,9 @@ class SynthesisInterface(object):
         self.spec_contract = spec_contract
         self.library = library
 
+        self.solver_interface = Z3Interface(library)
+
+
     def same_block_constraint(self, port_name_list):
         '''
         Assert a set of ports to be implemented by the same block
@@ -36,4 +40,4 @@ class SynthesisInterface(object):
         call for synthesis
         '''
 
-        pass
+        self.solver_interface.synthetize(self.spec_contract)

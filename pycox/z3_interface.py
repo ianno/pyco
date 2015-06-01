@@ -8,10 +8,20 @@ import logging
 from pycox.smt_factory import SMTModelFactory
 import z3
 import itertools
+import types
 
 LOG = logging.getLogger()
 LOG.debug('in z3_interface')
 
+
+def zcontract_hash(obj):
+    '''
+    hash for z3 contract objects
+    '''
+    #LOG.debug('hash')
+    #LOG.debug(obj)
+    #LOG.debug(z3.simplify(obj.sort().accessor(0,6)(obj)))
+    return int(z3.simplify(obj.sort().accessor(0,6)(obj)).as_long())
 
 class Z3Interface(object):
     '''
@@ -58,6 +68,8 @@ class Z3Interface(object):
         #TODO remember to include mapping
         self.component_refinement = None
 
+        self.counter = itertools.count()
+
         self.solver = None
 
     @property
@@ -67,41 +79,54 @@ class Z3Interface(object):
         '''
         assert self.property_model is not None
 
-        return dict(self.contract_model_instances.items() + (self.property_model, self.property_contract))
+        return dict(self.contract_model_instances.items() + [(self.property_model, self.property_contract)])
 
     def initiliaze_solver(self, property_contract):
         '''
         Create environment and models from library
         '''
-        port_name_pairs = self.library.get_port_names_pairs
-        contract_name_pairs = self.library.get_contract_name_pairs
-        component_name_pairs = self.library.get_component_name_pairs
+
+        port_name_pairs = self.library.smt_manager.port_name_pairs
+        contract_name_pairs = self.library.smt_manager.contract_name_pairs
+        component_name_pairs = self.library.smt_manager.component_name_pairs
+
 
         #extend port names with property ones
-        _ = [port_name_pairs.append(port.base_name, port.unique_name)
-             for port in property_contract.ports_dict]
+        _ = [port_name_pairs.append((port.base_name, port.unique_name))
+             for port in property_contract.ports_dict.values()]
 
         #extends contract names
-        contract_name_pairs.append(property_contract.base_name, property_contract.unique_name)
+        contract_name_pairs.append((property_contract.base_name, property_contract.unique_name))
+
+        self.create_z3_environment(port_name_pairs, contract_name_pairs, component_name_pairs)
 
         self.property_model = self.create_contract_model(property_contract, is_library_elem=False)
         self.property_contract = property_contract
 
-        self.create_z3_environment(port_name_pairs, contract_name_pairs, component_name_pairs)
 
 
     def initialize_for_fixed_size(self, size):
         '''
         Instantiate structures for a given size
         '''
+        constraints = []
+
+        try:
+            self.solver.pop()
+        except z3.Z3Exception as err:
+            #LOG.debug(err)
+            pass
 
         for _ in range(0, size):
             for component in self.library.components:
                 self.create_component_model(component)
 
         #initialize the solver functions
-        self.define_initial_constraints()
-        self.define_initial_connections()
+        constraints += self.define_initial_constraints()
+        constraints += self.define_initial_connections()
+
+        self.solver.push()
+        self.solver.add(constraints)
 
     def create_port_model(self, port, is_library_elem=True):
         '''
@@ -146,12 +171,17 @@ class Z3Interface(object):
 
         model = self.ZContract.contract(getattr(self.ContractBaseName,
                                                 contract.base_name),
-                                        getattr(self.ContractUniqueName,
-                                                contract.unique_name),
+                                        #getattr(self.ContractUniqueName,
+                                        #        contract.unique_name),
                                         len(contract.input_ports_dict),
                                         input_list,
-                                        len(contract.otput_ports_dict),
-                                        output_list, 0)
+                                        len(contract.output_ports_dict),
+                                        output_list, 0,
+                                        self.counter.next())
+
+        #add hash
+        model.__hash__ = types.MethodType(zcontract_hash, model)
+
         if is_library_elem:
             self.contract_model_instances[model] = contract
 
@@ -217,7 +247,8 @@ class Z3Interface(object):
                                ('input_ports', self.ZPortList),
                                ('num_output', z3.IntSort()),
                                ('output_ports', self.ZPortList),
-                               ('hierarchy', z3.IntSort()))
+                               ('hierarchy', z3.IntSort()),
+                               ('id', z3.IntSort()))
 
         self.ZContract = self.ZContract.create()
 
@@ -232,20 +263,6 @@ class Z3Interface(object):
         #                        ('contracts', self.ZContractList))
 
 
-
-        self.solver = z3.Solver()
-
-
-    def define_initial_constraints(self):
-        '''
-        populate smt functions easily identifiable as total
-        '''
-        constraints = []
-
-        #define functions from scratch.
-        #Since we are adding components for each n, we need to re-declare all the
-        #function values. We could try to incrementally add constraints,
-        #without recreating everything each time...
         self.contract_has_port_wbase_name = z3.Function('contract_has_port_wbase_name',
                                                         self.ZContract,
                                                         self.PortBaseName,
@@ -255,7 +272,7 @@ class Z3Interface(object):
                                           self.PortBaseName,
                                           self.ZContract,
                                           z3.BoolSort())
-        self.port_is_output = z3.Function('port_is_input',
+        self.port_is_output = z3.Function('port_is_output',
                                           self.PortBaseName,
                                           self.ZContract,
                                           z3.BoolSort())
@@ -296,47 +313,65 @@ class Z3Interface(object):
                                             self.PortBaseName,
                                             z3.BoolSort())
 
+        self.solver = z3.Solver()
+
+
+    def define_initial_constraints(self):
+        '''
+        populate smt functions easily identifiable as total
+        '''
+        constraints = []
+
+        #define functions from scratch.
+        #Since we are adding components for each n, we need to re-declare all the
+        #function values. We could try to incrementally add constraints,
+        #without recreating everything each time...
+ 
         #define structural properties:
         #ports
+        #LOG.debug(self.extended_instances.items())
         for (model, contract) in self.extended_instances.items():
             in_conn_conditions = []
             out_conn_conditions = []
             for port_name in self.port_names:
 
+                port_name_model = getattr(self.PortBaseName, port_name)
+
                 port_connected_conditions = []
 
                 if port_name in contract.input_ports_dict:
-                    constraints.append(self.contract_has_port_wbase_name(model, port_name) == True)
-                    constraints.append(self.port_is_input(port_name, model) == True)
-                    constraints.append(self.port_is_output(port_name, model) == False)
+                    constraints.append(self.contract_has_port_wbase_name(model, port_name_model) == True)
+                    constraints.append(self.port_is_input(port_name_model, model) == True)
+                    constraints.append(self.port_is_output(port_name_model, model) == False)
                 elif port_name in contract.output_ports_dict:
-                    constraints.append(self.contract_has_port_wbase_name(model, port_name) == True)
-                    constraints.append(self.port_is_input(port_name, model) == False)
-                    constraints.append(self.port_is_output(port_name, model) == True)
+                    constraints.append(self.contract_has_port_wbase_name(model, port_name_model) == True)
+                    constraints.append(self.port_is_input(port_name_model, model) == False)
+                    constraints.append(self.port_is_output(port_name_model, model) == True)
                 else:
-                    constraints.append(self.contract_has_port_wbase_name(model, port_name) == False)
-                    constraints.append(self.port_is_input(port_name, model) == False)
-                    constraints.append(self.port_is_output(port_name, model) == False)
+                    constraints.append(self.contract_has_port_wbase_name(model, port_name_model) == False)
+                    constraints.append(self.port_is_input(port_name_model, model) == False)
+                    constraints.append(self.port_is_output(port_name_model, model) == False)
 
                 #define rules for in connections
-                in_conn_conditions.append(z3.Implies(self.port_is_input(port_name, model),
-                                          self.port_is_connected(model, port_name)))
+                in_conn_conditions.append(z3.Implies(self.port_is_input(port_name_model, model),
+                                          self.port_is_connected(model, port_name_model)))
 
-                out_conn_conditions.append(z3.Implies(self.port_is_output(port_name, model),
-                                          self.port_is_connected(model, port_name)))
+                out_conn_conditions.append(z3.Implies(self.port_is_output(port_name_model, model),
+                                          self.port_is_connected(model, port_name_model)))
 
                 #a port is connected if there is at least a valid connection
                 for other_model in self.extended_instances:
                     for other_port_name in self.port_names:
+                        other_port_name_model = getattr(self.PortBaseName, other_port_name)
                         port_connected_conditions.append(self.connected_ports(model,
                                                                               other_model,
-                                                                              port_name,
-                                                                              other_port_name))
-                condition = z3.And(self.contract_has_port_wbase_name(model, port_name),
+                                                                              port_name_model,
+                                                                              other_port_name_model))
+                condition = z3.And(self.contract_has_port_wbase_name(model, port_name_model),
                                    z3.Or(port_connected_conditions))
                 constraints.append(z3.If(condition,
-                                         self.port_is_connected(model, port_name),
-                                         z3.Not(self.port_is_connected(model, port_name))))
+                                         self.port_is_connected(model, port_name_model),
+                                         z3.Not(self.port_is_connected(model, port_name_model))))
 
             #if for all the inputs, the port is connected, the the model is fully input connected
             condition = z3.And(in_conn_conditions)
@@ -367,32 +402,42 @@ class Z3Interface(object):
 
         #loop over all the possible instances
         for (m_a, m_b) in itertools.combinations(self.extended_instances.keys(), 2):
-            c_a = self.contract_model_instances[m_a]
-            c_b = self.contract_model_instances[m_b]
+            #c_a = self.contract_model_instances[m_a]
+            #c_b = self.contract_model_instances[m_b]
+            c_a = self.extended_instances[m_a]
+            c_b = self.extended_instances[m_b]
 
             #sub_constr_and = []
             sub_constr = []
             conn_out_constr = []
 
-            for (p_a, p_b) in itertools.product(self.port_names, 2):
+            #LOG.debug('iteration')
+            #for item in itertools.product(self.port_names, repeat=2):
+            for item in itertools.combinations_with_replacement(set(self.port_names), 2):
+
+                #LOG.debug(item)
+                (p_a, p_b) = item
+                p_a_model = getattr(self.PortBaseName, p_a)
+                p_b_model = getattr(self.PortBaseName, p_b)
+
                 #if a is connected to b, then b is connected to a and vice versa
-                constraints.append(self.connected_ports(m_a, m_b, p_a, p_b) ==
-                                   self.connected_ports(m_b, m_a, p_b, p_a))
+                constraints.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model) ==
+                                   self.connected_ports(m_b, m_a, p_b_model, p_a_model))
 
                 #used in implication, later
-                sub_constr.append(self.connected_ports(m_a, m_b, p_a, p_b) == True)
+                sub_constr.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model) == True)
 
-                conn_out_constr.append(z3.And(self.connected_ports(m_a, m_b, p_a, p_b) == True,
-                                           self.port_is_output(p_a, m_a),
-                                           self.port_is_output(p_b, m_b)))
+                conn_out_constr.append(z3.And(self.connected_ports(m_a, m_b, p_a_model, p_b_model) == True,
+                                           self.port_is_output(p_a_model, m_a),
+                                           self.port_is_output(p_b_model, m_b)))
 
-                if (p_a not in c_a.ports_dict) or (p_b not in c_b):
-                    constraints.append(self.connected_ports(m_a, m_b, p_a, p_b) == False)
+                if (p_a not in c_a.ports_dict) or (p_b not in c_b.ports_dict):
+                    constraints.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model) == False)
 
                 elif ((m_a in self.contract_model_instances) and (m_b in self.contract_model_instances)
                        and (p_a in c_a.output_ports_dict) and (p_b in c_b.output_ports_dict)):
                     #no connections between outputs of library elements
-                    constraints.append(self.connected_ports(m_a, m_b, p_a, p_b) == False)
+                    constraints.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model) == False)
 
             #connected if there is at least a connection
             constraints.append(z3.Implies(z3.Not(z3.Or(sub_constr)), self.connected(m_a, m_b) == False))
@@ -410,11 +455,14 @@ class Z3Interface(object):
         #transitivity of connections
         #HEAVY
         for (m_a, m_b, m_c) in itertools.permutations(self.extended_instances.keys(), 3):
-            for (p_a, p_b, p_c) in itertools.product(self.port_names, 3):
-
-                constraints.append(z3.Implies(z3.And(self.connected_ports(m_a, m_b, p_a, p_b) == True,
-                                                     self.connected_ports(m_b, m_c, p_b, p_c) == True),
-                                              self.connected_ports(m_a, m_c, p_a, p_c == True)))
+            for item in itertools.product(set(self.port_names), repeat=3):
+                (p_a, p_bi, p_c) = item
+                p_a_model = getattr(self.PortBaseName, p_a)
+                p_b_model = getattr(self.PortBaseName, p_b)
+                p_c_model = getattr(self.PortBaseName, p_c)
+                constraints.append(z3.Implies(z3.And(self.connected_ports(m_a, m_b, p_a_model, p_b_model) == True,
+                                                     self.connected_ports(m_b, m_c, p_b_model, p_c_model) == True),
+                                              self.connected_ports(m_a, m_c, p_a_model, p_c_model) == True))
         return constraints
 
 
@@ -436,11 +484,16 @@ class Z3Interface(object):
         return constraints
 
 
-    def all_models_completely_connected(self, candidate_models, property_model):
+    def all_models_completely_connected(self, candidate_models):
         '''
         All ports need to be connected
         '''
+        constraints = []
 
+        for model in candidate_models:
+            constraints.append(self.fully_connected(model)==True)
+
+        return constraints
 
     def synthetize(self, property_contract):
         '''
@@ -450,9 +503,12 @@ class Z3Interface(object):
 
         max_components = len(property_contract.output_ports_dict)
 
-        for size_n in range(1, max_components):
+        #property model has to be fully connected - always true
+        self.solver.add(self.fully_connected(self.property_model))
+
+        for size_n in range(1, max_components+1):
             try:
-                res = self.synthesize_fixed_size(property_contract, size_n)
+                res = self.synthesize_fixed_size(size_n)
             except NotSynthesizableError:
                 LOG.debug("size %d synthesis failed")
             else:
@@ -461,7 +517,7 @@ class Z3Interface(object):
         raise NotSynthesizableError
 
 
-    def synthesize_fixed_size(self, property_contract, size):
+    def synthesize_fixed_size(self, size):
         '''
         synthesis for a fixed size
         includes constraints:
@@ -469,32 +525,14 @@ class Z3Interface(object):
         1) We need to generate a candidate
         2) We need to verify refinement
 
-        '''
-        self.initialize_for_fixed_size(size)
-
-        while True:
-            try:
-                candidate = self.propose_candidate(property_contract, size)
-            except NotSynthesizableError as err:
-                raise err
-            else:
-                try:
-                    self.verify_candidate(candidate, property_contract)
-                except NotSynthesizableError as err:
-                    LOG.debug("candidate not valid")
-                else:
-                    return candidate
-
-    def propose_candidate(self, property_contract, size):
-        '''
         1) We need to create this variables and assert the possibilities
         2) We also need to create the mapping functions. Do we allow feedback? Not for now.
         3) We need to define the refinement relations, where possible. Low priority
         4) Verify and loop
 
+
         '''
-        #let's start a new session
-        self.solver.push()
+        self.initialize_for_fixed_size(size)
 
         #declare variables
         c_list = [z3.Const('c_%s' % i, self.ZContract) for i in range(0, size)]
@@ -502,26 +540,59 @@ class Z3Interface(object):
         #Every component must be unique (we already duplicated)
         self.solver.add(z3.Distinct(c_list))
 
+        #All the candidates fully connected
+        self.solver.add(self.all_models_completely_connected(c_list))
+
         for candidate in c_list:
             #candidates must be within library components
             span = [candidate == component for component in self.contract_model_instances]
             self.solver.add(z3.Or(span))
 
-            #candidates need to be connected to 
+        while True:
+            try:
+                candidate = self.propose_candidate(size)
+            except NotSynthesizableError as err:
+                raise err
+            else:
+                try:
+                    self.verify_candidate(candidate)
+                except NotSynthesizableError as err:
+                    LOG.debug("candidate not valid")
+                else:
+                    return candidate
 
- 
-        #we want all the output ports of the property to be connected
-        for port in property_contract.output_port.values():
-            pass
-
-
-
-
-    def verify_candidate(self, candidate, property_contract):
+    def propose_candidate(self, size):
         '''
-        check if a candidate is valid or not
+        generate a model
         '''
-        pass
+        #LOG.debug(self.solver.assertions)
+        LOG.debug('start solving')
+        res = self.solver.check()
+        LOG.debug(res)
+        LOG.debug('done')
+        if res == z3.sat:
+            LOG.debug(self.solver.sexpr())
+        else:
+            LOG.debug(self.solver.unsat_core)
+
+        try:
+            model = self.solver.model()
+        except z3.Z3Exception:
+            raise NotSynthesizableError()
+
+        return model
+
+
+
+    def verify_candidate(self, candidate):
+        '''
+        check if a candidate is valid or not.
+        Here we need to:
+        1) transform the model to a contract composition
+        2) LEARN
+            2a)
+        '''
+        
 
 
 
@@ -535,5 +606,5 @@ class NotSynthesizableError(Exception):
     pass
 
 #instance a public interface
-Z3 = Z3Interface()
+#Z3 = Z3Interface()
 

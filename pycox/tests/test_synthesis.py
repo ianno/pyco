@@ -32,6 +32,7 @@ two 1-1 elements are suitable
 Author: Antonio Iannopollo
 '''
 
+import pytest
 from pycox.contract import Contract
 from pycox.library import (ContractLibrary, LibraryComponent,
                             LibraryPortMapping, LibraryCompositionMapping)
@@ -122,14 +123,6 @@ def comp_ab():
 
     return LibraryComponent('AB_comp', c_b)
 
-@pytest.fixture()
-def comp_ab():
-    '''
-    ABC as component
-    '''
-    c_b = AB('ABC')
-
-    return LibraryComponent('ABC_comp', c_b)
 
 @pytest.fixture()
 def comp_ab_comp(comp_a, comp_b):
@@ -175,9 +168,9 @@ def populated_library(comp_a, comp_b, comp_ab, comp_meta, library):
     #add refinement assertion
     mapping = LibraryPortMapping([comp_ab, comp_meta])
     mapping.add(comp_ab.a, comp_meta.a)
-    mapping.add(comp_ab.b1, comp_meta.b)
+    mapping.add(comp_ab.b, comp_meta.b)
 
-    comp_ab.add_refinement_assertion(comp_meta, mapping)
+    #comp_ab.add_refinement_assertion(comp_meta, mapping)
 
     library.verify_library()
 

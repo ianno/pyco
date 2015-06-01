@@ -82,7 +82,7 @@ class Contract(BaseContract):
 
         for port in self.ports_dict.values():
             smt_manager.register_port(port)
-            port.assign_to_solver(smt_manager)
+            #port.assign_to_solver(smt_manager)
 
 
 

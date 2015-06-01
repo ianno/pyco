@@ -17,7 +17,7 @@ class SMTManager(object):
 
 
 
-    def __init__(self, solver=None):
+    def __init__(self, library, solver=None):
         '''
         Defines init behavior, e.g. where to save list
         of parameters
@@ -28,9 +28,10 @@ class SMTManager(object):
         self.contract_unique_names = {}
         self.component_base_names = {}
         self.component_unique_names = {}
+        self.library = library
 
         if solver is None:
-            solver = Z3Interface()
+            solver = Z3Interface(library)
 
         self.solver = solver
 
@@ -91,15 +92,35 @@ class SMTManager(object):
         '''
         returns all the names of components, contracts and ports
         '''
-        port_names = [(port.base_name, port.unique_name)
-                      for port in self.port_base_names.keys()]
-        contract_names = [(contract.base_name, contract.unique_name)
-                          for contract in self.contract_base_names.keys()]
-        component_names = [(component.base_name, component.unique_name)
-                           for component in self.component_base_names.keys()]
+        port_names = self.port_name_pairs
+        contract_names = self.contract_name_pairs
+        component_names = self.component_name_pairs
 
         return (port_names, contract_names, component_names)
 
+    @property
+    def port_name_pairs(self):
+        '''
+        return port names
+        '''
+        return [(port.base_name, port.unique_name)
+                for port in self.port_base_names.keys()]
+
+    @property
+    def contract_name_pairs(self):
+        '''
+        return contract names
+        '''
+        return [(contract.base_name, contract.unique_name)
+                for contract in self.contract_base_names.keys()]
+
+    @property
+    def component_name_pairs(self):
+        '''
+        return component names
+        '''
+        return [(component.base_name, component.unique_name)
+                for component in self.component_base_names.keys()]
 
 
 class UnregisteredPortError(Exception):

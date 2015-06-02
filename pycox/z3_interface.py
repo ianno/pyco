@@ -884,7 +884,7 @@ class Z3Interface(object):
                 raise err
             else:
                 try:
-                    self.verify_candidate(candidate)
+                    self.verify_candidate(candidate, c_list)
                 except NotSynthesizableError as err:
                     LOG.debug("candidate not valid")
                 else:
@@ -901,6 +901,7 @@ class Z3Interface(object):
         LOG.debug(res)
         LOG.debug('done')
         if res == z3.sat:
+            z3.set_option(max_args=10000000, max_lines=1000000, max_depth=10000000, max_visited=1000000)
             LOG.debug(self.solver.model())
         else:
             LOG.debug(self.solver.proof())
@@ -914,7 +915,7 @@ class Z3Interface(object):
 
 
 
-    def verify_candidate(self, candidate):
+    def verify_candidate(self, model, candidates):
         '''
         check if a candidate is valid or not.
         Here we need to:
@@ -922,14 +923,57 @@ class Z3Interface(object):
         2) LEARN
             2a)
         '''
-        composition = None
+        composition = self.build_composition_from_model(model, candidates)
 
 
-    def build_composition_from_model(self):
+    def build_composition_from_model(self, model, candidates):
         '''
         builds a contract composition out of a model
         '''
-        pass
+
+        contracts = {}
+        spec_contract = self.property_contract.copy()
+        LOG.debug(spec_contract)
+        #instantiate single contracts
+        for candidate in candidates:
+            c_m = model[candidate]
+            c_m.__hash__ = types.MethodType(zcontract_hash, c_m)
+            c_name = str(z3.simplify(self.ZContract.base_name(c_m)))
+            id_c = str(z3.simplify(self.ZContract.id(c_m)))
+            #LOG.debug(c_name, id_c)
+            contract = type(self.contract_model_instances[c_m])(c_name+id_c)
+            LOG.debug(contract)
+            contracts[c_m] = contract
+
+        extended_contracts = dict(contracts.items() + [(self.property_model, spec_contract)])
+
+        #connections
+        for m_a, m_b in itertools.combinations_with_replacement(extended_contracts, 2):
+            c_a = extended_contracts[m_a]
+            c_b = extended_contracts[m_b]
+            for ((p_a_name, p_a), (p_b_name, p_b)) in itertools.product(c_a.ports_dict.items(), c_b.ports_dict.items()):
+                if p_a != p_b:
+                    pm_a = getattr(self.PortBaseName, p_a_name)
+                    pm_b = getattr(self.PortBaseName, p_b_name)
+                    if z3.is_true(model.eval(self.connected_ports(m_a, m_b, pm_a, pm_b),
+                                       model_completion=True)):
+                        #LOG.debug(c_a)
+                        #LOG.debug(p_a_name)
+                        #LOG.debug(p_a.unique_name)
+                        #LOG.debug('--')
+                        #LOG.debug(c_b)
+                        #LOG.debug(p_b_name)
+                        #LOG.debug(p_b.unique_name)
+                        #LOG.debug('**')
+                        c_a.connect_to_port(p_a, p_b)
+                        assert(c_a == spec_contract or
+                               c_b == spec_contract or
+                               not (p_a.is_output and p_b.is_output))
+
+        for contract in extended_contracts.values():
+            LOG.debug(contract)
+
+
 
 SMTModelFactory.register(Z3Interface)
 

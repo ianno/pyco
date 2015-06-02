@@ -22,7 +22,22 @@ def zcontract_hash(obj):
     #LOG.debug(obj)
     #LOG.debug(z3.simplify(obj.sort().accessor(0,6)(obj)))
     return hash(str(z3.simplify(obj.sort().accessor(0,0)(obj))) +
+                str(z3.simplify(obj.sort().accessor(0,1)(obj)).as_long()) +
                 str(z3.simplify(obj.sort().accessor(0,2)(obj)).as_long()))
+
+def zcontract_eq(obj, other):
+    '''
+    equality
+    '''
+    try:
+        return (str(z3.simplify(obj.sort().accessor(0,0)(obj))) ==
+                str(z3.simplify(other.sort().accessor(0,0)(other))) and
+                z3.simplify(obj.sort().accessor(0,1)(obj)).as_long() ==
+                z3.simplify(other.sort().accessor(0,1)(other)).as_long() and
+                z3.simplify(obj.sort().accessor(0,2)(obj)).as_long() ==
+                z3.simplify(other.sort().accessor(0,2)(other)).as_long())
+    except:
+        return False
 
 class Z3Interface(object):
     '''
@@ -191,7 +206,8 @@ class Z3Interface(object):
 
         #add hash
         model.__hash__ = types.MethodType(zcontract_hash, model)
-
+        #add eq
+        model.__eq__ = types.MethodType(zcontract_eq, model)
         if is_library_elem:
             self.contract_model_instances[model] = contract
 
@@ -628,8 +644,8 @@ class Z3Interface(object):
 
         #loop over all the possible instances
         #NOT considering the spec   
-        for (m_a, m_b) in itertools.permutations(self.extended_instances.keys(), 2):
-        #for (m_a, m_b) in itertools.product(self.extended_instances.keys(), repeat=2):
+        #for (m_a, m_b) in itertools.permutations(self.extended_instances.keys(), 2):
+        for (m_a, m_b) in itertools.product(self.extended_instances.keys(), repeat=2):
             #c_a = self.contract_model_instances[m_a]
             #c_b = self.contract_model_instances[m_b]
             c_a = self.extended_instances[m_a]
@@ -653,10 +669,11 @@ class Z3Interface(object):
                 constraints.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model) ==
                                    self.connected_ports(m_b, m_a, p_b_model, p_a_model))
 
-                #used in implication, later
+                #used in implication, later, but only if not the same component and port
                 sub_constr.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model) == True)
 
-                conn_out_constr.append(z3.And(self.connected_ports(m_a, m_b, p_a_model, p_b_model) == True,
+                conn_out_constr.append(z3.And(self.connected_ports(m_a, m_b,
+                                                                   p_a_model, p_b_model) == True,
                                            self.port_is_output(p_a_model, m_a),
                                            self.port_is_output(p_b_model, m_b)))
 
@@ -675,11 +692,11 @@ class Z3Interface(object):
                     #LOG.debug(m_a)
                     #LOG.debug(m_b)
                     constraints.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model) == False)
-                    pass
+                    #pass
 
             #two contracts connected if there is at least a common connection
-            constraints.append(z3.Implies(z3.Not(z3.Or(sub_constr)), self.connected(m_a, m_b) == False))
-            constraints.append(z3.Implies(z3.Or(sub_constr), self.connected(m_a, m_b) == True))
+            #constraints.append(z3.Implies(z3.Not(z3.Or(sub_constr)), self.connected(m_a, m_b) == False))
+            #constraints.append(z3.Implies(z3.Or(sub_constr), self.connected(m_a, m_b) == True))
             constraints.append(z3.If(z3.Or(sub_constr),
                                      self.connected(m_a, m_b)==True,
                                      self.connected(m_a, m_b)==False))
@@ -688,10 +705,10 @@ class Z3Interface(object):
 
             #output_connection
             constraints.append(self.connected_output(m_a, m_b) == self.connected_output(m_b, m_a))
-            constraints.append(z3.Implies(z3.Not(z3.Or(conn_out_constr)),
-                                          self.connected_output(m_a, m_b) == False))
-            constraints.append(z3.Implies(z3.Or(conn_out_constr),
-                                          self.connected_output(m_a, m_b) == True))
+            #constraints.append(z3.Implies(z3.Not(z3.Or(conn_out_constr)),
+            #                              self.connected_output(m_a, m_b) == False))
+            #constraints.append(z3.Implies(z3.Or(conn_out_constr),
+            #                              self.connected_output(m_a, m_b) == True))
             constraints.append(z3.If(z3.Or(conn_out_constr),
                                      self.connected_output(m_a, m_b) == True,
                                      self.connected_output(m_a, m_b) == False
@@ -746,6 +763,51 @@ class Z3Interface(object):
 
         return constraints
 
+    def models_disconnected_if_not_solution(self, candidate_models):
+        '''
+        if not part of solution, everything disconnected
+        '''
+        constraints = []
+        part1 = {}
+
+        for m_a in self.contract_model_instances:
+            conditions = []
+            for candidate in candidate_models:
+                conditions.append(m_a == candidate)
+            part1[m_a] = conditions
+        
+        #not considering repetitions e.g. (a,a)
+        for m_a, m_b in itertools.combinations(self.contract_model_instances.keys(), 2):
+            prop = z3.Implies(z3.Not(z3.And(z3.Or(part1[m_a]),
+                                            z3.Or(part1[m_b]))),
+                              self.connected(m_a, m_b)==False)
+            constraints.append(prop)
+
+        return constraints
+
+
+    def property_outputs_not_together(self):
+        '''
+        Output ports of property can be connected to other outputs, but not
+        among themselves
+        '''
+        constraints = []
+
+        #do not consider the same port twice e.g. (a, a): in that case reflexivity guarantees
+        #the property to be true
+        for (p_a, p_b) in itertools.combinations(self.property_contract.output_ports_dict.keys(), 2):
+            port_model_a = getattr(self.PortBaseName, p_a)
+            port_model_b = getattr(self.PortBaseName, p_b)
+
+            constraints.append(self.connected_ports(self.property_model,
+                                                    self.property_model,
+                                                    port_model_a,
+                                                    port_model_b)==False)
+
+        return constraints
+
+
+
     def synthetize(self, property_contract):
         '''
         perform synthesis process
@@ -798,7 +860,11 @@ class Z3Interface(object):
         self.solver.add(self.fully_connected(self.property_model))
 
         #Spec cannot be connected to itself on outputs
-        self.solver.add(self.connected_output(self.property_model, self.property_model)==False)
+        #self.solver.add(self.connected_output(self.property_model, self.property_model)==False)
+        #self.solver.add(self.property_outputs_not_together())
+
+        #models disconnected if not solution
+        self.solver.add(self.models_disconnected_if_not_solution(c_list))
 
         for candidate in c_list:
             #candidates must be within library components
@@ -856,9 +922,14 @@ class Z3Interface(object):
         2) LEARN
             2a)
         '''
-        
+        composition = None
 
 
+    def build_composition_from_model(self):
+        '''
+        builds a contract composition out of a model
+        '''
+        pass
 
 SMTModelFactory.register(Z3Interface)
 

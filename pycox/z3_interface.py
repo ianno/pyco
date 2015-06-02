@@ -628,7 +628,8 @@ class Z3Interface(object):
 
         #loop over all the possible instances
         #NOT considering the spec   
-        for (m_a, m_b) in itertools.combinations_with_replacement(self.extended_instances.keys(), 2):
+        for (m_a, m_b) in itertools.permutations(self.extended_instances.keys(), 2):
+        #for (m_a, m_b) in itertools.product(self.extended_instances.keys(), repeat=2):
             #c_a = self.contract_model_instances[m_a]
             #c_b = self.contract_model_instances[m_b]
             c_a = self.extended_instances[m_a]
@@ -639,8 +640,8 @@ class Z3Interface(object):
             conn_out_constr = []
 
             #LOG.debug('iteration')
-            #for item in itertools.product(self.port_names, repeat=2):
-            for item in itertools.combinations_with_replacement(set(self.port_names), 2):
+            for item in itertools.product(self.port_names, repeat=2):
+            #for item in itertools.combinations_with_replacement(set(self.port_names), 2):
 
                 #LOG.debug(item)
                 (p_a, p_b) = item
@@ -661,6 +662,10 @@ class Z3Interface(object):
 
                 if (p_a not in c_a.ports_dict) or (p_b not in c_b.ports_dict):
                     constraints.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model) == False)
+                #connected_port is reflexive - but never in the case without replacement, or product
+                #this will break the definition of connected output
+                elif (m_a == m_b) and (p_a == p_b):
+                    constraints.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model) == True)
 
                 elif ((m_a is not self.property_model) and (m_b is not self.property_model)
                        and (p_a in c_a.output_ports_dict) and (p_b in c_b.output_ports_dict)):

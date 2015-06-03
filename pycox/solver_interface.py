@@ -4,10 +4,9 @@ This module contains the main interface to the SMT solver
 Author: Antonio Iannopollo
 '''
 
-import logging
 from pycox.z3_interface import Z3Interface
+from pycox import LOG
 
-LOG = logging.getLogger()
 LOG.debug('In solver_interface')
 
 class SMTManager(object):

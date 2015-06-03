@@ -5,10 +5,9 @@ Author: Antonio Iannopollo
 '''
 
 import itertools
-import logging
+from pycox import LOG
 from pycox.z3_interface import Z3Interface
 
-LOG = logging.getLogger()
 
 
 class SynthesisInterface(object):

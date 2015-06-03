@@ -37,10 +37,7 @@ from pycox.contract import Contract
 from pycox.library import (ContractLibrary, LibraryComponent,
                             LibraryPortMapping, LibraryCompositionMapping)
 from pycox.synthesis import SynthesisInterface
-
-import logging
-
-LOG = logging.getLogger()
+from pycox import LOG
 
 class A(Contract):
     '''

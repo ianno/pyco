@@ -1,16 +1,16 @@
 import logging
 
-log = logging.getLogger()
-log.setLevel(logging.DEBUG)
+LOG = logging.getLogger('pycox')
+LOG.setLevel(logging.DEBUG)
 
 ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
+#ch.setLevel(logging.DEBUG)
 
 # create formatter and add it to the handlers
 formatter = logging.Formatter('%(asctime)s  - %(lineno)d - %(levelname)s - %(message)s')
 ch.setFormatter(formatter)
 
 # add the handlers to the logger
-log.addHandler(ch)
+LOG.addHandler(ch)
 
-log.debug('PYCOX INIT')
+LOG.debug('PYCOX INIT')

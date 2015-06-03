@@ -4,14 +4,13 @@ to the concept of library of contracts
 
 Author: Antonio Iannopollo
 '''
-import logging
 from pyco.attribute import Attribute
 from pycox.contract import (ContractMapping, PortMappingError, PortMapping,
                             CompositionMapping, NotARefinementError)
 
 from pycox.solver_interface import SMTManager
+from pycox import LOG
 
-LOG = logging.getLogger()
 LOG.debug('in library')
 
 class ContractLibrary(object):

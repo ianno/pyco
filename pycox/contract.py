@@ -11,9 +11,8 @@ from pyco.contract import (Port as BasePort, Contract as BaseContract, PortMappi
                            CompositionMapping, RefinementMapping as ContractMapping,
                            NotARefinementError, RefinementMapping)
 from pyco.parser.lexer import BaseSymbolSet
-import logging
+from pycox import LOG
 
-LOG = logging.getLogger()
 
 LOG.debug('In contract.py')
 

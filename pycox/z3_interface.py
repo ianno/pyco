@@ -86,7 +86,7 @@ class Z3Interface(object):
         self.component_refinement = None
 
         self.counter = itertools.count()
-
+        self.port_dict = {}
         self.solver = None
 
     @property
@@ -247,6 +247,8 @@ class Z3Interface(object):
         _ = [self.PortBaseName.declare(x) for x in  set(p_base_names)]
         self.PortBaseName = self.PortBaseName.create()
 
+        self.port_dict = {name: getattr(self.PortBaseName, name) for name in self.port_names}
+
         #self.PortUniqueName = z3.Datatype('PortUniqueName')
         #_ = [self.PortUniqueName.declare(x) for x in set(p_unique_names)]
         #self.PortUniqueName = self.PortUniqueName.create()
@@ -392,46 +394,88 @@ class Z3Interface(object):
         p_a, p_b = z3.Consts('p_a p_b', self.PortBaseName)
 
         #all the inputs connected -> full_input
-        in_conn_conditions = z3.ForAll([p_a], z3.Implies(self.port_is_input(p_a, c_a),
-                                          self.port_is_connected(c_a, p_a)))
+        #in_conn_conditions = [z3.Implies(self.port_is_input(p_a, c_a),
+        #                                  self.port_is_connected(c_a, p_a)) for p_a in self.port_dict.values()]
 
-        condition = z3.ForAll([c_a], z3.If(in_conn_conditions,
-                                           self.full_input(c_a),
-                                           z3.Not(self.full_input(c_a))))
-        constraints.append(condition)
+        #condition = [z3.If(z3.And(in_conn_conditions),
+        #                                   self.full_input(c_a),
+        #                                   z3.Not(self.full_input(c_a))))
 
+        condition = [z3.If(z3.And([z3.Implies(self.port_is_input(p_a, c_a),
+                                          self.port_is_connected(c_a, p_a))
+                                   for p_a in self.port_dict.values()]),
+                                   self.full_input(c_a),
+                                   z3.Not(self.full_input(c_a)))
+                    for c_a in self.extended_instances]
+
+        constraints += condition
+
+
+        c_a, c_b = z3.Consts('c_a c_b', self.ZContract)
+        p_a, p_b = z3.Consts('p_a p_b', self.PortBaseName)
         #all outputs connectedf -> full_output
-        out_conn_conditions = z3.ForAll([p_a], z3.Implies(self.port_is_output(p_a, c_a),
-                                                      self.port_is_connected(c_a, p_a)))
-        condition = z3.ForAll([c_a], z3.If(out_conn_conditions,
-                                           self.full_output(c_a),
-                                           z3.Not(self.full_output(c_a))))
-        constraints.append(condition)
+        #out_conn_conditions = z3.ForAll([p_a], z3.Implies(self.port_is_output(p_a, c_a),
+        #                                              self.port_is_connected(c_a, p_a)))
+        #condition = z3.ForAll([c_a], z3.If(out_conn_conditions,
+        #                                   self.full_output(c_a),
+        #                                   z3.Not(self.full_output(c_a))))
+        #constraints.append(condition)
+        condition = [z3.If(z3.And([z3.Implies(self.port_is_output(port, contract),
+                                              self.port_is_connected(contract, port))
+                                   for port in self.port_dict.values()]),
+                           self.full_output(contract),
+                           z3.Not(self.full_output(contract)))
+                     for contract in self.extended_instances]
+
+        constraints += condition
 
         #all inputs and all outputs -> fully connected
-        condition = z3.ForAll([c_a], z3.If(z3.And(self.full_input(c_a),
-                                                  self.full_output(c_a)),
-                                           self.fully_connected(c_a),
-                                           z3.Not(self.fully_connected(c_a))))
-        constraints.append(condition)
+        #condition = z3.ForAll([c_a], z3.If(z3.And(self.full_input(c_a),
+        #                                          self.full_output(c_a)),
+        #                                   self.fully_connected(c_a),
+        #                                   z3.Not(self.fully_connected(c_a))))
+        #constraints.append(condition)
+
+        condition = [z3.If(z3.And(self.full_input(contract),
+                                  self.full_output(contract)),
+                           self.fully_connected(contract),
+                           z3.Not(self.fully_connected(contract)))
+                     for contract in self.extended_instances]
+
+        constraints += condition
 
         #at least a connection -> port connected
-        condition = z3.ForAll([c_a, p_a], z3.If(z3.And(self.contract_has_port_wbase_name(c_a, p_a),
-                                                       z3.Exists([c_b, p_b],
-                                                                 #self.connected_ports(c_a, c_b,
-                                                                 #                     p_a, p_b)
-                                                                 z3.And(self.connected_ports(c_a, c_b,
-                                                                                      p_a, p_b),
-                                                                        z3.Or(z3.Distinct([c_a, c_b]),
-                                                                              z3.Distinct([p_a, p_b]))
-                                                                        )
-                                                                 )
-                                                       ),
-                                                self.port_is_connected(c_a, p_a),
-                                                z3.Not(self.port_is_connected(c_a, p_a))
-                                                )
-                             )
-        constraints.append(condition)
+        #condition = z3.ForAll([c_a, p_a], z3.If(z3.And(self.contract_has_port_wbase_name(c_a, p_a),
+        #                                               z3.Exists([c_b, p_b],
+        #                                                         #self.connected_ports(c_a, c_b,
+        #                                                         #                     p_a, p_b)
+        #                                                         z3.And(self.connected_ports(c_a, c_b,
+        #                                                                              p_a, p_b),
+        #                                                                z3.Or(z3.Distinct([c_a, c_b]),
+        #                                                                      z3.Distinct([p_a, p_b]))
+        #                                                                )
+        #                                                         )
+        #                                               ),
+        #                                        self.port_is_connected(c_a, p_a),
+        #                                        z3.Not(self.port_is_connected(c_a, p_a))
+        #                                        )
+        #                     )
+        #constraints.append(condition)
+
+        condition = [z3.If(z3.And(self.contract_has_port_wbase_name(contract, port),
+                                   z3.Or([z3.And(self.connected_ports(contract, contract1,
+                                                                      port, port1),
+                                                 z3.Or(z3.Not(contract == contract1),
+                                                       z3.Not(port == port1)))
+                                          for port1 in self.port_dict.values()
+                                          for contract1 in self.extended_instances]
+                                        )
+                                   ),
+                            self.port_is_connected(contract, port),
+                            z3.Not(self.port_is_connected(contract, port)))
+                     for port in self.port_dict.values() for contract in self.extended_instances]
+        
+        constraints += condition
 
         c_c = z3.Const('c_c', self.ZContract)
         p_c = z3.Const('p_c', self.PortBaseName)
@@ -451,6 +495,18 @@ class Z3Interface(object):
                                         )
                              )
         constraints.append(condition)
+
+
+        # A LOT SLOWER  
+        #condition = [z3.Implies(z3.And(self.connected_ports(c_a, c_b, p_a, p_b),
+        #                               self.connected_ports(c_b, c_c, p_b, p_c)),
+        #                        self.connected_ports(c_a, c_c, p_a, p_c)
+        #                       )
+        #             for p_a in self.port_dict.values() for p_b in self.port_dict.values()
+        #             for p_c in self.port_dict.values() for c_a in self.extended_instances
+        #             for c_b in self.extended_instances for c_c in self.extended_instances]
+
+        #constraints += condition
 
         #connected
         #condition = z3.ForAll([c_a, c_b],

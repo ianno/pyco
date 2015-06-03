@@ -695,6 +695,23 @@ class Z3Interface(object):
 #        return constraints
 
 
+    #def define_additional_constraints(self):
+    #    '''
+    #    use the programmatic api to implement define_initial_connection
+    #    '''
+    #    constraints = []
+
+
+    #    #if a is connected to b, then b is connected to a and vice versa
+    #    #symmetric
+    #    condition = [self.connected_ports(m_a, m_b, p_a_model, p_b_model) ==
+    #                 self.connected_ports(m_b, m_a, p_b_model, p_a_model)
+    #                 for m_a in self.extended_instances for m_b in self.extended_instances
+    #                 for p_a_model in self.port_dict.values()
+    #                 for p_b_model in self.port_dict.values()]
+
+    #    constraints += condition
+
 
 
     def define_initial_connections(self):
@@ -815,9 +832,13 @@ class Z3Interface(object):
         model_contract = self.extended_instances[discarded_model]
         #constraints.append(candidate != discarded_model)
 
-        for (model, contract) in self.extended_instances.items():
-            if contract.base_name == model_contract.base_name:
-                constraints.append(candidate != discarded_model)
+        #for (model, contract) in self.extended_instances.items():
+        #    if contract.base_name == model_contract.base_name:
+        #        constraints.append(candidate != discarded_model)
+
+        constraints = [candidate != discarded_model
+                       for (model, contract) in self.extended_instances.items()
+                       if contract.base_name == model_contract.base_name]
 
         return constraints
 
@@ -826,10 +847,8 @@ class Z3Interface(object):
         '''
         All ports need to be connected
         '''
-        constraints = []
 
-        for model in candidate_models:
-            constraints.append(self.fully_connected(model))
+        constraints = [self.fully_connected(model) for model in candidate_models]
 
         return constraints
 
@@ -853,23 +872,30 @@ class Z3Interface(object):
         #                      self.connected(m_a, m_b)==False)
         #    constraints.append(prop)
         
-        for m_a in self.contract_model_instances:
-            conditions = []
-            for candidate in candidate_models:
-                conditions.append(m_a == candidate)
-            part1[m_a] = conditions
+        #for m_a in self.contract_model_instances:
+        #    conditions = []
+        #    for candidate in candidate_models:
+        #        conditions.append(m_a == candidate)
+        #    part1[m_a] = conditions
         
-        for (m_a, c_a) in self.contract_model_instances.items():
-            part2 = []
-            for port_name in c_a.ports_dict:
-                p_a = getattr(self.PortBaseName, port_name)
-                part2.append(z3.Not(self.port_is_connected(m_a, p_a)))
+        #for (m_a, c_a) in self.contract_model_instances.items():
+        #    part2 = []
+        #    for port_name in c_a.ports_dict:
+        #        p_a = getattr(self.PortBaseName, port_name)
+        #        part2.append(z3.Not(self.port_is_connected(m_a, p_a)))
 
-            prop = z3.Implies(z3.Not(z3.Or(part1[m_a])),
-                              z3.And(part2))
+        #    prop = z3.Implies(z3.Not(z3.Or(part1[m_a])),
+        #                      z3.And(part2))
 
-            constraints.append(prop)
+        #    constraints.append(prop)
        
+
+        constraints = [z3.Implies(z3.Not(z3.Or([m_a == candidate
+                                                for candidate in candidate_models])),
+                                  z3.And([z3.Not(self.port_is_connected(m_a, p_a))
+                                          for (p_name, p_a) in self.port_dict.items()
+                                          if p_name in c_a.ports_dict]))
+                       for (m_a, c_a) in self.contract_model_instances.items()]
 
         return constraints
 
@@ -1013,7 +1039,14 @@ class Z3Interface(object):
         2) LEARN
             2a)
         '''
-        composition = self.build_composition_from_model(model, candidates)
+        composition, spec = self.build_composition_from_model(model, candidates)
+
+        if  composition.is_refinement(spec):
+            #learn
+            #self.solver.add(self.exclude_candidate_type())
+
+
+            raise NotSynthesizableError
 
 
     def build_composition_from_model(self, model, candidates):
@@ -1063,6 +1096,19 @@ class Z3Interface(object):
         for contract in extended_contracts.values():
             LOG.debug(contract)
 
+        #compose
+        c_set = set(contracts.viewvalues())
+
+        root = c_set.pop()
+        
+        #TODO: find a way to define mapping
+        #c_set.add(root.copy())
+        
+        composition = root.compose(c_set)
+
+        LOG.debug(composition)
+
+        return composition, spec_contract
 
 
 SMTModelFactory.register(Z3Interface)

@@ -24,6 +24,7 @@ def zcontract_hash(obj):
     return hash(str(z3.simplify(obj.sort().accessor(0,0)(obj))) +
                 str(z3.simplify(obj.sort().accessor(0,1)(obj)).as_long()) +
                 str(z3.simplify(obj.sort().accessor(0,2)(obj)).as_long()))
+    #return obj.hash()
 
 def zcontract_eq(obj, other):
     '''
@@ -207,7 +208,7 @@ class Z3Interface(object):
         #add hash
         model.__hash__ = types.MethodType(zcontract_hash, model)
         #add eq
-        model.__eq__ = types.MethodType(zcontract_eq, model)
+        #model.__eq__ = types.MethodType(zcontract_eq, model)
         if is_library_elem:
             self.contract_model_instances[model] = contract
 
@@ -417,8 +418,13 @@ class Z3Interface(object):
         #at least a connection -> port connected
         condition = z3.ForAll([c_a, p_a], z3.If(z3.And(self.contract_has_port_wbase_name(c_a, p_a),
                                                        z3.Exists([c_b, p_b],
-                                                                 self.connected_ports(c_a, c_b,
-                                                                                      p_a, p_b)
+                                                                 #self.connected_ports(c_a, c_b,
+                                                                 #                     p_a, p_b)
+                                                                 z3.And(self.connected_ports(c_a, c_b,
+                                                                                      p_a, p_b),
+                                                                        z3.Or(z3.Distinct([c_a, c_b]),
+                                                                              z3.Distinct([p_a, p_b]))
+                                                                        )
                                                                  )
                                                        ),
                                                 self.port_is_connected(c_a, p_a),
@@ -654,6 +660,7 @@ class Z3Interface(object):
             #sub_constr_and = []
             sub_constr = []
             conn_out_constr = []
+            diff_model = []
 
             #LOG.debug('iteration')
             for item in itertools.product(self.port_names, repeat=2):
@@ -670,28 +677,38 @@ class Z3Interface(object):
                                    self.connected_ports(m_b, m_a, p_b_model, p_a_model))
 
                 #used in implication, later, but only if not the same component and port
-                sub_constr.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model) == True)
-
+                sub_constr.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model))
                 conn_out_constr.append(z3.And(self.connected_ports(m_a, m_b,
-                                                                   p_a_model, p_b_model) == True,
+                                                                   p_a_model, p_b_model),
                                            self.port_is_output(p_a_model, m_a),
                                            self.port_is_output(p_b_model, m_b)))
+                #LOG.debug('test-----------')
+                #LOG.debug(m_a)
+                #LOG.debug(m_b)
+                #LOG.debug(p_a)
+                #LOG.debug(p_b)
+                #LOG.debug(z3.is_true(z3.simplify(m_a == self.property_model)))
 
                 if (p_a not in c_a.ports_dict) or (p_b not in c_b.ports_dict):
-                    constraints.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model) == False)
+                    #LOG.debug('1')
+                    constraints.append(z3.Not(self.connected_ports(m_a, m_b, p_a_model, p_b_model)))
                 #connected_port is reflexive - but never in the case without replacement, or product
-                #this will break the definition of connected output
-                elif (m_a == m_b) and (p_a == p_b):
-                    constraints.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model) == True)
+                elif (z3.is_true(z3.simplify(m_a == m_b)) and
+                     z3.is_true(z3.simplify(p_a_model == p_b_model))):
+                    #LOG.debug('2')
+                    constraints.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model))
 
-                elif ((m_a is not self.property_model) and (m_b is not self.property_model)
+                elif (z3.is_false(z3.simplify(m_a == self.property_model)) and
+                        z3.is_false(z3.simplify(m_b == self.property_model))
                        and (p_a in c_a.output_ports_dict) and (p_b in c_b.output_ports_dict)):
                 #elif (p_a in c_a.output_ports_dict) and (p_b in c_b.output_ports_dict):
                     #no connections between outputs of library elements
                     #LOG.debug('no output-----------')
                     #LOG.debug(m_a)
                     #LOG.debug(m_b)
-                    constraints.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model) == False)
+                    #LOG.debug(p_a)
+                    #LOG.debug(p_b)
+                    constraints.append(z3.Not(self.connected_ports(m_a, m_b, p_a_model, p_b_model)))
                     #pass
 
             #two contracts connected if there is at least a common connection
@@ -714,9 +731,6 @@ class Z3Interface(object):
                                      self.connected_output(m_a, m_b) == False
                                      )
                               )
-                        
-            
-
 
         #transitivity of connections
         #HEAVY
@@ -759,7 +773,7 @@ class Z3Interface(object):
         constraints = []
 
         for model in candidate_models:
-            constraints.append(self.fully_connected(model)==True)
+            constraints.append(self.fully_connected(model))
 
         return constraints
 
@@ -770,18 +784,36 @@ class Z3Interface(object):
         constraints = []
         part1 = {}
 
+        #for m_a in self.contract_model_instances:
+        #    conditions = []
+        #    for candidate in candidate_models:
+        #        conditions.append(m_a == candidate)
+        #    part1[m_a] = conditions
+        #
+        ##not considering repetitions e.g. (a,a)
+        #for m_a, m_b in itertools.combinations(self.contract_model_instances.keys(), 2):
+        #    prop = z3.Implies(z3.Not(z3.And(z3.Or(part1[m_a]),
+        #                                    z3.Or(part1[m_b]))),
+        #                      self.connected(m_a, m_b)==False)
+        #    constraints.append(prop)
+        
         for m_a in self.contract_model_instances:
             conditions = []
             for candidate in candidate_models:
                 conditions.append(m_a == candidate)
             part1[m_a] = conditions
         
-        #not considering repetitions e.g. (a,a)
-        for m_a, m_b in itertools.combinations(self.contract_model_instances.keys(), 2):
-            prop = z3.Implies(z3.Not(z3.And(z3.Or(part1[m_a]),
-                                            z3.Or(part1[m_b]))),
-                              self.connected(m_a, m_b)==False)
+        for (m_a, c_a) in self.contract_model_instances.items():
+            part2 = []
+            for port_name in c_a.ports_dict:
+                p_a = getattr(self.PortBaseName, port_name)
+                part2.append(z3.Not(self.port_is_connected(m_a, p_a)))
+
+            prop = z3.Implies(z3.Not(z3.Or(part1[m_a])),
+                              z3.And(part2))
+
             constraints.append(prop)
+       
 
         return constraints
 
@@ -866,6 +898,8 @@ class Z3Interface(object):
         #models disconnected if not solution
         self.solver.add(self.models_disconnected_if_not_solution(c_list))
 
+        #add full input for models, too
+
         for candidate in c_list:
             #candidates must be within library components
             span = [candidate == component for component in self.contract_model_instances]
@@ -894,6 +928,7 @@ class Z3Interface(object):
         '''
         generate a model
         '''
+        z3.set_option(max_args=10000000, max_lines=1000000, max_depth=10000000, max_visited=1000000)
         #LOG.debug(self.solver.assertions)
 
         LOG.debug('start solving')
@@ -901,7 +936,6 @@ class Z3Interface(object):
         LOG.debug(res)
         LOG.debug('done')
         if res == z3.sat:
-            z3.set_option(max_args=10000000, max_lines=1000000, max_depth=10000000, max_visited=1000000)
             LOG.debug(self.solver.model())
         else:
             LOG.debug(self.solver.proof())

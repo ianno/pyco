@@ -712,6 +712,19 @@ class Z3Interface(object):
 
         return constraints
 
+    def property_inputs_only_to_inputs(self):
+        '''
+        property inputs cannot be connected to models outputs
+        '''
+
+        constraints = [z3.Not(self.connected_ports(self.property_model, m_b, p_p, p_b))
+                        for n_p, p_p in self.port_dict.items()
+                        if n_p in self.property_contract.input_ports_dict
+                        for n_b, p_b in self.port_dict.items()
+                        for m_b, c_b in self.extended_instances.items()
+                        if n_b in c_b.output_ports_dict]
+
+        return constraints
 
     def property_outputs_not_together(self):
         '''
@@ -750,7 +763,7 @@ class Z3Interface(object):
             try:
                 res = self.synthesize_fixed_size(size_n)
             except NotSynthesizableError:
-                LOG.debug("size %d synthesis failed")
+                LOG.debug("size %d synthesis failed" % size_n)
             else:
                 return res
 
@@ -789,6 +802,9 @@ class Z3Interface(object):
         #Spec cannot be connected to itself on outputs
         #self.solver.add(self.connected_output(self.property_model, self.property_model)==False)
         #self.solver.add(self.property_outputs_not_together())
+
+        #property inputs only with inputs
+        self.solver.add(self.property_inputs_only_to_inputs())
 
         #models disconnected if not solution
         self.solver.add(self.models_disconnected_if_not_solution(c_list))
@@ -883,8 +899,9 @@ class Z3Interface(object):
         size = len(candidates)
         c_set = set([self.contract_model_instances[c_model] for c_model in contract_instances])
 
-        c_list = [contract for contract in c_set]
+        c_list = [self.contract_model_instances[c_model] for c_model in contract_instances]
         #create inverse dict: contract to index
+        print c_list
         c_pos = {c_list[ind]: ind for ind in range(0, size) }
 
         #create inverse model dict: contract to candidate model
@@ -1004,6 +1021,9 @@ class Z3Interface(object):
                         #c_a.connect_to_port(p_a, p_b)
                         mapping.connect(p_a, p_b, '%s_%s' % (c_a.unique_name, p_a.base_name))
                         assert(not (p_a.is_output and p_b.is_output))
+                    else:
+                        mapping.add(p_a, '%s_%s' % (c_a.unique_name, p_a.base_name))
+                        mapping.add(p_b, '%s_%s' % (c_b.unique_name, p_b.base_name))
 
         for contract in extended_contracts.values():
             LOG.debug(contract)
@@ -1017,7 +1037,7 @@ class Z3Interface(object):
         composition = root.compose(c_set, composition_mapping=mapping)
 
         LOG.debug(composition)
-
+        
         return composition, spec_contract, contracts
 
 

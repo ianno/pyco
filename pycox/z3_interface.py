@@ -870,6 +870,7 @@ class Z3Interface(object):
 
     def reject_candidate(self, model, candidates, contract_instances):
         '''
+        I'm so sorry, but we need efficiency...if any
         reject proposed solution.
         we have a set of contracts, and a set of functions.
         We can reject the actual evaluation of port connections.
@@ -878,33 +879,59 @@ class Z3Interface(object):
         '''
         #LOG.debug(candidates[0])
         #LOG.debug(model[candidates[0]])
-        constraints = z3.Not(z3.And([self.connected_ports(m_a, m_b,
+
+        size = len(candidates)
+        c_set = set([self.contract_model_instances[c_model] for c_model in contract_instances])
+
+        c_list = [contract for contract in c_set]
+        #create inverse dict: contract to index
+        c_pos = {c_list[ind]: ind for ind in range(0, size) }
+
+        #create inverse model dict: contract to candidate model
+        c_mod = {self.contract_model_instances[c_model]: c_model for c_model in contract_instances}
+
+
+        constraints = [z3.Not(z3.And([self.connected_ports(m_a, m_b,
                                                            p_a, p_b) ==
-                                      model.eval(self.connected_ports(m_a,
-                                                                      m_b,
+                                      model.eval(self.connected_ports(c_mod[c_a],
+                                                                      c_mod[c_b],
                                                                       p_a, p_b),
                                                  model_completion=True)
                                       for name_a, p_a in self.port_dict.items()
                                       for name_b, p_b in self.port_dict.items()
-                                      for m_a, c_a in contract_instances.items()
-                                      for m_b, c_b in contract_instances.items()
+                                      for m_a, c_a in self.contract_model_instances.items()
+                                      if (c_a in c_set) and
+                                         (z3.simplify(self.ZContract.id(m_a)).as_long() ==
+                                         order[c_pos[c_a]])
+                                      for m_b, c_b in self.contract_model_instances.items()
+                                      if (c_b in c_set) and
+                                         (z3.simplify(self.ZContract.id(m_b)).as_long() ==
+                                         order[c_pos[c_b]])
                                       if name_a in c_a.ports_dict
                                       if name_b in c_b.ports_dict
                                       ] +
                                       [self.connected_ports(self.property_model, m_c,
                                                             p_p, p_c) ==
                                        model.eval(self.connected_ports(self.property_model,
-                                                                       m_c,
+                                                                       c_mod[c_c],
                                                                        p_p, p_c),
                                                   model_completion=True)
                                       for name_p, p_p in self.port_dict.items()
                                       for name_c, p_c in self.port_dict.items()
-                                      for m_c, c_c in contract_instances.items()
+                                      for m_c, c_c in self.contract_model_instances.items()
+                                      if (c_c in c_set) and
+                                         (z3.simplify(self.ZContract.id(m_c)).as_long() ==
+                                         order[c_pos[c_c]])
                                       if name_p in self.property_contract.ports_dict
                                       if name_c in c_c.ports_dict
                                       ]
                                     )
                             )
+                        for order in itertools.product(range(size), repeat=size)
+                      ]
+
+        #apply the same set of rules for candidates of the same type
+
         #LOG.debug(constraints)
         return constraints
 

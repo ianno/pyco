@@ -93,6 +93,15 @@ class Spec_1(Contract):
     ASSUMPTIONS = 'GFa'
     GUARANTEES = 'G(a -> (Fc ))'
 
+class Spec_2(Contract):
+    '''
+    A: GFa & GFb, G: G(a -> (Fc )) & G(b -> (F !d ))
+    '''
+    INPUT_PORTS = ['a', 'b']
+    OUTPUT_PORTS = ['c', 'd']
+    ASSUMPTIONS = 'GFa & GFb'
+    GUARANTEES = 'G(a -> (Fc )) & G(b -> (F !d ))'
+
 @pytest.fixture()
 def comp_a():
     '''
@@ -186,3 +195,16 @@ def test_synthesis_0(populated_library):
 
     synth_interface.synthesize()
 
+def test_synthesis_1(populated_library):
+    '''
+    Perform basic synthesis test.
+    Two componenent needed.
+    '''
+
+    spec = Spec_2('spec_2')
+
+    synth_interface = SynthesisInterface(spec, populated_library)
+
+    #synth_interface
+
+    synth_interface.synthesize()

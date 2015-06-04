@@ -795,6 +795,10 @@ class Z3Interface(object):
 
         #add full input for models, too
         #---
+
+        #add input needs to be connected to property
+        #or outputs
+
         for candidate in c_list:
             #candidates must be within library components
             span = [candidate == component for component in self.contract_model_instances]
@@ -833,7 +837,8 @@ class Z3Interface(object):
         if res == z3.sat:
             LOG.debug(self.solver.model())
         else:
-            LOG.debug(self.solver.proof())
+            #LOG.debug(self.solver.proof())
+            pass
 
         try:
             model = self.solver.model()
@@ -852,15 +857,56 @@ class Z3Interface(object):
         2) LEARN
             2a)
         '''
-        composition, spec = self.build_composition_from_model(model, candidates)
+        composition, spec, c_inst = self.build_composition_from_model(model, candidates)
 
-        if not composition.is_refinement(spec):
+        #self.reject_candidate(model, candidates)
+        if  True: #composition.is_refinement(spec):
             #learn
+            #as first step, we reject the actual solution
             #self.solver.add(self.exclude_candidate_type())
-
+            self.solver.add(self.reject_candidate(model, candidates, c_inst))
 
             raise NotSynthesizableError
 
+    def reject_candidate(self, model, candidates, contract_instances):
+        '''
+        reject proposed solution.
+        we have a set of contracts, and a set of functions.
+        We can reject the actual evaluation of port connections.
+        Also, discard the evaluation of the functions for all 
+        the n possibilities
+        '''
+        #LOG.debug(candidates[0])
+        #LOG.debug(model[candidates[0]])
+        constraints = z3.Not(z3.And([self.connected_ports(m_a, m_b,
+                                                           p_a, p_b) ==
+                                      model.eval(self.connected_ports(m_a,
+                                                                      m_b,
+                                                                      p_a, p_b),
+                                                 model_completion=True)
+                                      for name_a, p_a in self.port_dict.items()
+                                      for name_b, p_b in self.port_dict.items()
+                                      for m_a, c_a in contract_instances.items()
+                                      for m_b, c_b in contract_instances.items()
+                                      if name_a in c_a.ports_dict
+                                      if name_b in c_b.ports_dict
+                                      ] +
+                                      [self.connected_ports(self.property_model, m_c,
+                                                            p_p, p_c) ==
+                                       model.eval(self.connected_ports(self.property_model,
+                                                                       m_c,
+                                                                       p_p, p_c),
+                                                  model_completion=True)
+                                      for name_p, p_p in self.port_dict.items()
+                                      for name_c, p_c in self.port_dict.items()
+                                      for m_c, c_c in contract_instances.items()
+                                      if name_p in self.property_contract.ports_dict
+                                      if name_c in c_c.ports_dict
+                                      ]
+                                    )
+                            )
+        #LOG.debug(constraints)
+        return constraints
 
     def build_composition_from_model(self, model, candidates):
         '''
@@ -927,7 +973,7 @@ class Z3Interface(object):
 
         LOG.debug(composition)
 
-        return composition, spec_contract
+        return composition, spec_contract, contracts
 
 
 SMTModelFactory.register(Z3Interface)

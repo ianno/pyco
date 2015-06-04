@@ -860,7 +860,7 @@ class Z3Interface(object):
         composition, spec, c_inst = self.build_composition_from_model(model, candidates)
 
         #self.reject_candidate(model, candidates)
-        if  True: #composition.is_refinement(spec):
+        if not composition.is_refinement(spec):
             #learn
             #as first step, we reject the actual solution
             #self.solver.add(self.exclude_candidate_type())
@@ -961,10 +961,32 @@ class Z3Interface(object):
         #c_set.add(contracts.values()[0])
         mapping = CompositionMapping(c_set)
 
-        #start with connections
-        for m_a, m_b in itertools.combinations_with_replacement(extended_contracts, 2):
-            c_a = extended_contracts[m_a]
+        #start with connections for the spec
+        for m_b in contracts:
             c_b = extended_contracts[m_b]
+
+            for ((p_a_name, p_a), (p_b_name, p_b)) in itertools.product(spec_contract.ports_dict.items(), c_b.ports_dict.items()):
+                if p_a != p_b:
+                    pm_a = getattr(self.PortBaseName, p_a_name)
+                    pm_b = getattr(self.PortBaseName, p_b_name)
+                    if z3.is_true(model.eval(self.connected_ports(self.property_model, m_b, pm_a, pm_b),
+                                       model_completion=True)):
+                        #LOG.debug(c_a)
+                        #LOG.debug(p_a_name)
+                        #LOG.debug(p_a.unique_name)
+                        #LOG.debug('--')
+                        #LOG.debug(c_b)
+                        #LOG.debug(p_b_name)
+                        #LOG.debug(p_b.unique_name)
+                        #LOG.debug('**')
+                        #c_a.connect_to_port(p_a, p_b)
+                        #connect directly
+                        spec_contract.connect_to_port(p_a, p_b)
+
+        #connections among candidates
+        for m_a, m_b in itertools.combinations_with_replacement(contracts, 2):
+            c_a = contracts[m_a]
+            c_b = contracts[m_b]
             for ((p_a_name, p_a), (p_b_name, p_b)) in itertools.product(c_a.ports_dict.items(), c_b.ports_dict.items()):
                 if p_a != p_b:
                     pm_a = getattr(self.PortBaseName, p_a_name)
@@ -980,12 +1002,8 @@ class Z3Interface(object):
                         #LOG.debug(p_b.unique_name)
                         #LOG.debug('**')
                         #c_a.connect_to_port(p_a, p_b)
-                        if c_a in c_set and c_b in c_set:
-                            mapping.connect(p_a, p_b, '%s_%s' % (c_a.unique_name, p_a.base_name))
-                            assert(not (p_a.is_output and p_b.is_output))
-                        else:
-                            #connect directly
-                            c_a.connect_to_port(p_a, p_b)
+                        mapping.connect(p_a, p_b, '%s_%s' % (c_a.unique_name, p_a.base_name))
+                        assert(not (p_a.is_output and p_b.is_output))
 
         for contract in extended_contracts.values():
             LOG.debug(contract)

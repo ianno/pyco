@@ -102,6 +102,15 @@ class Spec_2(Contract):
     ASSUMPTIONS = 'GFa & GFb'
     GUARANTEES = 'G(a -> (Fc )) & G(b -> (F !d ))'
 
+class Spec_3(Contract):
+    '''
+    A: GFa & GFb & GFc, G: G(a -> (Fd )) & G(b -> (F !e )) & G(b -> (F f ))
+    '''
+    INPUT_PORTS = ['a', 'b', 'c']
+    OUTPUT_PORTS = ['d', 'e', 'f']
+    ASSUMPTIONS = 'GFa & GFb & GFc'
+    GUARANTEES = 'G(a -> (Fd )) & G(b -> (F !e )) & G(b -> (F f ))'
+
 @pytest.fixture()
 def comp_a():
     '''
@@ -181,7 +190,7 @@ def populated_library(comp_a, comp_b, comp_ab, comp_meta, library):
     library.verify_library()
 
     return library
-
+"""
 def test_synthesis_0(populated_library):
     '''
     Perform basic synthesis test. Retrieve block from library
@@ -208,3 +217,18 @@ def test_synthesis_1(populated_library):
     #synth_interface
 
     synth_interface.synthesize()
+"""
+def test_synthesis_2(populated_library):
+    '''
+    Perform basic synthesis test.
+    Two componenent needed.
+    '''
+
+    spec = Spec_3('spec_2')
+
+    synth_interface = SynthesisInterface(spec, populated_library)
+
+    #synth_interface
+
+    synth_interface.synthesize()
+#"""

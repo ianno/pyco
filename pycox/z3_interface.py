@@ -712,7 +712,7 @@ class Z3Interface(object):
 
         return constraints
 
-    def property_inputs_only_to_inputs(self):
+    def property_inputs_no_on_candidate_outputs(self):
         '''
         property inputs cannot be connected to models outputs
         '''
@@ -723,6 +723,23 @@ class Z3Interface(object):
                         for n_b, p_b in self.port_dict.items()
                         for m_b, c_b in self.extended_instances.items()
                         if n_b in c_b.output_ports_dict]
+
+        return constraints
+
+    def property_inputs_to_candidates(self):
+        '''
+        property inputs cannot be connected to models outputs
+        '''
+
+        constraints = [z3.Or([self.connected_ports(self.property_model, m_b,
+                                                          p_p, p_b)
+                               for n_b, p_b in self.port_dict.items()
+                               for m_b, c_b in self.contract_model_instances.items()
+                               if n_b in c_b.input_ports_dict
+                              ])
+                        for n_p, p_p in self.port_dict.items()
+                        if n_p in self.property_contract.input_ports_dict
+                      ]
 
         return constraints
 
@@ -761,11 +778,14 @@ class Z3Interface(object):
 
         for size_n in range(1, max_components+1):
             try:
-                res = self.synthesize_fixed_size(size_n)
+                candidate, composition, spec, c_list = self.synthesize_fixed_size(size_n)
             except NotSynthesizableError:
                 LOG.debug("size %d synthesis failed" % size_n)
             else:
-                return res
+                LOG.debug(candidate)
+                LOG.debug(composition)
+                LOG.debug(spec)
+                return candidate, composition, spec, c_list
 
         raise NotSynthesizableError
 
@@ -804,10 +824,13 @@ class Z3Interface(object):
         #self.solver.add(self.property_outputs_not_together())
 
         #property inputs only with inputs
-        self.solver.add(self.property_inputs_only_to_inputs())
+        self.solver.add(self.property_inputs_no_on_candidate_outputs())
 
         #models disconnected if not solution
         self.solver.add(self.models_disconnected_if_not_solution(c_list))
+
+        #property inputs have to be conncted to model
+        self.solver.add(self.property_inputs_to_candidates())
 
         #add full input for models, too
         #---
@@ -833,17 +856,17 @@ class Z3Interface(object):
                 raise err
             else:
                 try:
-                    self.verify_candidate(candidate, c_list)
+                    composition, spec, c_list = self.verify_candidate(candidate, c_list)
                 except NotSynthesizableError as err:
                     LOG.debug("candidate not valid")
                 else:
-                    return candidate
+                    return candidate, composition, spec, c_list
 
     def propose_candidate(self, size):
         '''
         generate a model
         '''
-        z3.set_option(max_args=10000000, max_lines=1000000, max_depth=10000000, max_visited=1000000)
+        #z3.set_option(max_args=10000000, max_lines=1000000, max_depth=10000000, max_visited=1000000)
         #LOG.debug(self.solver.assertions)
 
         LOG.debug('start solving')
@@ -852,6 +875,7 @@ class Z3Interface(object):
         LOG.debug('done')
         if res == z3.sat:
             LOG.debug(self.solver.model())
+            pass
         else:
             #LOG.debug(self.solver.proof())
             pass
@@ -884,6 +908,8 @@ class Z3Interface(object):
 
             raise NotSynthesizableError
 
+        return composition, spec, c_inst
+
     def reject_candidate(self, model, candidates, contract_instances):
         '''
         I'm so sorry, but we need efficiency...if any
@@ -901,7 +927,6 @@ class Z3Interface(object):
 
         c_list = [self.contract_model_instances[c_model] for c_model in contract_instances]
         #create inverse dict: contract to index
-        print c_list
         c_pos = {c_list[ind]: ind for ind in range(0, size) }
 
         #create inverse model dict: contract to candidate model
@@ -959,7 +984,9 @@ class Z3Interface(object):
 
         contracts = {}
         spec_contract = self.property_contract.copy()
-        LOG.debug(spec_contract)
+
+        #LOG.debug(spec_contract)
+
         #instantiate single contracts
         for candidate in candidates:
             c_m = model[candidate]
@@ -968,7 +995,9 @@ class Z3Interface(object):
             id_c = str(z3.simplify(self.ZContract.id(c_m)))
             #LOG.debug(c_name, id_c)
             contract = type(self.contract_model_instances[c_m])(c_name+id_c)
-            LOG.debug(contract)
+
+            #LOG.debug(contract)
+
             contracts[c_m] = contract
 
         extended_contracts = dict(contracts.items() + [(self.property_model, spec_contract)])

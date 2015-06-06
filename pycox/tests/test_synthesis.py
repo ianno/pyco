@@ -57,6 +57,15 @@ class B(Contract):
     ASSUMPTIONS = 'GFa'
     GUARANTEES = 'G(a -> X !b)'
 
+class C(Contract):
+    '''
+    G(a->(X!b & XX!b)
+    '''
+    INPUT_PORTS = ['a']
+    OUTPUT_PORTS = ['b']
+    ASSUMPTIONS = 'GFa'
+    GUARANTEES = 'G(a -> X !b & XX !b)'
+
 class AB(Contract):
     '''
     G(a&b -> c&d)
@@ -111,6 +120,14 @@ class Spec_3(Contract):
     ASSUMPTIONS = 'GFa & GFb & GFc'
     GUARANTEES = 'G(a -> (Fd )) & G(b -> (F !e )) & G(b -> (F f ))'
 
+class Spec_4(Contract):
+    '''
+    A: GFa & GFb & GFc, G: G(a -> (Fd )) & G(b -> (F !e )) & G(b -> (F f ))
+    '''
+    INPUT_PORTS = ['a', 'b', 'c']
+    OUTPUT_PORTS = ['d', 'e', 'f']
+    ASSUMPTIONS = 'GFa & GFb & GFc'
+    GUARANTEES = 'G(a -> (Fd )) & G(b -> (F !e )) & G(b -> (F (X!f & XX !f )))'
 @pytest.fixture()
 def comp_a():
     '''
@@ -128,6 +145,15 @@ def comp_b():
     c_b = B('B')
 
     return LibraryComponent('B_comp', c_b)
+
+@pytest.fixture()
+def comp_c():
+    '''
+    B as component
+    '''
+    c_c = C('C')
+
+    return LibraryComponent('C_comp', c_c)
 
 @pytest.fixture()
 def comp_ab():
@@ -217,7 +243,7 @@ def test_synthesis_1(populated_library):
     #synth_interface
 
     synth_interface.synthesize()
-"""
+
 def test_synthesis_2(populated_library):
     '''
     Perform basic synthesis test.
@@ -231,4 +257,21 @@ def test_synthesis_2(populated_library):
     #synth_interface
 
     synth_interface.synthesize()
-#"""
+"""
+
+def test_synthesis_3(populated_library, comp_c):
+    '''
+    Perform basic synthesis test.
+    Two componenent needed.
+    '''
+
+    populated_library.add(comp_c)
+
+    spec = Spec_4('spec_4')
+
+    synth_interface = SynthesisInterface(spec, populated_library)
+
+    #synth_interface
+
+    synth_interface.synthesize()
+

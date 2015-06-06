@@ -76,6 +76,10 @@ class Z3Interface(object):
 
         self.counter = itertools.count()
         self.port_dict = {}
+
+        #maintain a list of contracts to check for consistency
+        self.consistency_dict = {}
+
         self.solver = None
 
     @property
@@ -672,37 +676,6 @@ class Z3Interface(object):
         constraints = []
         part1 = {}
 
-        #for m_a in self.contract_model_instances:
-        #    conditions = []
-        #    for candidate in candidate_models:
-        #        conditions.append(m_a == candidate)
-        #    part1[m_a] = conditions
-        #
-        ##not considering repetitions e.g. (a,a)
-        #for m_a, m_b in itertools.combinations(self.contract_model_instances.keys(), 2):
-        #    prop = z3.Implies(z3.Not(z3.And(z3.Or(part1[m_a]),
-        #                                    z3.Or(part1[m_b]))),
-        #                      self.connected(m_a, m_b)==False)
-        #    constraints.append(prop)
-        
-        #for m_a in self.contract_model_instances:
-        #    conditions = []
-        #    for candidate in candidate_models:
-        #        conditions.append(m_a == candidate)
-        #    part1[m_a] = conditions
-        
-        #for (m_a, c_a) in self.contract_model_instances.items():
-        #    part2 = []
-        #    for port_name in c_a.ports_dict:
-        #        p_a = getattr(self.PortBaseName, port_name)
-        #        part2.append(z3.Not(self.port_is_connected(m_a, p_a)))
-
-        #    prop = z3.Implies(z3.Not(z3.Or(part1[m_a])),
-        #                      z3.And(part2))
-
-        #    constraints.append(prop)
-       
-
         constraints = [z3.Implies(z3.Not(z3.Or([m_a == candidate
                                                 for candidate in candidate_models])),
                                   z3.And([z3.Not(self.port_is_connected(m_a, p_a))
@@ -750,6 +723,8 @@ class Z3Interface(object):
         '''
         constraints = []
 
+        #TODO: refactor as list comprehension
+
         #do not consider the same port twice e.g. (a, a): in that case reflexivity guarantees
         #the property to be true
         for (p_a, p_b) in itertools.combinations(self.property_contract.output_ports_dict.keys(), 2):
@@ -763,7 +738,30 @@ class Z3Interface(object):
 
         return constraints
 
+    def inputs_on_property_inputs_or_candidate_out(self, candidates):
+        '''
+        An input of a candidate can be only connected to inputs of the
+        property or to an output of any candidate
+        '''
 
+        constraints = [z3.And([z3.Implies(cand == m_a,
+                                  z3.Or([self.connected_ports(m_a, m_b, p_a, p_b)
+                                    for n_b, p_b in self.port_dict.items()
+                                    for m_b, c_b in self.contract_model_instances.items()
+                                    if n_b in c_b.output_ports_dict
+                                    ] +
+                                    [self.connected_ports(m_a, self.property_model, p_a, p_b)
+                                    for n_b, p_b in self.port_dict.items()
+                                    if n_b in self.property_contract.input_ports_dict
+                                    ])
+                                    )
+                                for n_a, p_a in self.port_dict.items()
+                                for m_a, c_a in self.contract_model_instances.items()
+                                if n_a in c_a.input_ports_dict
+                              ])
+                        for cand in candidates]
+
+        return constraints
 
     def synthetize(self, property_contract):
         '''
@@ -833,10 +831,11 @@ class Z3Interface(object):
         self.solver.add(self.property_inputs_to_candidates())
 
         #add full input for models, too
-        #---
+        #---nope
 
         #add input needs to be connected to property
         #or outputs
+        self.solver.add(self.inputs_on_property_inputs_or_candidate_out(c_list))
 
         for candidate in c_list:
             #candidates must be within library components

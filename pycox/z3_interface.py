@@ -74,6 +74,8 @@ class Z3Interface(object):
         #TODO remember to include mapping
         self.component_refinement = None
 
+        self.same_block_constraints = None
+
         self.counter = itertools.count()
         self.port_dict = {}
 
@@ -127,10 +129,16 @@ class Z3Interface(object):
             #LOG.debug(err)
             pass
 
-        self.contract_model_instances={}
-        for index in range(0, size):
-            for component in self.library.components:
-                self.create_component_model(component, index)
+        #self.contract_model_instances={}
+        #for index in range(0, size):
+        #    for component in self.library.components:
+        #        self.create_component_model(component, index)
+
+        self.contract_model_instances = {self.create_contract_model(component.contract,
+                                                                    index):
+                                         component.contract
+                                         for component in self.library.components
+                                         for index in range(size)}
 
         #initialize the solver functions
         #constraints += self.define_initial_constraints()
@@ -160,6 +168,8 @@ class Z3Interface(object):
         '''
         override from SMTModelFactory method
         '''
+        #TODO
+        #get rid of the is_library_elem param
         #create port_list
         #input_list = self.ZPortList.bottom
         #output_list = self.ZPortList.bottom
@@ -202,8 +212,8 @@ class Z3Interface(object):
         model.__hash__ = types.MethodType(zcontract_hash, model)
         #add eq
         #model.__eq__ = types.MethodType(zcontract_eq, model)
-        if is_library_elem:
-            self.contract_model_instances[model] = contract
+        #if is_library_elem:
+        #    self.contract_model_instances[model] = contract
 
         return model
 
@@ -763,10 +773,41 @@ class Z3Interface(object):
 
         return constraints
 
-    def synthetize(self, property_contract):
+    def property_ports_controlled_by_same_component(self, port_name_a, port_name_b):
+        '''
+        Specify that property ports port_name_a and b are controlled
+        by the same component
+        '''
+        port_a = getattr(self.PortBaseName, port_name_a)
+        port_b = getattr(self.PortBaseName, port_name_b)
+
+        constraints = z3.Or([z3.And(self.connected_ports(self.property_model, m_a,
+                                                         port_a, p_x),
+                                    self.connected_ports(self.property_model, m_a,
+                                                         port_b, p_y))
+                        for p_name_x, p_x in self.port_dict.items()
+                        for p_name_y, p_y in self.port_dict.items()
+                        for m_a, c_a in self.contract_model_instances.items()
+                        if p_name_x in c_a.ports_dict and p_name_y in c_a.ports_dict])
+
+        return constraints
+
+    def compute_same_block_constraints(self):
+        '''
+        compute same block constraints according to the info given
+        by the user
+        '''
+        constraints = [self.property_ports_controlled_by_same_component(name_a, name_b)
+                        for name_a, name_b in self.same_block_constraints]
+
+        return constraints
+
+    def synthetize(self, property_contract, same_block_constraints):
         '''
         perform synthesis process
         '''
+        self.same_block_constraints = same_block_constraints
+
         self.initiliaze_solver(property_contract)
 
         max_components = len(property_contract.output_ports_dict)
@@ -808,45 +849,56 @@ class Z3Interface(object):
         #declare variables
         c_list = [z3.Const('c_%s' % i, self.ZContract) for i in range(0, size)]
 
+        constraints = []
+
         #Every component must be unique (we already duplicated)
-        self.solver.add(z3.Distinct(c_list))
+        constraints += [z3.Distinct(c_list)]
 
         #All the candidates fully connected
-        self.solver.add(self.all_models_completely_connected(c_list))
+        constraints += self.all_models_completely_connected(c_list)
 
         #property has to be fully connected
-        self.solver.add(self.fully_connected(self.property_model))
+        constraints += [self.fully_connected(self.property_model)]
 
         #Spec cannot be connected to itself on outputs
         #self.solver.add(self.connected_output(self.property_model, self.property_model)==False)
         #self.solver.add(self.property_outputs_not_together())
 
         #property inputs only with inputs
-        self.solver.add(self.property_inputs_no_on_candidate_outputs())
+        constraints += self.property_inputs_no_on_candidate_outputs()
 
         #models disconnected if not solution
-        self.solver.add(self.models_disconnected_if_not_solution(c_list))
+        constraints += self.models_disconnected_if_not_solution(c_list)
 
         #property inputs have to be conncted to model
-        self.solver.add(self.property_inputs_to_candidates())
+        constraints += self.property_inputs_to_candidates()
 
         #add full input for models, too
         #---nope
 
         #add input needs to be connected to property
         #or outputs
-        self.solver.add(self.inputs_on_property_inputs_or_candidate_out(c_list))
+        constraints += self.inputs_on_property_inputs_or_candidate_out(c_list)
+
+        #from previous computation
+        constraints += self.recall_not_consistent_constraints()
+
+        #external hints
+        constraints += self.compute_same_block_constraints()
 
         for candidate in c_list:
             #candidates must be within library components
             span = [candidate == component for component in self.contract_model_instances]
-            self.solver.add(z3.Or(span))
+            constraints += [z3.Or(span)]
 
             #but candidate cannot be the spec itself
-            self.solver.add(z3.Not(candidate==self.property_model))
+            constraints += [z3.Not(candidate==self.property_model)]
 
             #spec needs to be connected to candidates
-            self.solver.add(self.connected_output(candidate, self.property_model))
+            constraints += [self.connected_output(candidate, self.property_model)]
+
+
+        self.solver.add(constraints)
 
         while True:
             try:
@@ -940,7 +992,7 @@ class Z3Interface(object):
             contract = contract_instances[c_m]
 
             if c_name not in self.consistency_dict:
-                self.consistency_dict[c_name] = set()
+                self.consistency_dict[c_name] = {}
 
             #contracts[c_m] = contract
 
@@ -961,7 +1013,7 @@ class Z3Interface(object):
                                                                       port_name_spec))
 
                     LOG.debug(self.consistency_dict)
-                    self.consistency_dict[c_name].add((port_name_a, port_name_spec))
+                    self.consistency_dict[c_name][(port_name_a, port_name_spec)] = True
 
                     #reinstantiate a fresh copy of contract
                     spec_contract = self.property_contract.copy()
@@ -987,6 +1039,7 @@ class Z3Interface(object):
 
                     if not composition.is_consistent():
                         LOG.debug('NOT CONSISTENT')
+                        self.consistency_dict[c_name][(port_name_a, port_name_spec)] = False
                         constraints += [z3.Not(self.connected_ports(c_a, self.property_model,
                                                                 p_a, p_s))
                                         for c_a in self.contract_model_instances
@@ -996,7 +1049,24 @@ class Z3Interface(object):
 
         return constraints
 
-
+    def recall_not_consistent_constraints(self):
+        '''
+        to be called by sizes > 1.
+        Load all the informations related to inconsistent
+        blocks, computed in previous steps
+        '''
+        constraints = [z3.Not(self.connected_ports(c_a, self.property_model,
+                                                   getattr(self.PortBaseName, port_name_a),
+                                                   getattr(self.PortBaseName, port_name_s)))
+                       for c_name, name_set in self.consistency_dict.items()
+                       for c_a in self.contract_model_instances
+                       if str(z3.simplify(self.ZContract.base_name(c_a)))
+                                           == c_name
+                       for (port_name_a, port_name_s) in name_set
+                       if self.consistency_dict[c_name][(port_name_a, port_name_s)]==False
+                       ]
+        #LOG.debug(constraints)
+        return constraints
 
     def reject_candidate(self, model, candidates, contract_instances):
         '''

@@ -243,7 +243,23 @@ def test_synthesis_1(populated_library):
     #synth_interface
 
     synth_interface.synthesize()
+"""
+def test_synthesis_1_with_hints(populated_library):
+    '''
+    Perform basic synthesis test.
+    Two componenent needed.
+    '''
 
+    spec = Spec_2('spec_2')
+
+    synth_interface = SynthesisInterface(spec, populated_library)
+
+    #synth_interface
+    synth_interface.same_block_constraint([spec.a, spec.c])
+    synth_interface.same_block_constraint([spec.b, spec.d])
+
+    synth_interface.synthesize()
+"""
 def test_synthesis_2(populated_library):
     '''
     Perform basic synthesis test.
@@ -257,7 +273,7 @@ def test_synthesis_2(populated_library):
     #synth_interface
 
     synth_interface.synthesize()
-"""
+
 
 def test_synthesis_3(populated_library, comp_c):
     '''
@@ -274,4 +290,4 @@ def test_synthesis_3(populated_library, comp_c):
     #synth_interface
 
     synth_interface.synthesize()
-
+"""

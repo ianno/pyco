@@ -850,16 +850,16 @@ class Z3Interface(object):
 
         while True:
             try:
-                candidate = self.propose_candidate(size)
+                model = self.propose_candidate(size)
             except NotSynthesizableError as err:
                 raise err
             else:
                 try:
-                    composition, spec, c_list = self.verify_candidate(candidate, c_list)
+                    composition, spec, contract_list = self.verify_candidate(model, c_list)
                 except NotSynthesizableError as err:
                     LOG.debug("candidate not valid")
                 else:
-                    return candidate, composition, spec, c_list
+                    return model, composition, spec, contract_list
 
     def propose_candidate(self, size):
         '''
@@ -896,18 +896,107 @@ class Z3Interface(object):
         2) LEARN
             2a)
         '''
-        composition, spec, c_inst = self.build_composition_from_model(model, candidates)
+        composition, spec, contract_inst = self.build_composition_from_model(model, candidates)
 
         #self.reject_candidate(model, candidates)
         if not composition.is_refinement(spec):
             #learn
             #as first step, we reject the actual solution
             #self.solver.add(self.exclude_candidate_type())
-            self.solver.add(self.reject_candidate(model, candidates, c_inst))
+            self.solver.add(self.reject_candidate(model, candidates, contract_inst))
+
+            #then check for consistency
+            self.solver.add(self.check_for_consistency(model, candidates, contract_inst))
 
             raise NotSynthesizableError
 
-        return composition, spec, c_inst
+        return composition, spec, contract_inst
+
+    def check_for_consistency(self, model, candidates, contract_instances):
+        '''
+        Checks for consistency of contracts in the proposed model.
+        If inconsistent, remove the contract and its refinements from
+        the possible candidates.
+        Steps.
+            1) take a model from the candidate list
+            2) make a copy of the spec contract
+            3) for every common output port between model and spec:
+                3.1) connect the only port of model with spec
+                3.2) compose model with spec
+                3.3) check consistency
+                3.4) if inconsistent, remove model and port from solution space
+        '''
+
+        constraints = []
+
+
+        #instantiate single contracts
+        for candidate in candidates:
+            c_m = model[candidate]
+            c_m.__hash__ = types.MethodType(zcontract_hash, c_m)
+            c_name = str(z3.simplify(self.ZContract.base_name(c_m)))
+
+            #get base instance
+            contract = contract_instances[c_m]
+
+            if c_name not in self.consistency_dict:
+                self.consistency_dict[c_name] = set()
+
+            #contracts[c_m] = contract
+
+            for (port_name_a, port_name_spec) in (
+                itertools.product(contract.output_ports_dict,
+                    self.property_contract.output_ports_dict)):
+
+                p_a = getattr(self.PortBaseName, port_name_a)
+                p_s = getattr(self.PortBaseName, port_name_spec)
+
+                if ((port_name_a, port_name_spec) not in self.consistency_dict[c_name] and
+                    z3.is_true(model.eval(self.connected_ports(c_m, self.property_model,
+                                                                p_a, p_s),
+                                          model_completion=True))):
+
+                    LOG.debug('Checking consistency of %s: %s->%s' % (contract.base_name,
+                                                                      port_name_a,
+                                                                      port_name_spec))
+
+                    LOG.debug(self.consistency_dict)
+                    self.consistency_dict[c_name].add((port_name_a, port_name_spec))
+
+                    #reinstantiate a fresh copy of contract
+                    spec_contract = self.property_contract.copy()
+                    contract = type(self.contract_model_instances[c_m])(c_name)
+
+
+                    port_a = contract.output_ports_dict[port_name_a]
+                    port_spec = spec_contract.output_ports_dict[port_name_spec]
+
+                    spec_contract.connect_to_port(port_spec, port_a)
+
+                    c_mapping = CompositionMapping([spec_contract, contract])
+                    #names
+                    for port in spec_contract.ports_dict.values():
+                        c_mapping.add(port_a, '%s_%s' % (contract.unique_name,
+                                                         port_a.base_name))
+                    for port in contract.ports_dict.values():
+                        c_mapping.add(port_spec, '%s_%s' % (spec_contract.unique_name,
+                                                        port_spec.base_name))
+
+                    composition = spec_contract.compose(contract,
+                                                        composition_mapping=c_mapping)
+
+                    if not composition.is_consistent():
+                        LOG.debug('NOT CONSISTENT')
+                        constraints += [z3.Not(self.connected_ports(c_a, self.property_model,
+                                                                p_a, p_s))
+                                        for c_a in self.contract_model_instances
+                                        if str(z3.simplify(self.ZContract.base_name(c_a)))
+                                           == c_name
+                                        ]
+
+        return constraints
+
+
 
     def reject_candidate(self, model, candidates, contract_instances):
         '''
@@ -915,11 +1004,11 @@ class Z3Interface(object):
         reject proposed solution.
         we have a set of contracts, and a set of functions.
         We can reject the actual evaluation of port connections.
-        Also, discard the evaluation of the functions for all 
-        the n possibilities
+        Also, discard the evaluation of the functions for all
+        the n possibilities. This means that for n instances
+        of a contract A, we exclude all the n from future
+        appearance
         '''
-        #LOG.debug(candidates[0])
-        #LOG.debug(model[candidates[0]])
 
         size = len(candidates)
         c_set = set([self.contract_model_instances[c_model] for c_model in contract_instances])

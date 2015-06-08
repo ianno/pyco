@@ -6,7 +6,8 @@ Author: Antonio Iannopollo
 '''
 from pyco.attribute import Attribute
 from pycox.contract import (ContractMapping, PortMappingError, PortMapping,
-                            CompositionMapping, NotARefinementError)
+                            CompositionMapping, NotARefinementError, BaseType,
+                            NotATypeError)
 
 from pycox.solver_interface import SMTManager
 from pycox import LOG
@@ -23,6 +24,11 @@ class ContractLibrary(object):
         initializer
         '''
         self.components = []
+
+        #type structures
+        self.typeset = set()
+        self.type_compatibility_set = set()
+
         self.context = context
         self.name_attribute = Attribute(base_name, context)
 
@@ -40,6 +46,25 @@ class ContractLibrary(object):
 
         self.components.append(library_component)
 
+    def add_type(self, type_cls):
+        '''
+        add a type class to the list
+        '''
+        if not issubclass(type_cls, BaseType):
+            raise NotATypeError(type_cls)
+
+        self.typeset.add(type_cls)
+
+    def add_type_compatibility(self, type_a, type_b):
+        '''
+        add a pair of compatible types
+        '''
+        if (type_a not in self.typeset or
+            type_b not in self.typeset):
+            raise UndefinedTypeError((type_a, type_b))
+
+        self.type_compatibility_set.add((type_a, type_b))
+        self.type_compatibility_set.add((type_b, type_a))
 
     def verify_library(self):
         '''
@@ -416,3 +441,10 @@ class EquivalentComponentError(Exception):
     a refinement assertion
     '''
     pass
+
+
+class UndefinedTypeError(Exception):
+    '''
+    Raised if trying to use a type not registered in the library
+    '''
+

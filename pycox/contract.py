@@ -12,7 +12,7 @@ from pyco.contract import (Port as BasePort, Contract as BaseContract, PortMappi
                            NotARefinementError, RefinementMapping)
 from pyco.parser.lexer import BaseSymbolSet
 from pycox import LOG
-
+from abc import ABCMeta
 
 LOG.debug('In contract.py')
 
@@ -45,6 +45,7 @@ class Contract(BaseContract):
     '''
     ASSUMPTIONS = ''
     GUARANTEES = ''
+    #pairs (name,type)
     INPUT_PORTS = []
     OUTPUT_PORTS = []
 
@@ -55,10 +56,13 @@ class Contract(BaseContract):
         '''
         Initialization
         '''
+        self.port_type = {port_name: port_type() for (port_name, port_type)
+                          in self.INPUT_PORTS + self.OUTPUT_PORTS}
+
         if input_ports is None:
-            input_ports = self.INPUT_PORTS
+            input_ports = [port_name for port_name in self.INPUT_PORTS]
         if output_ports is None:
-            output_ports = self.OUTPUT_PORTS
+            output_ports = [port_name for port_name in self.OUTPUT_PORTS]
         if assume_formula is None:
             assume_formula = self.ASSUMPTIONS
         if guarantee_formula is None:
@@ -85,6 +89,14 @@ class Contract(BaseContract):
 
 
 
+class BaseType:
+    '''
+    Implements base type for contract ports
+    '''
+
+    __metaclass__ = ABCMeta
+
+
 class PortMappingError(Exception):
     '''
     Raised if a mapping constraint is add more than once
@@ -92,4 +104,8 @@ class PortMappingError(Exception):
     pass
 
 
+class NotATypeError(Exception):
+    '''
+    Raised if a type is not a subclass of BaseType
+    '''
 

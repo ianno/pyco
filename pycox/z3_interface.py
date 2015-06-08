@@ -74,7 +74,9 @@ class Z3Interface(object):
         #TODO remember to include mapping
         self.component_refinement = None
 
+        #hints from designer
         self.same_block_constraints = None
+        self.distinct_mapping_constraints = None
 
         self.counter = itertools.count()
         self.port_dict = {}
@@ -794,7 +796,7 @@ class Z3Interface(object):
 
     def compute_same_block_constraints(self):
         '''
-        compute same block constraints according to the info given
+        computes same block constraints according to the info given
         by the user
         '''
         constraints = [self.property_ports_controlled_by_same_component(name_a, name_b)
@@ -802,11 +804,40 @@ class Z3Interface(object):
 
         return constraints
 
-    def synthetize(self, property_contract, same_block_constraints):
+    def map_property_ports_on_distinct_ports(self, port_name_a, port_name_b):
+        '''
+        prevents two ports of the property to be mapped on the same candidate port
+        '''
+        port_a = getattr(self.PortBaseName, port_name_a)
+        port_b = getattr(self.PortBaseName, port_name_b)
+
+        constraints = z3.And([z3.Not(z3.And(self.connected_ports(self.property_model,
+                                                                 m_a, port_a, p_x)),
+                                            self.connected_ports(self.property_model,
+                                                                 m_a, port_b, p_x))
+                             for name_x, p_x in self.port_dict.items()
+                             for m_a, c_a in self.contract_model_instances.items()
+                             if name_x in c_a.ports_dict])
+
+        return constraints
+
+    def compute_distinct_port_constraints(self):
+        '''
+        computes the set of distinct ports according the info from the user
+        '''
+
+        constraints = [self.map_property_ports_on_distinct_ports(name_a, name_b)
+                       for name_a, name_b in self.distinct_mapping_constraints]
+
+        return constraints
+
+    def synthesize(self, property_contract, same_block_constraints,
+                    distinct_mapping_constraints):
         '''
         perform synthesis process
         '''
         self.same_block_constraints = same_block_constraints
+        self.distinct_mapping_constraints = distinct_mapping_constraints
 
         self.initiliaze_solver(property_contract)
 
@@ -885,6 +916,7 @@ class Z3Interface(object):
 
         #external hints
         constraints += self.compute_same_block_constraints()
+        constraints += self.compute_distinct_port_constraints()
 
         for candidate in c_list:
             #candidates must be within library components

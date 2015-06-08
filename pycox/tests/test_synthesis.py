@@ -216,7 +216,7 @@ def populated_library(comp_a, comp_b, comp_ab, comp_meta, library):
     library.verify_library()
 
     return library
-"""
+
 def test_synthesis_0(populated_library):
     '''
     Perform basic synthesis test. Retrieve block from library
@@ -243,7 +243,7 @@ def test_synthesis_1(populated_library):
     #synth_interface
 
     synth_interface.synthesize()
-"""
+
 def test_synthesis_1_with_hints(populated_library):
     '''
     Perform basic synthesis test.
@@ -259,7 +259,7 @@ def test_synthesis_1_with_hints(populated_library):
     synth_interface.same_block_constraint([spec.b, spec.d])
 
     synth_interface.synthesize()
-"""
+
 def test_synthesis_2(populated_library):
     '''
     Perform basic synthesis test.
@@ -290,4 +290,4 @@ def test_synthesis_3(populated_library, comp_c):
     #synth_interface
 
     synth_interface.synthesize()
-"""
+

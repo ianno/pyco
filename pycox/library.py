@@ -27,12 +27,24 @@ class ContractLibrary(object):
 
         #type structures
         self.typeset = set()
-        self.type_compatibility_set = set()
+        self.typeset.add(BaseType)
+
+        self._type_compatibility_set = set()
 
         self.context = context
         self.name_attribute = Attribute(base_name, context)
 
         self.smt_manager = SMTManager(self)
+
+    @property
+    def type_compatibility_set(self):
+        '''
+        Returns BaseType-BaseType if the set is empty
+        '''
+        if not self._type_compatibility_set:
+            return set([(BaseType, BaseType)])
+        else:
+            return self._type_compatibility_set
 
     def add(self, library_component):
         '''
@@ -55,6 +67,19 @@ class ContractLibrary(object):
 
         self.typeset.add(type_cls)
 
+        #given the new type, compute new compatibilities
+        #according to the actual ones
+        addition = set()
+        for (type_a, type_b) in self.type_compatibility_set:
+            #if (a, b) in the set, then also (b, a) is in
+            #by constraction
+            if issubclass(type_cls, type_a):
+                addition.add((type_cls, type_b))
+                addition.add((type_b, type_cls))
+
+        self.type_compatibility_set = self.type_compatibility_set | addition
+
+
     def add_type_compatibility(self, type_a, type_b):
         '''
         add a pair of compatible types
@@ -63,8 +88,18 @@ class ContractLibrary(object):
             type_b not in self.typeset):
             raise UndefinedTypeError((type_a, type_b))
 
-        self.type_compatibility_set.add((type_a, type_b))
-        self.type_compatibility_set.add((type_b, type_a))
+        self._type_compatibility_set.add((type_a, type_b))
+        self._type_compatibility_set.add((type_b, type_a))
+
+        #add compatibility also for subclasses
+        for a_type in self.typeset:
+            if issubclass(a_type, type_a):
+                self._type_compatibility_set.add((a_type, type_b))
+                self._type_compatibility_set.add((type_b, a_type))
+            if issubclass(a_type, type_b):
+                self._type_compatibility_set.add((a_type, type_a))
+                self._type_compatibility_set.add((type_a, a_type))
+
 
     def verify_library(self):
         '''

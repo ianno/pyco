@@ -50,5 +50,6 @@ class SynthesisInterface(object):
         call for synthesis
         '''
 
-        self.solver_interface.synthesize(self.spec_contract, self.same_block_pairs,
-                                         self.distinct_map)
+        self.solver_interface.synthesize(self.spec_contract,
+                                         same_block_constraints=self.same_block_pairs,
+                                         distinct_mapping_constraints=self.distinct_map)

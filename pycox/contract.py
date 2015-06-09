@@ -56,13 +56,27 @@ class Contract(BaseContract):
         '''
         Initialization
         '''
-        self.port_type = {port_name: port_type() for (port_name, port_type)
+        #pre-process
+        for index, item in enumerate(self.INPUT_PORTS):
+            try:
+                (port_name, port_type) = item
+            except ValueError:
+                self.INPUT_PORTS[index] = (item, BaseType)
+
+        for index, item in enumerate(self.OUTPUT_PORTS):
+            try:
+                (port_name, port_type) = item
+            except ValueError:
+                self.OUTPUT_PORTS[index] = (item, BaseType)
+
+        self.port_type = {port_name: port_type for (port_name, port_type)
                           in self.INPUT_PORTS + self.OUTPUT_PORTS}
+        #LOG.debug(self.port_type)
 
         if input_ports is None:
-            input_ports = [port_name for port_name in self.INPUT_PORTS]
+            input_ports = [port_name for (port_name, _) in self.INPUT_PORTS]
         if output_ports is None:
-            output_ports = [port_name for port_name in self.OUTPUT_PORTS]
+            output_ports = [port_name for (port_name, _) in self.OUTPUT_PORTS]
         if assume_formula is None:
             assume_formula = self.ASSUMPTIONS
         if guarantee_formula is None:

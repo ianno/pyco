@@ -41,6 +41,8 @@ class Z3Interface(object):
         '''
         z3.set_param(proof=True)
         self.library = library
+        #self.typeset = library.typeset
+        self.type_compatibility_set = library.type_compatibility_set
 
         self.property_model = None
         #self.ComponentBaseName = None
@@ -94,6 +96,7 @@ class Z3Interface(object):
         assert self.property_model is not None
 
         return dict(self.contract_model_instances.items() + [(self.property_model, self.property_contract)])
+
 
     def initiliaze_solver(self, property_contract):
         '''
@@ -831,6 +834,24 @@ class Z3Interface(object):
 
         return constraints
 
+
+    def process_type_compatibility(self):
+        '''
+        Prevents connections among incompatible types
+        '''
+
+        constraints = [z3.Not(self.connected_ports(m_a, m_b, p_a, p_b))
+                        for p_name_a, p_a in self.port_dict.items()
+                        for p_name_b, p_b in self.port_dict.items()
+                        for m_a, c_a in self.contract_model_instances.items()
+                        for m_b, c_b in self.contract_model_instances.items()
+                        if p_name_a in c_a.ports_dict and
+                           p_name_b in c_b.ports_dict and
+                           (c_a.port_type[p_name_a], c_b.port_type[p_name_b]) not in
+                           self.type_compatibility_set]
+
+        return constraints
+
     def synthesize(self, property_contract, same_block_constraints,
                     distinct_mapping_constraints):
         '''
@@ -917,6 +938,9 @@ class Z3Interface(object):
         #external hints
         constraints += self.compute_same_block_constraints()
         constraints += self.compute_distinct_port_constraints()
+
+        #type compatibility
+        #constraints += self.process_type_compatibility()
 
         for candidate in c_list:
             #candidates must be within library components
@@ -1044,7 +1068,7 @@ class Z3Interface(object):
                                                                       port_name_a,
                                                                       port_name_spec))
 
-                    LOG.debug(self.consistency_dict)
+                    #LOG.debug(self.consistency_dict)
                     self.consistency_dict[c_name][(port_name_a, port_name_spec)] = True
 
                     #reinstantiate a fresh copy of contract

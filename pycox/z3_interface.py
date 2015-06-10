@@ -43,6 +43,10 @@ class Z3Interface(object):
         self.library = library
         #self.typeset = library.typeset
         self.type_compatibility_set = library.type_compatibility_set
+        self.max_hierarchy = library.max_hierarchy
+        self.refined_by = library.refined_by
+        self.refines = library.refines
+        self.hierarchy = library.hierarchy
 
         self.property_model = None
         #self.ComponentBaseName = None
@@ -209,7 +213,8 @@ class Z3Interface(object):
 
         model = self.ZContract.contract(getattr(self.ContractBaseName,
                                                 contract.base_name),
-                                        z3.BitVecVal(0,2),
+                                        z3.BitVecVal(self.hierarchy.get(contract.base_name, 0),
+                                                     2),
                                         z3.BitVecVal(index, 8))
 
 
@@ -940,7 +945,7 @@ class Z3Interface(object):
         constraints += self.compute_distinct_port_constraints()
 
         #type compatibility
-        #constraints += self.process_type_compatibility()
+        constraints += self.process_type_compatibility()
 
         for candidate in c_list:
             #candidates must be within library components
@@ -956,11 +961,26 @@ class Z3Interface(object):
 
         self.solver.add(constraints)
 
+        #start from hierarchy 0
+        self.solver.push()
+        current_hierarchy = 0
+        self.solver.add(self.allow_hierarchy(current_hierarchy, c_list))
+        LOG.debug('current hierarchy: %d' % current_hierarchy)
+
         while True:
             try:
                 model = self.propose_candidate(size)
             except NotSynthesizableError as err:
-                raise err
+                if current_hierarchy < self.max_hierarchy:
+                    LOG.debug('increase hierarchy to %d' % current_hierarchy + 1)
+                    current_hierarchy += 1
+                    self.solver.pop()
+                    self.solver.push()
+                    self.solver.add(self.allow_hierarchy(current_hierarchy, c_list))
+                    LOG.debug(self.solver.assertions)
+                else:
+                    self.solver.pop()
+                    raise err
             else:
                 try:
                     composition, spec, contract_list = self.verify_candidate(model, c_list)
@@ -968,6 +988,15 @@ class Z3Interface(object):
                     LOG.debug("candidate not valid")
                 else:
                     return model, composition, spec, contract_list
+
+    def allow_hierarchy(self, hierarchy, candidate_list):
+        '''
+        Allows components with hierarchy less than or equal to hierarchy
+        '''
+        constraints = [self.ZContract.hierarchy(candidate) <= z3.BitVecVal(hierarchy,2)
+                         for candidate in candidate_list]
+
+        return constraints
 
     def propose_candidate(self, size):
         '''
@@ -1102,7 +1131,22 @@ class Z3Interface(object):
                                         if str(z3.simplify(self.ZContract.base_name(c_a)))
                                            == c_name
                                         ]
+                        #add constraints also for the contracts which refines this one
+                        for ref_name in self.refines[c_name]:
+                            ref_map = self.refines[c_name][ref_name]
+                            mapped_p_name = ref_map[port_name_a]
+                            mapped_p = getattr(self.PortBaseName, mapped_p_name)
+                            self.consistency_dict[ref_name][(mapped_p_name,
+                                                             port_name_spec)] = False
 
+                            constraints += [z3.Not(self.connected_ports(c_a, self.property_model,
+                                                                mapped_p, p_s))
+                                        for c_a in self.contract_model_instances
+                                        if str(z3.simplify(self.ZContract.base_name(c_a)))
+                                           == ref_name
+                                        ]
+        #LOG.debug('consistency constraints')
+        #LOG.debug(constraints)
         return constraints
 
     def recall_not_consistent_constraints(self):
@@ -1188,6 +1232,7 @@ class Z3Interface(object):
 
         #apply the same set of rules for candidates of the same type
 
+        #LOG.debug('log rejection constraints')
         #LOG.debug(constraints)
         return constraints
 

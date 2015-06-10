@@ -31,10 +31,47 @@ class ContractLibrary(object):
 
         self._type_compatibility_set = set()
 
+        self.hierarchy = {}
+        self.refines = {}
+        self.refined_by = {}
+
         self.context = context
         self.name_attribute = Attribute(base_name, context)
 
         self.smt_manager = SMTManager(self)
+
+    @property
+    def max_hierarchy(self):
+        '''
+        computes the highest level of hierarchy
+        '''
+        if not self.hierarchy:
+            return 0
+
+        return max(self.hierarchy.values())
+
+    def _new_refinement_assertion(self, assertion):
+        '''
+        register a new refinement assertion
+        '''
+        concrete = assertion.component.contract
+        abstract = assertion.abstract_component.contract
+        mapping = assertion.port_mapping
+
+
+        self.hierarchy[concrete.base_name] = self.hierarchy[abstract.base_name]+1
+        if concrete not in self.refined_by:
+            self.refined_by[concrete.base_name] = {}
+        self.refined_by[concrete.base_name][abstract.base_name] = {}
+
+        if abstract not in self.refines:
+            self.refines[abstract.base_name] = {}
+        self.refines[abstract.base_name][concrete.base_name] = {}
+
+        for port_a, port_b in mapping.mapping:
+            if port_a.contract == concrete:
+                self.refined_by[concrete.base_name][abstract.base_name][port_a.base_name] = port_b.base_name
+                self.refines[abstract.base_name][concrete.base_name][port_b.base_name] = port_a.base_name
 
     @property
     def type_compatibility_set(self):
@@ -57,6 +94,7 @@ class ContractLibrary(object):
         library_component.assign_to_solver(self.smt_manager)
 
         self.components.append(library_component)
+        self.hierarchy[library_component.contract] = 0
 
     def add_type(self, type_cls):
         '''
@@ -300,6 +338,7 @@ class LibraryComponent(object):
 
             #save assertion
             self.refinement_assertions.add(assertion)
+            self.library._new_refinement_assertion(assertion)
 
     def verify_refinement_assertions(self):
         '''

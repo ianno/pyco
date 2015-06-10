@@ -250,7 +250,7 @@ def test_synthesis_1_with_hints(populated_library):
     Two componenent needed.
     '''
 
-    spec = Spec_2('spec_2')
+    spec = Spec_2('spec_2_hints')
 
     synth_interface = SynthesisInterface(spec, populated_library)
 

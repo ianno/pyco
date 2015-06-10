@@ -49,6 +49,8 @@ class Z3Interface(object):
         self.hierarchy = library.hierarchy
 
         self.property_model = None
+        self.property_contract = None
+        self.specification_list = []
         #self.ComponentBaseName = None
 
         self.contracts_dict = {}
@@ -857,13 +859,19 @@ class Z3Interface(object):
 
         return constraints
 
-    def synthesize(self, property_contract, same_block_constraints,
+    def synthesize(self, property_contracts, same_block_constraints,
                     distinct_mapping_constraints):
         '''
         perform synthesis process
         '''
         self.same_block_constraints = same_block_constraints
         self.distinct_mapping_constraints = distinct_mapping_constraints
+
+        self.specification_list = property_contracts
+
+        #let's pick a root
+        #we assume all the specs have same interface
+        property_contract = self.specification_list[0]
 
         self.initiliaze_solver(property_contract)
 
@@ -1033,23 +1041,42 @@ class Z3Interface(object):
         2) LEARN
             2a)
         '''
-        composition, spec, contract_inst = self.build_composition_from_model(model, candidates)
 
         #self.reject_candidate(model, candidates)
-        if not composition.is_refinement(spec):
+        state, composition, connected_spec, contract_inst = \
+                self.check_all_specs(model, candidates)
+        if not state:
             #learn
             #as first step, we reject the actual solution
             #self.solver.add(self.exclude_candidate_type())
             self.solver.add(self.reject_candidate(model, candidates, contract_inst))
 
             #then check for consistency
-            self.solver.add(self.check_for_consistency(model, candidates, contract_inst))
+            self.solver.add(self.check_for_consistency(model, candidates, contract_inst, connected_spec))
 
             raise NotSynthesizableError
 
-        return composition, spec, contract_inst
+        return composition, connected_spec, contract_inst
 
-    def check_for_consistency(self, model, candidates, contract_instances):
+    def check_all_specs(self, model, candidates):
+        '''
+        check if the model satisfies a number of specs, if provided
+        '''
+        composition = None
+        connected_spec = None
+        contract_inst = None
+        for spec in self.specification_list:
+            composition, connected_spec, contract_inst = \
+                self.build_composition_from_model(model, spec, candidates)
+
+            if not composition.is_refinement(connected_spec):
+                return False, composition, connected_spec,contract_inst
+
+        return True, composition, connected_spec,contract_inst
+
+
+
+    def check_for_consistency(self, model, candidates, contract_instances, spec_contract):
         '''
         Checks for consistency of contracts in the proposed model.
         If inconsistent, remove the contract and its refinements from
@@ -1083,7 +1110,7 @@ class Z3Interface(object):
 
             for (port_name_a, port_name_spec) in (
                 itertools.product(contract.output_ports_dict,
-                    self.property_contract.output_ports_dict)):
+                    spec_contract.output_ports_dict)):
 
                 p_a = getattr(self.PortBaseName, port_name_a)
                 p_s = getattr(self.PortBaseName, port_name_spec)
@@ -1101,7 +1128,8 @@ class Z3Interface(object):
                     self.consistency_dict[c_name][(port_name_a, port_name_spec)] = True
 
                     #reinstantiate a fresh copy of contract
-                    spec_contract = self.property_contract.copy()
+                    spec_contract = spec_contract.copy()
+                    #spec model is the same for all specs
                     contract = type(self.contract_model_instances[c_m])(c_name)
 
 
@@ -1236,13 +1264,57 @@ class Z3Interface(object):
         #LOG.debug(constraints)
         return constraints
 
-    def build_composition_from_model(self, model, candidates):
+    def filter_candidate_contracts_for_composition(self, candidates, spec_contract):
+        '''
+        Figures out what candidates are really needed to perform refinement verification
+        '''
+        #if len(candidates) > 1:
+        #    import pdb
+        #    pdb.set_trace()
+        spec_literals = spec_contract.assume_formula.get_literal_items()
+        spec_literals |= spec_contract.guarantee_formula.get_literal_items()
+        spec_literal_unames = set([literal.unique_name for (_,literal) in spec_literals])
+
+        #match ports on literals
+        out_ports = {name: port for name, port in spec_contract.output_ports_dict.items()
+                     if port.unique_name in spec_literal_unames}
+
+        in_ports = {name: port for name, port in spec_contract.input_ports_dict.items()
+                     if port.unique_name in spec_literal_unames}
+
+        #push all the output ports into a stack, and start exploring
+        explore_list = set(out_ports.values())
+        connected_contracts = set()
+
+        #find all candidates connected to the spec
+        while explore_list:
+            new_ports = set()
+            query_port = explore_list.pop()
+            for contract in candidates:
+                if contract not in connected_contracts:
+                    for port in contract.output_ports_dict.values():
+                        if port.is_connected_to(query_port):
+                            connected_contracts.add(contract)
+                            new_ports |= set(([n_port for n_port
+                                           in contract.input_ports_dict.values()]))
+                            break
+
+            explore_list |= new_ports
+
+        LOG.debug('filtered list')
+        LOG.debug(connected_contracts)
+        return connected_contracts
+
+
+
+
+    def build_composition_from_model(self, model, spec, candidates):
         '''
         builds a contract composition out of a model
         '''
 
         contracts = {}
-        spec_contract = self.property_contract.copy()
+        spec_contract = spec.copy()
 
         #LOG.debug(spec_contract)
 
@@ -1316,6 +1388,8 @@ class Z3Interface(object):
         for contract in extended_contracts.values():
             LOG.debug(contract)
 
+
+        c_set = self.filter_candidate_contracts_for_composition(c_set, spec_contract)
 
         #compose
         root = c_set.pop()

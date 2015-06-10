@@ -224,7 +224,7 @@ def test_synthesis_0(populated_library):
 
     spec = A('spec_A')
 
-    synth_interface = SynthesisInterface(spec, populated_library)
+    synth_interface = SynthesisInterface([spec], populated_library)
 
     #synth_interface
 
@@ -238,7 +238,7 @@ def test_synthesis_1(populated_library):
 
     spec = Spec_2('spec_2')
 
-    synth_interface = SynthesisInterface(spec, populated_library)
+    synth_interface = SynthesisInterface([spec], populated_library)
 
     #synth_interface
 
@@ -252,7 +252,7 @@ def test_synthesis_1_with_hints(populated_library):
 
     spec = Spec_2('spec_2_hints')
 
-    synth_interface = SynthesisInterface(spec, populated_library)
+    synth_interface = SynthesisInterface([spec], populated_library)
 
     #synth_interface
     synth_interface.same_block_constraint([spec.a, spec.c])
@@ -268,7 +268,7 @@ def test_synthesis_2(populated_library):
 
     spec = Spec_3('spec_2')
 
-    synth_interface = SynthesisInterface(spec, populated_library)
+    synth_interface = SynthesisInterface([spec], populated_library)
 
     #synth_interface
 
@@ -285,7 +285,7 @@ def test_synthesis_3(populated_library, comp_c):
 
     spec = Spec_4('spec_4')
 
-    synth_interface = SynthesisInterface(spec, populated_library)
+    synth_interface = SynthesisInterface([spec], populated_library)
 
     #synth_interface
 

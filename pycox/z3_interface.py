@@ -842,7 +842,7 @@ class Z3Interface(object):
         return constraints
 
 
-    def process_type_compatibility(self):
+    def process_candidate_type_compatibility(self):
         '''
         Prevents connections among incompatible types
         '''
@@ -858,6 +858,23 @@ class Z3Interface(object):
                            self.type_compatibility_set]
 
         return constraints
+
+    def process_spec_type_compatibility(self):
+        '''
+        Allows spec to be connected only to similar types
+        '''
+
+        constraints = [z3.Not(self.connected_ports(self.property_model, m_b, p_a, p_b))
+                        for p_name_a, p_a in self.port_dict.items()
+                        for p_name_b, p_b in self.port_dict.items()
+                        for m_b, c_b in self.contract_model_instances.items()
+                        if p_name_a in self.property_contract.ports_dict and
+                           p_name_b in c_b.ports_dict and
+                           not issubclass(self.property_contract.port_type[p_name_a],
+                                          c_b.port_type[p_name_b])]
+
+        return constraints
+
 
     def synthesize(self, property_contracts, same_block_constraints,
                     distinct_mapping_constraints):
@@ -953,7 +970,8 @@ class Z3Interface(object):
         constraints += self.compute_distinct_port_constraints()
 
         #type compatibility
-        constraints += self.process_type_compatibility()
+        constraints += self.process_candidate_type_compatibility()
+        constraints += self.process_spec_type_compatibility()
 
         for candidate in c_list:
             #candidates must be within library components

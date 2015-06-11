@@ -6,7 +6,7 @@ Author: Antonio Iannopollo
 
 import itertools
 from pycox import LOG
-from pycox.z3_interface import Z3Interface
+from pycox.z3_interface import Z3Interface, NotSynthesizableError
 
 
 

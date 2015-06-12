@@ -39,6 +39,7 @@ class Z3Interface(object):
         '''
         init
         '''
+
         z3.set_param(proof=True)
         self.library = library
         #self.typeset = library.typeset
@@ -822,13 +823,13 @@ class Z3Interface(object):
         port_b = getattr(self.PortBaseName, port_name_b)
 
         constraints = z3.And([z3.Not(z3.And(self.connected_ports(self.property_model,
-                                                                 m_a, port_a, p_x)),
+                                                                 m_x, port_a, p_x),
                                             self.connected_ports(self.property_model,
-                                                                 m_a, port_b, p_x))
+                                                                 m_x, port_b, p_x)))
                              for name_x, p_x in self.port_dict.items()
-                             for m_a, c_a in self.contract_model_instances.items()
-                             if name_x in c_a.ports_dict])
-
+                             for m_x, c_x in self.contract_model_instances.items()
+                             if name_x in c_x.ports_dict])
+        #LOG.debug(constraints)
         return constraints
 
     def compute_distinct_port_constraints(self):
@@ -844,7 +845,9 @@ class Z3Interface(object):
 
     def process_candidate_type_compatibility(self):
         '''
-        Prevents connections among incompatible types
+        Prevents connections among incompatible types.
+        OK only if inputs are connected and with same type
+        or if an input gets fed by a subtype
         '''
 
         constraints = [z3.Not(self.connected_ports(m_a, m_b, p_a, p_b))
@@ -854,9 +857,18 @@ class Z3Interface(object):
                         for m_b, c_b in self.contract_model_instances.items()
                         if p_name_a in c_a.ports_dict and
                            p_name_b in c_b.ports_dict and
-                           (c_a.port_type[p_name_a], c_b.port_type[p_name_b]) not in
-                           self.type_compatibility_set]
-
+                           (
+                            ((c_a.port_type[p_name_a], c_b.port_type[p_name_b]) not in
+                           self.type_compatibility_set) and
+                            (c_a.port_type[p_name_a] != c_b.port_type[p_name_b]) and 
+                            (p_name_a in c_a.input_ports_dict and
+                             p_name_b in c_b.output_ports_dict and not
+                             issubclass(c_b.port_type[p_name_b], c_a.port_type[p_name_a])) or
+                            (p_name_a in c_a.output_ports_dict and
+                             p_name_b in c_b.input_ports_dict and not
+                             issubclass(c_a.port_type[p_name_a], c_b.port_type[p_name_b]))
+                            )]
+        #LOG.debug(constraints)
         return constraints
 
     def process_spec_type_compatibility(self):
@@ -998,12 +1010,12 @@ class Z3Interface(object):
                 model = self.propose_candidate(size)
             except NotSynthesizableError as err:
                 if current_hierarchy < self.max_hierarchy:
-                    LOG.debug('increase hierarchy to %d' % current_hierarchy + 1)
+                    LOG.debug('increase hierarchy to %d' % (current_hierarchy + 1))
                     current_hierarchy += 1
                     self.solver.pop()
                     self.solver.push()
                     self.solver.add(self.allow_hierarchy(current_hierarchy, c_list))
-                    LOG.debug(self.solver.assertions)
+                    #LOG.debug(self.solver.assertions)
                 else:
                     self.solver.pop()
                     raise err
@@ -1013,6 +1025,13 @@ class Z3Interface(object):
                 except NotSynthesizableError as err:
                     LOG.debug("candidate not valid")
                 else:
+
+                    (composition,
+                     spec_contract,
+                     contracts) = self.build_composition_from_model(model,
+                                                                    self.property_contract,
+                                                                    c_list,
+                                                                    complete_model=True)
                     return model, composition, spec, contract_list
 
     def allow_hierarchy(self, hierarchy, candidate_list):
@@ -1326,7 +1345,7 @@ class Z3Interface(object):
 
 
 
-    def build_composition_from_model(self, model, spec, candidates):
+    def build_composition_from_model(self, model, spec, candidates, complete_model=False):
         '''
         builds a contract composition out of a model
         '''
@@ -1406,8 +1425,8 @@ class Z3Interface(object):
         for contract in extended_contracts.values():
             LOG.debug(contract)
 
-
-        c_set = self.filter_candidate_contracts_for_composition(c_set, spec_contract)
+        if not complete_model:
+            c_set = self.filter_candidate_contracts_for_composition(c_set, spec_contract)
 
         #compose
         root = c_set.pop()

@@ -54,17 +54,18 @@ class ContractLibrary(object):
         '''
         register a new refinement assertion
         '''
+        #TODO: check types
         concrete = assertion.component.contract
         abstract = assertion.abstract_component.contract
         mapping = assertion.port_mapping
 
 
         self.hierarchy[concrete.base_name] = self.hierarchy[abstract.base_name]+1
-        if concrete not in self.refined_by:
+        if concrete.base_name not in self.refined_by:
             self.refined_by[concrete.base_name] = {}
         self.refined_by[concrete.base_name][abstract.base_name] = {}
 
-        if abstract not in self.refines:
+        if abstract.base_name not in self.refines:
             self.refines[abstract.base_name] = {}
         self.refines[abstract.base_name][concrete.base_name] = {}
 
@@ -72,6 +73,10 @@ class ContractLibrary(object):
             if port_a.contract == concrete:
                 self.refined_by[concrete.base_name][abstract.base_name][port_a.base_name] = port_b.base_name
                 self.refines[abstract.base_name][concrete.base_name][port_b.base_name] = port_a.base_name
+            else:
+                self.refined_by[concrete.base_name][abstract.base_name][port_b.base_name] = port_a.base_name
+                self.refines[abstract.base_name][concrete.base_name][port_a.base_name] = port_b.base_name
+
 
     @property
     def type_compatibility_set(self):
@@ -94,7 +99,7 @@ class ContractLibrary(object):
         library_component.assign_to_solver(self.smt_manager)
 
         self.components.append(library_component)
-        self.hierarchy[library_component.contract] = 0
+        self.hierarchy[library_component.contract.base_name] = 0
 
     def add_type(self, type_cls):
         '''
@@ -108,14 +113,14 @@ class ContractLibrary(object):
         #given the new type, compute new compatibilities
         #according to the actual ones
         addition = set()
-        for (type_a, type_b) in self.type_compatibility_set:
+        for (type_a, type_b) in self._type_compatibility_set:
             #if (a, b) in the set, then also (b, a) is in
             #by constraction
             if issubclass(type_cls, type_a):
                 addition.add((type_cls, type_b))
                 addition.add((type_b, type_cls))
 
-        self.type_compatibility_set = self.type_compatibility_set | addition
+        self._type_compatibility_set = self._type_compatibility_set | addition
 
 
     def add_type_compatibility(self, type_a, type_b):

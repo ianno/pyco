@@ -16,7 +16,7 @@ class SMTManager(object):
 
 
 
-    def __init__(self, library, solver=None):
+    def __init__(self, library):
         '''
         Defines init behavior, e.g. where to save list
         of parameters
@@ -29,10 +29,10 @@ class SMTManager(object):
         self.component_unique_names = {}
         self.library = library
 
-        if solver is None:
-            solver = Z3Interface(library)
+        #if solver is None:
+        #    solver = Z3Interface(library)
 
-        self.solver = solver
+        #self.solver = solver
 
 
 
@@ -69,23 +69,23 @@ class SMTManager(object):
         self.component_base_names[component] = component.base_name
         self.component_unique_names[component] = component.unique_name
 
-    def get_port_model(self, port):
-        '''
-        returns port model
-        '''
-        return self.solver.create_port_model(port)
+    #def get_port_model(self, port):
+    #    '''
+    #    returns port model
+    #    '''
+    #    return self.solver.create_port_model(port)
 
-    def get_contract_model(self, contract):
-        '''
-        returns contract model
-        '''
-        return self.solver.create_contract_model(contract)
+    #def get_contract_model(self, contract):
+    #    '''
+    #    returns contract model
+    #    '''
+    #    return self.solver.create_contract_model(contract)
 
-    def get_component_model(self, component):
-        '''
-        returns component model
-        '''
-        return self.solver.create_component_model(component)
+    #def get_component_model(self, component):
+    #    '''
+    #    returns component model
+    #    '''
+    #    return self.solver.create_component_model(component)
 
     def _enumerate_names(self):
         '''

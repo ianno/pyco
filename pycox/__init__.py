@@ -1,4 +1,5 @@
 import logging
+import pdb
 
 LOG = logging.getLogger('pycox')
 LOG.setLevel(logging.DEBUG)
@@ -14,3 +15,5 @@ ch.setFormatter(formatter)
 LOG.addHandler(ch)
 
 LOG.debug('PYCOX INIT')
+
+#pdb.set_trace()

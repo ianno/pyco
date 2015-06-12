@@ -33,11 +33,17 @@ Author: Antonio Iannopollo
 '''
 
 import pytest
-from pycox.contract import Contract
+from pycox.contract import Contract, BaseType
 from pycox.library import (ContractLibrary, LibraryComponent,
                             LibraryPortMapping, LibraryCompositionMapping)
-from pycox.synthesis import SynthesisInterface
+from pycox.synthesis import SynthesisInterface, NotSynthesizableError
 from pycox import LOG
+
+class AType(BaseType):
+    '''
+    A type
+    '''
+    pass
 
 class A(Contract):
     '''
@@ -107,6 +113,15 @@ class Spec_2(Contract):
     A: GFa & GFb, G: G(a -> (Fc )) & G(b -> (F !d ))
     '''
     INPUT_PORTS = ['a', 'b']
+    OUTPUT_PORTS = ['c', 'd']
+    ASSUMPTIONS = 'GFa & GFb'
+    GUARANTEES = 'G(a -> (Fc )) & G(b -> (F !d ))'
+
+class Spec_2Type(Contract):
+    '''
+    A: GFa & GFb, G: G(a -> (Fc )) & G(b -> (F !d ))
+    '''
+    INPUT_PORTS = [('a', AType), ('b', AType)]
     OUTPUT_PORTS = ['c', 'd']
     ASSUMPTIONS = 'GFa & GFb'
     GUARANTEES = 'G(a -> (Fc )) & G(b -> (F !d ))'
@@ -259,6 +274,23 @@ def test_synthesis_1_with_hints(populated_library):
     synth_interface.same_block_constraint([spec.b, spec.d])
 
     synth_interface.synthesize()
+
+def test_synthesis_1_with_types(populated_library):
+    '''
+    Perform basic synthesis test.
+    Two componenent needed.
+    '''
+
+    spec = Spec_2Type('spec_2_type')
+
+    synth_interface = SynthesisInterface([spec], populated_library)
+
+    #synth_interface
+    #synth_interface.same_block_constraint([spec.a, spec.c])
+    #synth_interface.same_block_constraint([spec.b, spec.d])
+
+    synth_interface.synthesize()
+
 
 def test_synthesis_2(populated_library):
     '''

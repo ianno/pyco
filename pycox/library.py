@@ -11,6 +11,7 @@ from pycox.contract import (ContractMapping, PortMappingError, PortMapping,
 
 from pycox.solver_interface import SMTManager
 from pycox import LOG
+import itertools
 
 LOG.debug('in library')
 
@@ -198,12 +199,18 @@ class LibraryComponent(object):
     the refinement information once inferred)
     '''
 
-    def __init__(self, base_name, components, mapping=None, context=None):
+    def __init__(self, base_name, components, mapping=None,
+                 distinct_set = None, verify=True, context=None):
         '''
         initialize component
         '''
         self.library = None
         self.mapping = mapping
+
+        self.distinct_set = distinct_set
+        if self.distinct_set == None:
+            self.distinct_set = set()
+
         try:
             self.components = set(components)
             self._contracts = None
@@ -222,6 +229,11 @@ class LibraryComponent(object):
         self.name_attribute = Attribute(base_name, self.context)
 
         self.smt_model = None
+
+        if verify and not self.contract.is_compatible():
+            raise ContractAssignmentError('%s INCOMPATIBLE' % self.contract)
+        if verify and not self.contract.is_consistent():
+            raise ContractAssignmentError('%s INCONSISTENT' % self.contract)
 
     def assign_to_solver(self, smt_manager):
         '''
@@ -246,6 +258,13 @@ class LibraryComponent(object):
         returns component's unique_name
         '''
         return self.name_attribute.unique_name
+
+    def add_distinct_port_constraints(self, port_list):
+        '''
+        Add a set of ports that cannot be connected together during synthesis
+        '''
+        for (port_1, port_2) in itertools.combinations(port_list, 2):
+           self.distinct_set.add((port_1.base_name, port_2.base_name))
 
     def register_to_library(self, library):
         '''
@@ -506,7 +525,10 @@ PortMapping.register(LibraryPortMapping)
 #        '''
 #        return (self.contract_a.unique_name, self.contract_b.unique_name)
 
-
+class ContractAssignmentError(Exception):
+    '''
+    Raised if there is an error in assigning a contract to a component
+    '''
 
 class RefinementAssertionError(Exception):
     '''

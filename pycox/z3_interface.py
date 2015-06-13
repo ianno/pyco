@@ -1134,25 +1134,26 @@ class Z3Interface(object):
 
         #self.solver.add(constraints)
 
-        #start from hierarchy 0
-        self.solver.push()
         current_hierarchy = 0
-        self.solver.add(self.allow_hierarchy(current_hierarchy, c_list))
         LOG.debug('current hierarchy: %d' % current_hierarchy)
 
         while True:
             try:
+                #push current hierarchy level
+                #pop is done in the finally clause
+                self.solver.push()
+                self.solver.add(self.allow_hierarchy(current_hierarchy, c_list))
                 model = self.propose_candidate(size)
             except NotSynthesizableError as err:
                 if current_hierarchy < self.max_hierarchy:
                     LOG.debug('increase hierarchy to %d' % (current_hierarchy + 1))
                     current_hierarchy += 1
-                    self.solver.pop()
-                    self.solver.push()
-                    self.solver.add(self.allow_hierarchy(current_hierarchy, c_list))
+                    #self.solver.pop()
+                    #self.solver.push()
+                    #self.solver.add(self.allow_hierarchy(current_hierarchy, c_list))
                     #LOG.debug(self.solver.assertions)
                 else:
-                    self.solver.pop()
+                    #self.solver.pop()
                     raise err
             else:
                 try:
@@ -1168,6 +1169,9 @@ class Z3Interface(object):
                                                                     c_list,
                                                                     complete_model=True)
                     return model, composition, spec, contract_list
+            finally:
+                #pop after the first try, no matter what
+                self.solver.pop()
 
     def allow_hierarchy(self, hierarchy, candidate_list):
         '''

@@ -236,9 +236,11 @@ class Z3Interface(object):
 
         model = self.ZContract.contract(getattr(self.ContractBaseName,
                                                 contract.base_name),
-                                        z3.BitVecVal(self.hierarchy.get(contract.base_name, 0),
-                                                     2),
-                                        z3.BitVecVal(index, 8))
+                                                self.hierarchy.get(contract.base_name, 0),
+                                                index)
+                                        #z3.BitVecVal(self.hierarchy.get(contract.base_name, 0),
+                                        #             2),
+                                        #z3.BitVecVal(index, 8))
 
 
         #add hash
@@ -326,8 +328,10 @@ class Z3Interface(object):
         #                       ('id', z3.IntSort()))
         self.ZContract.declare('contract',
                                ('base_name', self.ContractBaseName),
-                               ('hierarchy', z3.BitVecSort(2)),
-                               ('id', z3.BitVecSort(8)))
+                               ('hierarchy', z3.IntSort()),
+                               ('id', z3.IntSort()))
+                               #('hierarchy', z3.BitVecSort(2)),
+                               #('id', z3.BitVecSort(8)))
 
         self.ZContract = self.ZContract.create()
 
@@ -1320,8 +1324,8 @@ class Z3Interface(object):
                 #get base instance
                 contract = contract_instances[c_m]
 
-            if c_name not in self.consistency_dict:
-                self.consistency_dict[c_name] = {}
+                if c_name not in self.consistency_dict:
+                    self.consistency_dict[c_name] = {}
 
             #contracts[c_m] = contract
 
@@ -1337,21 +1341,23 @@ class Z3Interface(object):
                                                                            self.property_model,
                                                                            p_a, p_s),
                                                       model_completion=True))
-                #out of lock here
-                if ((port_name_a, port_name_spec) not in self.consistency_dict[c_name]
-                     and condition):
 
-                    LOG.debug('Checking consistency of %s: %s->%s' % (contract.base_name,
+                    if ((port_name_a, port_name_spec) not in self.consistency_dict[c_name]
+                         and condition):
+
+                        LOG.debug('Checking consistency of %s: %s->%s' % (contract.base_name,
                                                                       port_name_a,
                                                                       port_name_spec))
 
-                    #LOG.debug(self.consistency_dict)
-                    self.consistency_dict[c_name][(port_name_a, port_name_spec)] = True
+                        #LOG.debug(self.consistency_dict)
+                        self.consistency_dict[c_name][(port_name_a, port_name_spec)] = True
 
-                    #reinstantiate a fresh copy of contract
-                    spec_contract = spec_contract.copy()
-                    #spec model is the same for all specs
-                    with z3_lock:
+                        #reinstantiate a fresh copy of contract
+                        LOG.debug('pre copy')
+                        spec_contract = spec_contract.copy()
+                        LOG.debug('post copy')
+                        #spec model is the same for all specs
+
                         contract = type(self.contract_model_instances[c_m])(c_name)
 
 
@@ -1374,9 +1380,10 @@ class Z3Interface(object):
                     #OUT OF THE LOCK!
                     if not composition.is_consistent():
                         LOG.debug('NOT CONSISTENT')
-                        self.consistency_dict[c_name][(port_name_a, port_name_spec)] = False
+
                         #get lock again
                         with z3_lock:
+                            self.consistency_dict[c_name][(port_name_a, port_name_spec)] = False
                             constraints += [z3.Not(self.connected_ports(c_a, self.property_model,
                                                                     p_a, p_s))
                                             for c_a in self.contract_model_instances
@@ -1450,13 +1457,13 @@ class Z3Interface(object):
 
 
         constraints = [z3.Not(z3.And([self.connected_ports(m_a, m_b,
-                                                           p_a, p_b) ==
-                                      model.eval(self.connected_ports(c_mod[c_a],
-                                                                      c_mod[c_b],
-                                                                      p_a, p_b),
+                                                           self.port_dict[name_a],
+                                                           self.port_dict[name_b]) ==
+                                      model.eval(self.connected_ports(m_a,
+                                                                      m_b,
+                                                                      self.port_dict[name_a],
+                                                                      self.port_dict[name_b]),
                                                  model_completion=True)
-                                      for name_a, p_a in self.port_dict.items()
-                                      for name_b, p_b in self.port_dict.items()
                                       for m_a, c_a in self.contract_model_instances.items()
                                       if (c_a in c_set) and
                                          (z3.simplify(self.ZContract.id(m_a)).as_long() ==
@@ -1465,23 +1472,25 @@ class Z3Interface(object):
                                       if (c_b in c_set) and
                                          (z3.simplify(self.ZContract.id(m_b)).as_long() ==
                                          order[c_pos[c_b]])
-                                      if name_a in c_a.ports_dict
-                                      if name_b in c_b.ports_dict
+                                      for name_a in c_a.ports_dict
+                                      for name_b in c_b.ports_dict
+                                      #if name_a in c_a.ports_dict
+                                      #if name_b in c_b.ports_dict
                                       ] +
                                       [self.connected_ports(self.property_model, m_c,
-                                                            p_p, p_c) ==
+                                                            self.port_dict[name_p],
+                                                            self.port_dict[name_c]) ==
                                        model.eval(self.connected_ports(self.property_model,
                                                                        c_mod[c_c],
-                                                                       p_p, p_c),
+                                                                       self.port_dict[name_p],
+                                                                       self.port_dict[name_c]),
                                                   model_completion=True)
-                                      for name_p, p_p in self.port_dict.items()
-                                      for name_c, p_c in self.port_dict.items()
                                       for m_c, c_c in self.contract_model_instances.items()
                                       if (c_c in c_set) and
                                          (z3.simplify(self.ZContract.id(m_c)).as_long() ==
                                          order[c_pos[c_c]])
-                                      if name_p in self.property_contract.ports_dict
-                                      if name_c in c_c.ports_dict
+                                      for name_p in self.property_contract.ports_dict
+                                      for name_c in c_c.ports_dict
                                       ]
                                     )
                             )

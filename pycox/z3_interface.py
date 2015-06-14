@@ -11,6 +11,7 @@ import z3
 import itertools
 import types
 from pycox.contract import CompositionMapping, RefinementMapping
+from pycox.z3_thread_manager import ModelVerificationManager
 
 #LOG = logging.getLogger()
 LOG.debug('in z3_interface')
@@ -42,7 +43,7 @@ class Z3Interface(object):
 
         z3.set_param(proof=True)
         self.library = library
-        #self.typeset = library.typeset
+        #selfeset = library.typeset
         self.type_compatibility_set = library.type_compatibility_set
         self.max_hierarchy = library.max_hierarchy
         self.refined_by = library.refined_by
@@ -138,11 +139,16 @@ class Z3Interface(object):
         '''
         constraints = []
 
-        try:
-            self.solver.pop()
-        except z3.Z3Exception as err:
-            #LOG.debug(err)
-            pass
+        #try:
+        #    self.solver.pop()
+        #except z3.Z3Exception as err:
+        #    #LOG.debug(err)
+        #    pass
+
+        #new solver!
+        self.solver = z3.Solver()
+        #start incremental. push
+        self.solver.push()
 
         #self.contract_model_instances={}
         #for index in range(0, size):
@@ -162,7 +168,7 @@ class Z3Interface(object):
         constraints += self.define_initial_connections_fast()
         #constraints += self.quantify_initial_connections()
 
-        self.solver.push()
+        #self.solver.push()
         self.solver.add(constraints)
 
     def create_port_model(self, port, is_library_elem=True):
@@ -220,6 +226,8 @@ class Z3Interface(object):
 
         model = self.ZContract.contract(getattr(self.ContractBaseName,
                                                 contract.base_name),
+                                        #        self.hierarchy.get(contract.base_name, 0),
+                                        #        index)
                                         z3.BitVecVal(self.hierarchy.get(contract.base_name, 0),
                                                      2),
                                         z3.BitVecVal(index, 8))
@@ -1137,6 +1145,7 @@ class Z3Interface(object):
         current_hierarchy = 0
         LOG.debug('current hierarchy: %d' % current_hierarchy)
 
+
         while True:
             try:
                 #push current hierarchy level
@@ -1157,17 +1166,23 @@ class Z3Interface(object):
                     raise err
             else:
                 try:
+                    #multithread approach.
+                    #we need a dispatcher who runs the refinement checks and 
+                    #compatibility checks and give back results.
+                    #it needs to adds constraints faster.
+                    #also, it needs to prevent the first exception, 
+                    #in case of non-synthesizeability
                     composition, spec, contract_list = self.verify_candidate(model, c_list)
                 except NotSynthesizableError as err:
                     LOG.debug("candidate not valid")
                 else:
 
-                    (composition,
-                     spec_contract,
-                     contracts) = self.build_composition_from_model(model,
-                                                                    self.property_contract,
-                                                                    c_list,
-                                                                    complete_model=True)
+                    #(composition,
+                    # spec_contract,
+                    # contracts) = self.build_composition_from_model(model,
+                    #                                                self.property_contract,
+                    #                                                c_list,
+                    #                                                complete_model=True)
                     return model, composition, spec, contract_list
             finally:
                 #pop after the first try, no matter what
@@ -1191,7 +1206,7 @@ class Z3Interface(object):
 
         LOG.debug('start solving')
         res = self.solver.check()
-        LOG.debug(res)
+        #LOG.debug(res)
         LOG.debug('done')
         if res == z3.sat:
             #LOG.debug(self.solver.model())
@@ -1225,7 +1240,7 @@ class Z3Interface(object):
             #learn
             #as first step, we reject the actual solution
             #self.solver.add(self.exclude_candidate_type())
-            self.solver.add(self.reject_candidate(model, candidates, contract_inst))
+            self.solver.add(self.reject_candidate(model, candidates))
 
             #then check for consistency
             self.solver.add(self.check_for_consistency(model, candidates, contract_inst, connected_spec))
@@ -1243,7 +1258,8 @@ class Z3Interface(object):
         contract_inst = None
         for spec in self.specification_list:
             composition, connected_spec, contract_inst = \
-                self.build_composition_from_model(model, spec, candidates, complete_model=False)
+                    self.build_composition_from_model(model, spec, candidates, complete_model=True)
+
 
             if not composition.is_refinement(connected_spec):
                 return False, composition, connected_spec,contract_inst
@@ -1291,21 +1307,27 @@ class Z3Interface(object):
                 p_a = getattr(self.PortBaseName, port_name_a)
                 p_s = getattr(self.PortBaseName, port_name_spec)
 
-                if ((port_name_a, port_name_spec) not in self.consistency_dict[c_name] and
-                    z3.is_true(model.eval(self.connected_ports(c_m, self.property_model,
-                                                                p_a, p_s),
-                                          model_completion=True))):
+                condition = z3.is_true(model.eval(self.connected_ports(c_m,
+                                                                       self.property_model,
+                                                                       p_a, p_s),
+                                                  model_completion=True))
+
+                if ((port_name_a, port_name_spec) not in self.consistency_dict[c_name]
+                     and condition):
 
                     LOG.debug('Checking consistency of %s: %s->%s' % (contract.base_name,
-                                                                      port_name_a,
-                                                                      port_name_spec))
+                                                                  port_name_a,
+                                                                  port_name_spec))
 
                     #LOG.debug(self.consistency_dict)
                     self.consistency_dict[c_name][(port_name_a, port_name_spec)] = True
 
                     #reinstantiate a fresh copy of contract
+                    LOG.debug('pre copy')
                     spec_contract = spec_contract.copy()
+                    LOG.debug('post copy')
                     #spec model is the same for all specs
+
                     contract = type(self.contract_model_instances[c_m])(c_name)
 
 
@@ -1325,9 +1347,9 @@ class Z3Interface(object):
 
                     composition = spec_contract.compose(contract,
                                                         composition_mapping=c_mapping)
-
                     if not composition.is_consistent():
                         LOG.debug('NOT CONSISTENT')
+
                         self.consistency_dict[c_name][(port_name_a, port_name_spec)] = False
                         constraints += [z3.Not(self.connected_ports(c_a, self.property_model,
                                                                 p_a, p_s))
@@ -1372,7 +1394,7 @@ class Z3Interface(object):
         #LOG.debug(constraints)
         return constraints
 
-    def reject_candidate(self, model, candidates, contract_instances):
+    def reject_candidate(self, model, candidates):
         '''
         I'm so sorry, but we need efficiency...if any
         reject proposed solution.
@@ -1383,6 +1405,12 @@ class Z3Interface(object):
         of a contract A, we exclude all the n from future
         appearance
         '''
+        #import pdb
+        #pdb.set_trace()
+        contract_instances = [model[candidate] for candidate in candidates]
+        for c_m in contract_instances:
+            c_m.__hash__ = types.MethodType(zcontract_hash, c_m)
+
 
         size = len(candidates)
         c_set = set([self.contract_model_instances[c_model] for c_model in contract_instances])
@@ -1395,39 +1423,38 @@ class Z3Interface(object):
         c_mod = {self.contract_model_instances[c_model]: c_model for c_model in contract_instances}
 
 
-        constraints = [z3.Not(z3.And([self.connected_ports(m_a, m_b,
-                                                           p_a, p_b) ==
+        constraints = [z3.Not(z3.And([self.connected_ports(c_mod[c_a], c_mod[c_b],
+                                                           self.port_dict[name_a],
+                                                           self.port_dict[name_b]) ==
                                       model.eval(self.connected_ports(c_mod[c_a],
                                                                       c_mod[c_b],
-                                                                      p_a, p_b),
+                                                                      self.port_dict[name_a],
+                                                                      self.port_dict[name_b]),
                                                  model_completion=True)
-                                      for name_a, p_a in self.port_dict.items()
-                                      for name_b, p_b in self.port_dict.items()
-                                      for m_a, c_a in self.contract_model_instances.items()
-                                      if (c_a in c_set) and
-                                         (z3.simplify(self.ZContract.id(m_a)).as_long() ==
+                                      for c_a in c_set
+                                      if (z3.simplify(self.ZContract.id(c_mod[c_a])).as_long() ==
                                          order[c_pos[c_a]])
-                                      for m_b, c_b in self.contract_model_instances.items()
-                                      if (c_b in c_set) and
-                                         (z3.simplify(self.ZContract.id(m_b)).as_long() ==
+                                      for c_b in c_set
+                                      if (z3.simplify(self.ZContract.id(c_mod[c_b])).as_long() ==
                                          order[c_pos[c_b]])
-                                      if name_a in c_a.ports_dict
-                                      if name_b in c_b.ports_dict
+                                      for name_a in c_a.ports_dict
+                                      for name_b in c_b.ports_dict
+                                      #if name_a in c_a.ports_dict
+                                      #if name_b in c_b.ports_dict
                                       ] +
-                                      [self.connected_ports(self.property_model, m_c,
-                                                            p_p, p_c) ==
+                                      [self.connected_ports(self.property_model, c_mod[c_c],
+                                                            self.port_dict[name_p],
+                                                            self.port_dict[name_c]) ==
                                        model.eval(self.connected_ports(self.property_model,
                                                                        c_mod[c_c],
-                                                                       p_p, p_c),
+                                                                       self.port_dict[name_p],
+                                                                       self.port_dict[name_c]),
                                                   model_completion=True)
-                                      for name_p, p_p in self.port_dict.items()
-                                      for name_c, p_c in self.port_dict.items()
-                                      for m_c, c_c in self.contract_model_instances.items()
-                                      if (c_c in c_set) and
-                                         (z3.simplify(self.ZContract.id(m_c)).as_long() ==
+                                      for c_c in c_set
+                                      if (z3.simplify(self.ZContract.id(c_mod[c_c])).as_long() ==
                                          order[c_pos[c_c]])
-                                      if name_p in self.property_contract.ports_dict
-                                      if name_c in c_c.ports_dict
+                                      for name_p in self.property_contract.ports_dict
+                                      for name_c in c_c.ports_dict
                                       ]
                                     )
                             )
@@ -1507,7 +1534,7 @@ class Z3Interface(object):
             contract = type(self.contract_model_instances[c_m])(c_name+id_c)
 
             #LOG.debug(contract)
-
+            #LOG.debug(c_m)
             contracts[c_m] = contract
 
         extended_contracts = dict(contracts.items() + [(self.property_model, spec_contract)])

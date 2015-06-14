@@ -1153,16 +1153,17 @@ class Z3Interface(object):
                 self.solver.push()
                 self.solver.add(self.allow_hierarchy(current_hierarchy, c_list))
                 model = self.propose_candidate(size)
+                self.solver.pop()
             except NotSynthesizableError as err:
                 if current_hierarchy < self.max_hierarchy:
                     LOG.debug('increase hierarchy to %d' % (current_hierarchy + 1))
                     current_hierarchy += 1
-                    #self.solver.pop()
+                    self.solver.pop()
                     #self.solver.push()
                     #self.solver.add(self.allow_hierarchy(current_hierarchy, c_list))
                     #LOG.debug(self.solver.assertions)
                 else:
-                    #self.solver.pop()
+                    self.solver.pop()
                     raise err
             else:
                 try:
@@ -1184,9 +1185,7 @@ class Z3Interface(object):
                     #                                                c_list,
                     #                                                complete_model=True)
                     return model, composition, spec, contract_list
-            finally:
-                #pop after the first try, no matter what
-                self.solver.pop()
+                
 
     def allow_hierarchy(self, hierarchy, candidate_list):
         '''
@@ -1206,7 +1205,7 @@ class Z3Interface(object):
 
         LOG.debug('start solving')
         res = self.solver.check()
-        #LOG.debug(res)
+        LOG.debug(res)
         LOG.debug('done')
         if res == z3.sat:
             #LOG.debug(self.solver.model())
@@ -1260,9 +1259,12 @@ class Z3Interface(object):
             composition, connected_spec, contract_inst = \
                     self.build_composition_from_model(model, spec, candidates, complete_model=True)
 
-
+            LOG.debug('ref check')
             if not composition.is_refinement(connected_spec):
+                LOG.debug('ref check done 1')
                 return False, composition, connected_spec,contract_inst
+
+            LOG.debug('ref check done 2')
 
         return True, composition, connected_spec,contract_inst
 
@@ -1420,40 +1422,58 @@ class Z3Interface(object):
         c_pos = {c_list[ind]: ind for ind in range(0, size) }
 
         #create inverse model dict: contract to candidate model
-        c_mod = {self.contract_model_instances[c_model]: c_model for c_model in contract_instances}
+        c_mod = {self.contract_model_instances[c_model]: c_model
+                 for c_model in contract_instances}
 
+        all_cand = {c_a:
+                {z3.simplify(self.ZContract.id(m_a)).as_long(): m_a
+                 for m_a in self.contract_model_instances
+                 if self.contract_model_instances[m_a] == c_a}
+                for c_a in c_set}
 
-        constraints = [z3.Not(z3.And([self.connected_ports(c_mod[c_a], c_mod[c_b],
-                                                           self.port_dict[name_a],
-                                                           self.port_dict[name_b]) ==
-                                      model.eval(self.connected_ports(c_mod[c_a],
+        spec_c = self.property_contract
+        spec_m = self.property_model
+        #ports
+        ports = self.port_dict
+
+        #funcs
+        func = self.connected_ports
+        not_f = z3.Not
+        and_f = z3.And
+
+        constraints = [not_f(and_f([func(all_cand[c_a][order[c_pos[c_a]]],
+                                                           all_cand[c_b][order[c_pos[c_b]]],
+                                                           ports[name_a],
+                                                           ports[name_b]) ==
+                                      model.eval(func(c_mod[c_a],
                                                                       c_mod[c_b],
-                                                                      self.port_dict[name_a],
-                                                                      self.port_dict[name_b]),
+                                                                      ports[name_a],
+                                                                      ports[name_b]),
                                                  model_completion=True)
-                                      for c_a in c_set
-                                      if (z3.simplify(self.ZContract.id(c_mod[c_a])).as_long() ==
-                                         order[c_pos[c_a]])
-                                      for c_b in c_set
-                                      if (z3.simplify(self.ZContract.id(c_mod[c_b])).as_long() ==
-                                         order[c_pos[c_b]])
+                                      for c_a in all_cand
+                                      #if (z3.simplify(self.ZContract.id(c_mod[c_a])).as_long() ==
+                                      #   order[c_pos[c_a]])
+                                      for c_b in all_cand
+                                      #if (z3.simplify(self.ZContract.id(c_mod[c_b])).as_long() ==
+                                      #   order[c_pos[c_b]])
                                       for name_a in c_a.ports_dict
                                       for name_b in c_b.ports_dict
                                       #if name_a in c_a.ports_dict
                                       #if name_b in c_b.ports_dict
                                       ] +
-                                      [self.connected_ports(self.property_model, c_mod[c_c],
-                                                            self.port_dict[name_p],
-                                                            self.port_dict[name_c]) ==
-                                       model.eval(self.connected_ports(self.property_model,
+                                      [func(spec_m,
+                                                            all_cand[c_c][order[c_pos[c_c]]],
+                                                            ports[name_p],
+                                                            ports[name_c]) ==
+                                       model.eval(func(spec_m,
                                                                        c_mod[c_c],
-                                                                       self.port_dict[name_p],
-                                                                       self.port_dict[name_c]),
+                                                                       ports[name_p],
+                                                                       ports[name_c]),
                                                   model_completion=True)
-                                      for c_c in c_set
-                                      if (z3.simplify(self.ZContract.id(c_mod[c_c])).as_long() ==
-                                         order[c_pos[c_c]])
-                                      for name_p in self.property_contract.ports_dict
+                                      for c_c in all_cand
+                                      #if (z3.simplify(self.ZContract.id(c_mod[c_c])).as_long() ==
+                                      #   order[c_pos[c_c]])
+                                      for name_p in spec_c.ports_dict
                                       for name_c in c_c.ports_dict
                                       ]
                                     )

@@ -1456,28 +1456,26 @@ class Z3Interface(object):
         c_mod = {self.contract_model_instances[c_model]: c_model for c_model in contract_instances}
 
 
-        constraints = [z3.Not(z3.And([self.connected_ports(m_a, m_b,
+        constraints = [z3.Not(z3.And([self.connected_ports(c_mod[c_a], c_mod[c_b],
                                                            self.port_dict[name_a],
                                                            self.port_dict[name_b]) ==
-                                      model.eval(self.connected_ports(m_a,
-                                                                      m_b,
+                                      model.eval(self.connected_ports(c_mod[c_a],
+                                                                      c_mod[c_b],
                                                                       self.port_dict[name_a],
                                                                       self.port_dict[name_b]),
                                                  model_completion=True)
-                                      for m_a, c_a in self.contract_model_instances.items()
-                                      if (c_a in c_set) and
-                                         (z3.simplify(self.ZContract.id(m_a)).as_long() ==
+                                      for c_a in c_set
+                                      if (z3.simplify(self.ZContract.id(c_mod[c_a])).as_long() ==
                                          order[c_pos[c_a]])
-                                      for m_b, c_b in self.contract_model_instances.items()
-                                      if (c_b in c_set) and
-                                         (z3.simplify(self.ZContract.id(m_b)).as_long() ==
+                                      for c_b in c_set
+                                      if (z3.simplify(self.ZContract.id(c_mod[c_b])).as_long() ==
                                          order[c_pos[c_b]])
                                       for name_a in c_a.ports_dict
                                       for name_b in c_b.ports_dict
                                       #if name_a in c_a.ports_dict
                                       #if name_b in c_b.ports_dict
                                       ] +
-                                      [self.connected_ports(self.property_model, m_c,
+                                      [self.connected_ports(self.property_model, c_mod[c_c],
                                                             self.port_dict[name_p],
                                                             self.port_dict[name_c]) ==
                                        model.eval(self.connected_ports(self.property_model,
@@ -1485,9 +1483,8 @@ class Z3Interface(object):
                                                                        self.port_dict[name_p],
                                                                        self.port_dict[name_c]),
                                                   model_completion=True)
-                                      for m_c, c_c in self.contract_model_instances.items()
-                                      if (c_c in c_set) and
-                                         (z3.simplify(self.ZContract.id(m_c)).as_long() ==
+                                      for c_c in c_set
+                                      if (z3.simplify(self.ZContract.id(c_mod[c_c])).as_long() ==
                                          order[c_pos[c_c]])
                                       for name_p in self.property_contract.ports_dict
                                       for name_c in c_c.ports_dict

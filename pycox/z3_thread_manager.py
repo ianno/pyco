@@ -90,10 +90,10 @@ class ModelVerificationManager(object):
                 #pop is done in the finally clause
                 LOG.debug('lock')
                 with self.z3_lock:
-                    LOG.debug('pre push')
-                    self.solver.push()
-                    LOG.debug('pre add hier')
-                    self.solver.add(self.z3_interface.allow_hierarchy(current_hierarchy, c_list))
+                    #LOG.debug('pre push')
+                    #self.solver.push()
+                    #LOG.debug('pre add hier')
+                    #self.solver.add(self.z3_interface.allow_hierarchy(current_hierarchy, c_list))
                     LOG.debug('pre-propose')
                     model = self.z3_interface.propose_candidate(self.size)
             except pycox.z3_interface.NotSynthesizableError as err:
@@ -122,8 +122,11 @@ class ModelVerificationManager(object):
                     self.thread_pool.add(thread)
 
                 #now reject the model, to get a new candidate
+                LOG.debug('pre-lock')
                 with self.z3_lock:
+                    LOG.debug('pre-reject')
                     self.solver.add(self.z3_interface.reject_candidate(model, c_list))
+                    LOG.debug('done')
 
                 #empty queue with additional constraints
                 while True:
@@ -132,13 +135,15 @@ class ModelVerificationManager(object):
                     except Empty:
                         break
                     else:
+                        LOG.debug('lock')
                         with self.z3_lock:
+                            LOG.debug('add %s' % constraints)
                             self.solver.add(constraints)
             finally:
                 LOG.debug('lock')
                 with self.z3_lock:
-                    LOG.debug('pre-pop')
-                    self.solver.pop()
+                    #LOG.debug('pre-pop')
+                    #self.solver.pop()
                     LOG.debug('popped')
 
 
@@ -188,12 +193,14 @@ class RefinementChecker(threading.Thread):
         connected_spec = None
         contract_inst = None
         for spec in self.z3_interface.specification_list:
+            LOG.debug('pre-lock')
             with z3_lock:
+                LOG.debug('pre-build')
                 composition, connected_spec, contract_inst = \
                     self.z3_interface.build_composition_from_model(model, spec,
                                                                    candidates,
                                                                    complete_model=False)
-
+                LOG.debug('built')
             #LOG.debug('start process')
             #process = multiprocessing.Process(target=check_refinement_in_process,
             #                        args=((self.result_queue, )))
@@ -208,9 +215,11 @@ class RefinementChecker(threading.Thread):
 
 
             #if not is_refinement:
+            LOG.debug('pre-refinement')
             if not composition.is_refinement(connected_spec):
+                LOG.debug('yes')
                 return (False, composition, connected_spec, contract_inst)
-
+            LOG.debug('no')
         return (True, composition, connected_spec, contract_inst)
 
     def run(self):
@@ -230,6 +239,7 @@ class RefinementChecker(threading.Thread):
                                                   connected_spec, contract_inst)
         else:
             #check for consistency
+            LOG.debug('pre consistency')
             constraints = self.z3_interface.check_for_consistency(self.model, self.candidates,
                                                      contract_inst, connected_spec, z3_lock=self.z3_lock)
 

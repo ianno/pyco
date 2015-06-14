@@ -151,11 +151,14 @@ class Z3Interface(object):
         '''
         constraints = []
 
-        try:
-            self.solver.pop()
-        except z3.Z3Exception as err:
-            #LOG.debug(err)
-            pass
+        #try:
+        #    self.solver.pop()
+        #except z3.Z3Exception as err:
+        #    #LOG.debug(err)
+        #    pass
+
+        #new solver!
+        self.solver = z3.Solver()
 
         #self.contract_model_instances={}
         #for index in range(0, size):
@@ -175,7 +178,7 @@ class Z3Interface(object):
         constraints += self.define_initial_connections_fast()
         #constraints += self.quantify_initial_connections()
 
-        self.solver.push()
+        #self.solver.push()
         self.solver.add(constraints)
 
     def create_port_model(self, port, is_library_elem=True):

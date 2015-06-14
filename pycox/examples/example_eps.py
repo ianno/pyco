@@ -214,9 +214,9 @@ class GenIsolation1(Contract):
     '''
     INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT)]
     OUTPUT_PORTS = [('c1', ACContactorT), ('c2', ACContactorT)]
-    #ASSUMPTIONS = '''!fail1 & !fail2 & G(!(fail1 & fail2)) &
-    #                 G(fail1 -> Xfail1) & G(fail2 -> Xfail2)'''
-    ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) '''
+    ASSUMPTIONS = '''!fail1 & !fail2 & G(!(fail1 & fail2)) &
+                     G(fail1 -> Xfail1) & G(fail2 -> Xfail2)'''
+    #ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) '''
     GUARANTEES = 'G(fail1 -> F!c1)'
 
 class GenIsolation2(Contract):
@@ -225,9 +225,9 @@ class GenIsolation2(Contract):
     '''
     INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT)]
     OUTPUT_PORTS = [('c1', ACContactorT), ('c2', ACContactorT)]
-    #ASSUMPTIONS = '''!fail1 & !fail2 & G(!(fail1 & fail2)) &
-    #                 G(fail1 -> Xfail1) & G(fail2 -> Xfail2)'''
-    ASSUMPTIONS = '''!fail2 & G(fail2 -> Xfail2) '''
+    ASSUMPTIONS = '''!fail1 & !fail2 & G(!(fail1 & fail2)) &
+                     G(fail1 -> Xfail1) & G(fail2 -> Xfail2)'''
+    #ASSUMPTIONS = '''!fail2 & G(fail2 -> Xfail2) '''
     GUARANTEES = 'G(fail2 -> F!c2)'
 
 

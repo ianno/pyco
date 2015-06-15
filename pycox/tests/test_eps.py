@@ -262,3 +262,28 @@ def test_synth_4gen_6c_ac(ac_lib):
 
     interface.synthesize()
 
+def test_synth_4gen_6c_ac_7spec(ac_lib):
+    '''
+    Performs simple synthesis
+    '''
+
+    spec1 = GenIsolation1B('G1')
+    spec2 = GenIsolation2B('G2')
+    spec3 = GenIsolation3B('G3')
+    spec4 = GenIsolation4B('G4')
+    spec5 = NoShort('G5')
+    spec6 = NoParallelShort('G6')
+    spec7 = IsolateEmergencyBus('G7')
+
+    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
+                                    spec5, spec6, spec7], ac_lib)
+
+    interface.same_block_constraint([spec1.fail1, spec1.c1])
+    interface.same_block_constraint([spec1.fail2, spec1.c2])
+    interface.same_block_constraint([spec1.fail3, spec1.c3])
+    interface.same_block_constraint([spec1.fail4, spec1.c4])
+    interface.distinct_ports_constraints([spec1.fail1, spec1.fail2, spec1.fail3, spec1.fail4,
+                                          spec1.c1, spec1.c2, spec1.c3,
+                                          spec1.c4, spec1.c5, spec1.c6])
+
+    interface.synthesize()

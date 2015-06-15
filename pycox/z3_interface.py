@@ -533,14 +533,19 @@ class Z3Interface(object):
         constraints.append(condition)
 
 
-        # A LOT SLOWER  
-        #condition = [z3.Implies(z3.And(self.connected_ports(c_a, c_b, p_a, p_b),
-        #                               self.connected_ports(c_b, c_c, p_b, p_c)),
-        #                        self.connected_ports(c_a, c_c, p_a, p_c)
+        # SLOWER  
+        #condition = [z3.Implies(z3.And(self.connected_ports(c_a, c_b, self.port_dict[p_a],
+        #                                                    self.port_dict[p_b]),
+        #                               self.connected_ports(c_b, c_c, self.port_dict[p_b],
+        #                                                        self.port_dict[p_c])),
+        #                        self.connected_ports(c_a, c_c, self.port_dict[p_a],
+        #                            self.port_dict[p_c])
         #                       )
-        #             for p_a in self.port_dict.values() for p_b in self.port_dict.values()
-        #             for p_c in self.port_dict.values() for c_a in self.extended_instances
-        #             for c_b in self.extended_instances for c_c in self.extended_instances]
+        #             for c_a, cc_a in self.extended_instances.items()
+        #             for c_b, cc_b in self.extended_instances.items()
+        #             for c_c, cc_c in self.extended_instances.items()
+        #             for p_a in cc_a.ports_dict for p_b in cc_b.ports_dict
+        #             for p_c in cc_c.ports_dict ]
 
         #constraints += condition
 
@@ -1209,6 +1214,8 @@ class Z3Interface(object):
         LOG.debug('done')
         if res == z3.sat:
             #LOG.debug(self.solver.model())
+            #LOG.debug('func eval')
+            #LOG.debug(self.solver.model()[self.connected_ports])
             pass
         else:
             #LOG.debug(self.solver.proof())
@@ -1239,6 +1246,9 @@ class Z3Interface(object):
             #learn
             #as first step, we reject the actual solution
             #self.solver.add(self.exclude_candidate_type())
+            #LOG.debug('exclude')
+            #LOG.debug(z3.Not(self.connected_ports==model[self.connected_ports]))
+            #self.solver.add(z3.Not(self.connected_ports==model[self.connected_ports]))
             self.solver.add(self.reject_candidate(model, candidates))
 
             #then check for consistency
@@ -1625,6 +1635,7 @@ class Z3Interface(object):
         composition = root.compose(c_set, composition_mapping=mapping)
 
         LOG.debug(composition)
+        LOG.debug(spec_contract)
         
         return composition, spec_contract, contracts
 

@@ -167,6 +167,7 @@ class AC4WayBackup(Contract):
     ASSUMPTIONS = '!fail1 & !fail2 & !fail3 & !fail4 & G(fail1 -> Xfail1) & G(fail2 -> Xfail2) &\
                    G(fail3 -> Xfail3) & G(fail4 -> Xfail4)'
     GUARANTEES = '''G(fail2 -> !c2) & G(fail3 -> !c3) &
+                    G(!(c2 & c3)) &
                   G((!fail1 & !fail4) -> (!c1 & !c2 & !c3 & !c4)) &
                   G((!fail1 & !fail3 & fail4) -> (!c1 & !c2 & c3 & c4)) &
                   G((fail1 & !fail2 & !fail4) -> (c1 & c2 & !c3 & !c4)) &
@@ -304,3 +305,49 @@ class GenIsolation4B(Contract):
                      !fail3 & G(fail3 -> Xfail3) &
                      !fail4 & G(fail4 -> Xfail4)'''
     GUARANTEES = 'G(fail4 -> F!c4)'
+
+#test C: as per test B, but more specs
+class NoShort(Contract):
+    '''
+    generator 1 is eventually disconnected if faulty.
+    '''
+    INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT),
+                   ('fail3', GeneratorT), ('fail4', GeneratorT)]
+    OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
+                    ('c3', ACGenContactorT), ('c4', ACGenContactorT),
+                    ('c6', ACBackContactorT), ('c5', ACBackContactorT)]
+    ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) &
+                     !fail2 & G(fail2 -> Xfail2) &
+                     !fail3 & G(fail3 -> Xfail3) &
+                     !fail4 & G(fail4 -> Xfail4)'''
+    GUARANTEES = 'G(!(c2 & c3))'
+
+class NoParallelShort(Contract):
+    '''
+    generator 1 is eventually disconnected if faulty.
+    '''
+    INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT),
+                   ('fail3', GeneratorT), ('fail4', GeneratorT)]
+    OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
+                    ('c3', ACGenContactorT), ('c4', ACGenContactorT),
+                    ('c6', ACBackContactorT), ('c5', ACBackContactorT)]
+    ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) &
+                     !fail2 & G(fail2 -> Xfail2) &
+                     !fail3 & G(fail3 -> Xfail3) &
+                     !fail4 & G(fail4 -> Xfail4)'''
+    GUARANTEES = 'G((!fail1 & !fail4) -> (!(c5 & c6)))'
+
+class IsolateEmergencyBus(Contract):
+    '''
+    generator 1 is eventually disconnected if faulty.
+    '''
+    INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT),
+                   ('fail3', GeneratorT), ('fail4', GeneratorT)]
+    OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
+                    ('c3', ACGenContactorT), ('c4', ACGenContactorT),
+                    ('c6', ACBackContactorT), ('c5', ACBackContactorT)]
+    ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) &
+                     !fail2 & G(fail2 -> Xfail2) &
+                     !fail3 & G(fail3 -> Xfail3) &
+                     !fail4 & G(fail4 -> Xfail4)'''
+    GUARANTEES = 'G((!fail1 & !fail2 & ! fail3 & !fail4) -> (!c2 & !c3 & !c5 & !c6))'

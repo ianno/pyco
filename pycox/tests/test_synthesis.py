@@ -289,7 +289,8 @@ def test_synthesis_1_with_types(populated_library):
     #synth_interface.same_block_constraint([spec.a, spec.c])
     #synth_interface.same_block_constraint([spec.b, spec.d])
 
-    synth_interface.synthesize()
+    with pytest.raises(NotSynthesizableError):
+        synth_interface.synthesize()
 
 
 def test_synthesis_2(populated_library):

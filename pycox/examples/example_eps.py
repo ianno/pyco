@@ -29,6 +29,18 @@ class GeneratorT(BreakableT):
     '''
     pass
 
+class ActiveGeneratorT(GeneratorT):
+    '''
+    active generator type
+    '''
+    pass
+
+class BackupGeneratorT(GeneratorT):
+    '''
+    backup generator type
+    '''
+    pass
+
 class RectifierT(BreakableT):
     '''
     Rectifier
@@ -120,7 +132,7 @@ class StdGenerator(Contract):
     '''
     closes the contactor if everything is ok
     '''
-    INPUT_PORTS = [('fail', GeneratorT)]
+    INPUT_PORTS = [('fail', ActiveGeneratorT)]
     OUTPUT_PORTS = [('c', ACGenContactorT)]
     ASSUMPTIONS = '!fail & G(fail -> X fail)'
     GUARANTEES = 'G(fail -> ! c) & G(!fail -> c)'
@@ -130,7 +142,7 @@ class SlowGenerator(Contract):
     closes the contactor if everything is ok.
     lock after 1 step
     '''
-    INPUT_PORTS = [('fail', GeneratorT)]
+    INPUT_PORTS = [('fail', ActiveGeneratorT)]
     OUTPUT_PORTS = [('c', ACGenContactorT)]
     ASSUMPTIONS = '!fail & G(fail -> X fail)'
     GUARANTEES = 'c & G(fail -> X ! c) & G(!fail -> c)'
@@ -148,8 +160,8 @@ class AC2WayBackup(Contract):
     '''
     Backup between ac contactors
     '''
-    INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT)]
-    OUTPUT_PORTS = [('c1', ACBackContactorT), ('c2', ACBackContactorT)]
+    INPUT_PORTS = [('fail1', BackupGeneratorT), ('fail2', BackupGeneratorT)]
+    OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT)]
     ASSUMPTIONS = '!fail1 & !fail2 & G(fail1 -> Xfail1) & G(fail2 -> Xfail2)'
     GUARANTEES = 'G((!fail1 & !fail2) -> (!c1 & !c2)) & \
                   G((fail1 & !fail2)-> (!c1 & !c2)) & \
@@ -160,8 +172,8 @@ class AC4WayBackup(Contract):
     '''
     Backup between ac contactors
     '''
-    INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT),
-                   ('fail3', GeneratorT), ('fail4', GeneratorT)]
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT)]
     OUTPUT_PORTS = [('c1', ACBackContactorT), ('c2', ACGenContactorT),
                     ('c3', ACGenContactorT), ('c4', ACBackContactorT)]
     ASSUMPTIONS = '!fail1 & !fail2 & !fail3 & !fail4 & G(fail1 -> Xfail1) & G(fail2 -> Xfail2) &\
@@ -250,8 +262,8 @@ class GenIsolation1B(Contract):
     '''
     generator 1 is eventually disconnected if faulty.
     '''
-    INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT),
-                   ('fail3', GeneratorT), ('fail4', GeneratorT)]
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT)]
     OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
                     ('c3', ACGenContactorT), ('c4', ACGenContactorT),
                     ('c6', ACBackContactorT), ('c5', ACBackContactorT)]
@@ -265,8 +277,8 @@ class GenIsolation2B(Contract):
     '''
     generator 2 is eventually disconnected if faulty.
     '''
-    INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT),
-                   ('fail3', GeneratorT), ('fail4', GeneratorT)]
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT)]
     OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
                     ('c3', ACGenContactorT), ('c4', ACGenContactorT),
                     ('c6', ACBackContactorT), ('c5', ACBackContactorT)]
@@ -280,8 +292,8 @@ class GenIsolation3B(Contract):
     '''
     generator 2 is eventually disconnected if faulty.
     '''
-    INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT),
-                   ('fail3', GeneratorT), ('fail4', GeneratorT)]
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT)]
     OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
                     ('c3', ACGenContactorT), ('c4', ACGenContactorT),
                     ('c6', ACBackContactorT), ('c5', ACBackContactorT)]
@@ -295,8 +307,8 @@ class GenIsolation4B(Contract):
     '''
     generator 1 is eventually disconnected if faulty.
     '''
-    INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT),
-                   ('fail3', GeneratorT), ('fail4', GeneratorT)]
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT)]
     OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
                     ('c3', ACGenContactorT), ('c4', ACGenContactorT),
                     ('c6', ACBackContactorT), ('c5', ACBackContactorT)]
@@ -311,8 +323,8 @@ class NoShort(Contract):
     '''
     generator 1 is eventually disconnected if faulty.
     '''
-    INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT),
-                   ('fail3', GeneratorT), ('fail4', GeneratorT)]
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT)]
     OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
                     ('c3', ACGenContactorT), ('c4', ACGenContactorT),
                     ('c6', ACBackContactorT), ('c5', ACBackContactorT)]
@@ -326,8 +338,8 @@ class NoParallelShort(Contract):
     '''
     generator 1 is eventually disconnected if faulty.
     '''
-    INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT),
-                   ('fail3', GeneratorT), ('fail4', GeneratorT)]
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT)]
     OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
                     ('c3', ACGenContactorT), ('c4', ACGenContactorT),
                     ('c6', ACBackContactorT), ('c5', ACBackContactorT)]
@@ -341,8 +353,8 @@ class IsolateEmergencyBus(Contract):
     '''
     generator 1 is eventually disconnected if faulty.
     '''
-    INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT),
-                   ('fail3', GeneratorT), ('fail4', GeneratorT)]
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT)]
     OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
                     ('c3', ACGenContactorT), ('c4', ACGenContactorT),
                     ('c6', ACBackContactorT), ('c5', ACBackContactorT)]

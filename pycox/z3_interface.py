@@ -11,6 +11,7 @@ from z3 import *
 import itertools
 import types
 from pycox.contract import CompositionMapping, RefinementMapping
+from time import time
 
 #LOG = logging.getLogger()
 LOG.debug('in z3_interface')
@@ -1100,6 +1101,8 @@ class Z3Interface(object):
         '''
         perform synthesis process
         '''
+        self.time = {}
+        self.time['start'] = time()
         self.same_block_constraints = same_block_constraints
         self.distinct_mapping_constraints = distinct_mapping_constraints
 
@@ -1125,6 +1128,7 @@ class Z3Interface(object):
                 LOG.debug(candidate)
                 LOG.debug(composition)
                 LOG.debug(spec)
+                LOG.debug(self.time)
                 return candidate, composition, spec, c_list
 
         raise NotSynthesizableError
@@ -1161,6 +1165,7 @@ class Z3Interface(object):
 
 
         '''
+        self.time['size%s' % size] = time()
         self.initialize_for_fixed_size(size)
 
         #declare variables
@@ -1244,6 +1249,8 @@ class Z3Interface(object):
 
         #self.solver.add(constraints)
 
+        self.time['size%s' % size] = time() - self.time['size%s' % size]
+
         current_hierarchy = 0
         LOG.debug('current hierarchy: %d' % current_hierarchy)
 
@@ -1269,12 +1276,6 @@ class Z3Interface(object):
                     raise err
             else:
                 try:
-                    #multithread approach.
-                    #we need a dispatcher who runs the refinement checks and 
-                    #compatibility checks and give back results.
-                    #it needs to adds constraints faster.
-                    #also, it needs to prevent the first exception, 
-                    #in case of non-synthesizeability
                     composition, spec, contract_list = self.verify_candidate(model, c_list)
                 except NotSynthesizableError as err:
                     LOG.debug("candidate not valid")

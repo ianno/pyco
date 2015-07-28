@@ -17,17 +17,175 @@ from time import time
 LOG.debug('in z3_interface')
 
 
-def zcontract_hash(obj):
+class Z3Library(object):
     '''
-    hash for z3 contract objects
+    maps library to a set of integers
     '''
-    #LOG.debug('hash')
-    #LOG.debug(obj)
-    #LOG.debug(z3.simplify(obj.sort().accessor(0,6)(obj)))
-    return hash(str(simplify(obj.sort().accessor(0,0)(obj))) +
-                str(simplify(obj.sort().accessor(0,1)(obj)).as_long()) +
-                str(simplify(obj.sort().accessor(0,2)(obj)).as_long()))
-    #return obj.hash()
+
+    def __init__(self, library):
+        '''
+        associate library
+        '''
+        self.library = library
+        self.models = []
+        self.ports = []
+        self.index = {}
+        self.contract_index = {}
+        self.out_models = []
+        self.out_ports = []
+        self.out_index = {}
+        self.out_contract_index = {}
+        self.in_models = []
+        self.in_ports = []
+        self.in_index = {}
+        self.in_contract_index = {}
+
+
+        for component in self.library.components:
+            contract = component.contract
+            self.contract_index[contract] = []
+            self.in_contract_index[contract] = []
+            self.out_contract_index[contract] = []
+
+            for port in contract.input_ports.values:
+                model = z3.Int('%s' % port.unique_name)
+                self.models.append(model)
+                self.in_models.append(model)
+                self.ports.append(port)
+                self.in_ports.append(port)
+
+                #reverse lookup
+                self.index[port] = len(self.models) - 1
+                self.in_index[port] = len(self.in_models) - 1
+
+                self.contract_index[contract].append(len(self.models) - 1)
+                self.in_contract_index[contract].append(len(self.in_models) - 1)
+
+            for port in contract.output_ports.values:
+                model = z3.Int('%s' % port.unique_name)
+                self.models.append(model)
+                self.out_models.append(model)
+                self.ports.append(port)
+                self.out_ports.append(port)
+
+                #reverse lookup
+                self.index[port] = len(self.models) - 1
+                self.out_index[port] = len(self.out_models) - 1
+
+                self.contract_index[contract].append(len(self.models) - 1)
+                self.out_contract_index[contract].append(len(self.out_models) - 1)
+
+
+    @property
+    def max_index(self):
+        '''
+        get the highest index
+        '''
+        return len(self.models)
+
+    @property
+    def max_in_index(self):
+        '''
+        returns the highest input index
+        '''
+        return len(self.in_models)
+
+    @property
+    def max_out_index(self):
+        '''
+        returns the highest input index
+        '''
+        return len(self.out_models)
+
+    def port_by_index(self, index):
+        '''
+        returns the port associated to the index
+        '''
+        return self.ports[index]
+
+    def in_port_by_index(self, index):
+        '''
+        returns the port associated to the index
+        '''
+        return self.in_ports[index]
+
+    def out_port_by_index(self, index):
+        '''
+        returns the port associated to the index
+        '''
+        return self.out_ports[index]
+
+    def model_by_index(self, index):
+        '''
+        returns the model associated to the index
+        '''
+        return self.models[index]
+
+    def in_model_by_index(self, index):
+        '''
+        returns the model associated to the index
+        '''
+        return self.in_models[index]
+
+    def out_model_by_index(self, index):
+        '''
+        returns the model associated to the index
+        '''
+        return self.out_models[index]
+
+    def contract_indices(self, contract):
+        '''
+        return all the indices for a contract
+        '''
+        return self.contract_index[contract]
+
+    def contract_in_indices(self, contract):
+        '''
+        return all the input indices for a contract
+        '''
+        return self.in_contract_index[contract]
+
+    def contract_out_indices(self, contract):
+        '''
+        return all the output indices for a contract
+        '''
+        return self.out_contract_index[contract]
+
+    def model_by_port(self, port):
+        '''
+        returns the model given a port
+        '''
+        return self.models[self.index[port]]
+
+    def in_model_by_port(self, port):
+        '''
+        returns the model given a port
+        '''
+        return self.in_models[self.in_index[port]]
+
+    def out_model_by_port(self, port):
+        '''
+        returns the model given a port
+        '''
+        return self.out_models[self.out_index[port]]
+
+    def contract_models(self, contract):
+        '''
+        returns all models related to a contract
+        '''
+        return [self.models[index] for index in self.contract_index[contract]]
+
+    def contract_in_models(self, contract):
+        '''
+        returns all models related to a contract
+        '''
+        return [self.in_models[index] for index in self.in_contract_index[contract]]
+
+    def contract_out_models(self, contract):
+        '''
+        returns all models related to a contract
+        '''
+        return [self.out_models[index] for index in self.out_contract_index[contract]]
 
 
 class Z3Interface(object):
@@ -41,7 +199,7 @@ class Z3Interface(object):
         init
         '''
 
-        set_param(proof=True)
+        #set_param(proof=True)
         self.library = library
         #selfeset = library.typeset
         self.type_compatibility_set = library.type_compatibility_set
@@ -64,25 +222,6 @@ class Z3Interface(object):
         #self.mapping_pairs = {}
         self.contract_model_instances = {}
         self.port_names = set()
-
-        #self.ComponentUniqueName = None
-        self.PortBaseName = None
-        self.PortUniqueName = None
-        self.ContractBaseName = None
-        self.ContractUniqueName = None
-
-        self.ZPort = None
-        self.ZPortList = None
-        self.ZContract = None
-        self.ZContractList = None
-        #self.ZComponent = None
-
-        #self.component_has_contract_wbase_name = None
-        self.contract_has_port_wbase_name = None
-        self.contract_list_has_contract = None
-        self.port_list_has_port = None
-        self.port_list_has_port_with_base_name = None
-        self.port_list_has_port_with_unique_name = None
 
         #TODO remember to include mapping
         self.component_refinement = None
@@ -126,12 +265,23 @@ class Z3Interface(object):
         #extends contract names
         contract_name_pairs.append((property_contract.base_name, property_contract.unique_name))
 
-        self.create_z3_environment(port_name_pairs, contract_name_pairs, component_name_pairs)
 
         self.property_model = self.create_contract_model(property_contract, 0, is_library_elem=False)
         self.property_contract = property_contract
 
+        self.create_z3_environment(self.property_contract)
 
+
+    def create_z3_environment(self, spec):
+        '''
+        Creates basic types for the current library instance
+        '''
+
+        self.spec_outs = {name: z3.Int('%s' % name) for name in spec.output_ports}
+        self.spec_ins = {name: z3.Int('%s' % name) for name in spec.input_ports}
+
+
+        self.solver = Solver()
 
     def initialize_for_fixed_size(self, size):
         '''
@@ -258,136 +408,6 @@ class Z3Interface(object):
         self.distinct_ports_by_component[model] = component.distinct_set
 
         return model
-
-    def create_z3_environment(self, ports, contracts, portc_names):
-        '''
-        Creates basic types for the current library instance
-        '''
-
-        #contract names 
-        (c_base_names, c_unique_names) = zip(*contracts)
-
-        self.ContractBaseName = Datatype('ContractBaseName')
-        _ = [self.ContractBaseName.declare(x) for x in set(c_base_names)]
-        self.ContractBaseName = self.ContractBaseName.create()
-
-        self.ContractUniqueName = Datatype('ContractUniqueName')
-        _ = [self.ContractUniqueName.declare(x) for x in set(c_unique_names)]
-        self.ContractUniqueName = self.ContractUniqueName.create()
-
-        #port names
-        (p_base_names, p_unique_names) = zip(*ports)
-        self.port_names = set(p_base_names)
-
-        self.PortBaseName = Datatype('PortBaseName')
-        _ = [self.PortBaseName.declare(x) for x in  set(p_base_names)]
-        self.PortBaseName = self.PortBaseName.create()
-
-        self.port_dict = {name: getattr(self.PortBaseName, name) for name in self.port_names}
-
-        #self.PortUniqueName = z3.Datatype('PortUniqueName')
-        #_ = [self.PortUniqueName.declare(x) for x in set(p_unique_names)]
-        #self.PortUniqueName = self.PortUniqueName.create()
-
-
-        self.ZPort = Datatype('ZPort')
-        self.ZPort.declare('port',
-                     ('base_name', self.PortBaseName))
-        #             ('unique_name', self.PortUniqueName))
-
-        self.ZPort = self.ZPort.create()
-
-        #build list according to the Tree example
-        #self.ZPortList = z3.Datatype('ZPortList')
-        #self.ZPortList.declare('node', ('elem', self.ZPort), ('tail', self.ZPortList))
-        #self.ZPortList.declare('bottom')
-
-        #self.ZPortList = self.ZPortList.create()
-
-        self.ZContract = Datatype('ZContract')
-        #self.ZContract.declare('contract',
-        #                       ('base_name', self.ContractBaseName),
-        #                       #('unique_name', self.ContractUniqueName),
-        #                       ('num_input', z3.IntSort()),
-        #                       ('input_ports', self.ZPortList),
-        #                       ('num_output', z3.IntSort()),
-        #                       ('output_ports', self.ZPortList),
-        #                       ('hierarchy', z3.IntSort()),
-        #                       ('id', z3.IntSort()))
-
-        #self.ZContract.declare('contract',
-        #                       ('base_name', self.ContractBaseName),
-        #                       ('hierarchy', z3.IntSort()),
-        #                       ('id', z3.IntSort()))
-        self.ZContract.declare('contract',
-                               ('base_name', self.ContractBaseName),
-                               ('hierarchy', BitVecSort(2)),
-                               ('id', BitVecSort(8)))
-
-        self.ZContract = self.ZContract.create()
-
-        #self.ZContractList = z3.Datatype('ZContractList')
-        #self.ZContractList.declare('node', ('elem', self.ZContract), ('tail', self.ZContractList))
-        #self.ZContractList.declare('bottom')
-
-        #self.ZComponent = z3.Datatype('ZComponent')
-        #self.ZComponent.declare('component',
-        #                        ('base_name', self.ComponentBaseName),
-        #                        ('unique_name', self.ComponentUniqueName),
-        #                        ('contracts', self.ZContractList))
-
-
-        #self.contract_has_port_wbase_name = z3.Function('contract_has_port_wbase_name',
-        #                                                self.ZContract,
-        #                                                self.PortBaseName,
-        #                                                z3.BoolSort())
-
-        #self.port_is_input = z3.Function('port_is_input',
-        #                                  self.PortBaseName,
-        #                                  self.ZContract,
-        #                                  z3.BoolSort())
-        #self.port_is_output = z3.Function('port_is_output',
-        #                                  self.PortBaseName,
-        #                                  self.ZContract,
-        #                                  z3.BoolSort())
-
-        #self.connected = z3.Function('connected',
-        #                             self.ZContract,
-        #                             self.ZContract,
-        #                             z3.BoolSort())
-
-        #true if two contracts share a connection over output ports
-        #self.connected_output = z3.Function('connected_output',
-        #                                    self.ZContract,
-        #                                    self.ZContract,
-        #                                    z3.BoolSort())
-        self.connected_ports = Function('connected_ports',
-                                     self.ZContract,
-                                     self.ZContract,
-                                     self.PortBaseName,
-                                     self.PortBaseName,
-                                     BoolSort())
-
-        #completely connected ports
-        self.fully_connected = Function('fully_connected',
-                                            self.ZContract,
-                                            BoolSort())
-        #completely connected input
-        self.full_input = Function('full_input',
-                                            self.ZContract,
-                                            BoolSort())
-        #completely connected output
-        self.full_output = Function('full_output',
-                                            self.ZContract,
-                                            BoolSort())
-
-        #a certain port is connected
-        self.port_is_connected = Function('port_is_connected',
-                                            self.ZContract,
-                                            self.PortBaseName,
-                                            BoolSort())
-
-        self.solver = Solver()
 
 
     def quantified_initial_contraints(self):

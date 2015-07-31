@@ -22,14 +22,19 @@ class Z3Library(object):
     maps library to a set of integers
     '''
 
-    def __init__(self, library):
+    def __init__(self, library, spec):
         '''
-        associate library
+        associate library and create models.
+        We need the spec, too, because we need to determine
+        the number of replicate components we need.
+        TODO
+        There is a problem with the size of the library, though...
         '''
         self.library = library
         self.models = []
         self.ports = []
         self.index = {}
+        self.model_index = {}
         self.contract_index = {}
         self.out_models = []
         self.out_ports = []
@@ -39,41 +44,53 @@ class Z3Library(object):
         self.in_ports = []
         self.in_index = {}
         self.in_contract_index = {}
+ 
+        self.spec = spec
+        self.max_components = len(spec.output_ports_dict)
 
+        for level in range(0, self.max_components):
+            self.contract_index[level] = {}
+            self.in_contract_index[level] = {}
+            self.out_contract_index[level] = {}
+            self.index[level] = {}
+            self.in_index[level] = {}
+            self.out_index[level] = {}
 
-        for component in self.library.components:
-            contract = component.contract
-            self.contract_index[contract] = []
-            self.in_contract_index[contract] = []
-            self.out_contract_index[contract] = []
+            for component in self.library.components:
+                contract = component.contract
+                self.contract_index[level][contract] = []
+                self.in_contract_index[level][contract] = []
+                self.out_contract_index[level][contract] = []
 
-            for port in contract.input_ports.values:
-                model = z3.Int('%s' % port.unique_name)
-                self.models.append(model)
-                self.in_models.append(model)
-                self.ports.append(port)
-                self.in_ports.append(port)
+                for port in contract.input_ports_dict.values():
+                    model = z3.Int('%d-%s' % (level, port.unique_name))
+                    self.models.append(model)
+                    self.in_models.append(model)
+                    self.ports.append(port)
+                    self.in_ports.append(port)
 
-                #reverse lookup
-                self.index[port] = len(self.models) - 1
-                self.in_index[port] = len(self.in_models) - 1
+                    #reverse lookup
+                    self.model_index[model.get_id()] = len(self.models) - 1
+                    self.index[level][port] = len(self.models) - 1
+                    self.in_index[level][port] = len(self.in_models) - 1
 
-                self.contract_index[contract].append(len(self.models) - 1)
-                self.in_contract_index[contract].append(len(self.in_models) - 1)
+                    self.contract_index[level][contract].append(len(self.models) - 1)
+                    self.in_contract_index[level][contract].append(len(self.in_models) - 1)
 
-            for port in contract.output_ports.values:
-                model = z3.Int('%s' % port.unique_name)
-                self.models.append(model)
-                self.out_models.append(model)
-                self.ports.append(port)
-                self.out_ports.append(port)
+                for port in contract.output_ports_dict.values():
+                    model = z3.Int('%d-%s' % (level, port.unique_name))
+                    self.models.append(model)
+                    self.out_models.append(model)
+                    self.ports.append(port)
+                    self.out_ports.append(port)
 
-                #reverse lookup
-                self.index[port] = len(self.models) - 1
-                self.out_index[port] = len(self.out_models) - 1
+                    #reverse lookup
+                    self.model_index[model.get_id()] = len(self.models) - 1
+                    self.index[level][port] = len(self.models) - 1
+                    self.out_index[level][port] = len(self.out_models) - 1
 
-                self.contract_index[contract].append(len(self.models) - 1)
-                self.out_contract_index[contract].append(len(self.out_models) - 1)
+                    self.contract_index[level][contract].append(len(self.models) - 1)
+                    self.out_contract_index[level][contract].append(len(self.out_models) - 1)
 
 
     @property
@@ -96,6 +113,30 @@ class Z3Library(object):
         returns the highest input index
         '''
         return len(self.out_models)
+
+    @property
+    def max_single_level_index(self):
+        '''
+        returns the max index not considering levels
+        '''
+
+        return len(self.models)/(self.max_components + 1)
+
+    @property
+    def max_single_level_in_index(self):
+        '''
+        returns the max index not considering levels
+        '''
+
+        return len(self.in_models)/(self.max_components + 1)
+
+    @property
+    def max_single_level_out_index(self):
+        '''
+        returns the max index not considering levels
+        '''
+
+        return len(self.out_models)/(self.max_components + 1)
 
     def port_by_index(self, index):
         '''
@@ -137,56 +178,75 @@ class Z3Library(object):
         '''
         return all the indices for a contract
         '''
-        return self.contract_index[contract]
+        return [self.contract_index[level][contract]
+                for level in range(0, self.max_components)]
 
     def contract_in_indices(self, contract):
         '''
         return all the input indices for a contract
         '''
-        return self.in_contract_index[contract]
+        return [self.in_contract_index[level][contract]
+                for level in range(0, self.max_components)]
 
     def contract_out_indices(self, contract):
         '''
         return all the output indices for a contract
         '''
-        return self.out_contract_index[contract]
+        return [self.out_contract_index[level][contract]
+                for level in range(0, self.max_components)]
 
-    def model_by_port(self, port):
+    def models_by_port(self, port):
         '''
         returns the model given a port
         '''
-        return self.models[self.index[port]]
+        return [self.models[self.index[port]]
+                for level in range(0, self.max_components)]
 
-    def in_model_by_port(self, port):
+    def in_models_by_port(self, port):
         '''
         returns the model given a port
         '''
-        return self.in_models[self.in_index[port]]
+        return [self.in_models[self.in_index[level][port]]
+                for level in range(0, self.max_components)]
 
-    def out_model_by_port(self, port):
+    def out_models_by_port(self, port):
         '''
         returns the model given a port
         '''
-        return self.out_models[self.out_index[port]]
+        return [self.out_models[self.out_index[level][port]]
+                for level in range(0, self.max_components)]
 
     def contract_models(self, contract):
         '''
         returns all models related to a contract
         '''
-        return [self.models[index] for index in self.contract_index[contract]]
+        return [[self.models[index]
+                 for index in self.contract_index[level][contract]]
+                for level in range(0, self.max_components)]
 
     def contract_in_models(self, contract):
         '''
         returns all models related to a contract
         '''
-        return [self.in_models[index] for index in self.in_contract_index[contract]]
+        return [[self.in_models[index]
+                 for index in self.in_contract_index[level][contract]]
+                for level in range(0, self.max_components)]
 
     def contract_out_models(self, contract):
         '''
         returns all models related to a contract
         '''
-        return [self.out_models[index] for index in self.out_contract_index[contract]]
+        return [[self.out_models[index]
+                 for index in self.out_contract_index[level][contract]]
+                for level in range(0, self.max_components)]
 
+    def all_other_models(self, model):
+        '''
+        returns all the models minus the one given as param
+        '''
+
+        return [self.models[index] for index in range(0, self.max_index)
+                if index != self.model_index[model.get_id()]]
 
 class Z3Interface(object):
     '''
@@ -199,7 +259,7 @@ class Z3Interface(object):
         init
         '''
 
-        #set_param(proof=True)
+        set_param(proof=True)
         self.library = library
         #selfeset = library.typeset
         self.type_compatibility_set = library.type_compatibility_set
@@ -214,6 +274,7 @@ class Z3Interface(object):
         self.property_model = None
         self.property_contract = None
         self.specification_list = []
+        self.num_out = 0
         #self.ComponentBaseName = None
 
         self.contracts_dict = {}
@@ -266,7 +327,7 @@ class Z3Interface(object):
         contract_name_pairs.append((property_contract.base_name, property_contract.unique_name))
 
 
-        self.property_model = self.create_contract_model(property_contract, 0, is_library_elem=False)
+        #self.property_model = self.create_contract_model(property_contract, 0, is_library_elem=False)
         self.property_contract = property_contract
 
         self.create_z3_environment(self.property_contract)
@@ -277,578 +338,16 @@ class Z3Interface(object):
         Creates basic types for the current library instance
         '''
 
-        self.spec_outs = {name: z3.Int('%s' % name) for name in spec.output_ports}
-        self.spec_ins = {name: z3.Int('%s' % name) for name in spec.input_ports}
+        self.spec_outs = [z3.Int('%s' % name) for name in spec.output_ports_dict]
+        self.spec_ins = [z3.Int('%s' % name) for name in spec.input_ports_dict]
+        self.num_out = len(self.spec_outs)
 
+        self.lib_model = Z3Library(self.library, spec)
 
         self.solver = Solver()
 
-    def initialize_for_fixed_size(self, size):
-        '''
-        Instantiate structures for a given size
-        '''
-        constraints = []
-
-        #try:
-        #    self.solver.pop()
-        #except z3.Z3Exception as err:
-        #    #LOG.debug(err)
-        #    pass
-
-        #new solver!
-        self.solver = Solver()
-        #start incremental. push
-        self.solver.push()
-
-        #self.contract_model_instances={}
-        #for index in range(0, size):
-        #    for component in self.library.components:
-        #        self.create_component_model(component, index)
-
-        self.contract_model_instances = {self.create_component_model(component,
-                                                                    index):
-                                         component.contract
-                                         for component in self.library.components
-                                         for index in range(size)}
-
-        #initialize the solver functions
-        #constraints += self.define_initial_constraints()
-        print '1'
-        constraints += self.quantified_initial_contraints()
-        #constraints += self.define_initial_connections()
-        print '2'
-        constraints += self.define_initial_connections_fast()
-        #constraints += self.quantify_initial_connections()
-
-        print '3'
-        #self.solver.push()
-        self.solver.add(constraints)
-
-    def create_port_model(self, port, is_library_elem=True):
-        '''
-        override from SMTModelFactory method
-        '''
-
-        #model = self.ZPort.port(getattr(self.PortBaseName, port.base_name),
-        #                        getattr(self.PortUniqueName, port.unique))
-
-        model = self.ZPort.port(getattr(self.PortBaseName, port.base_name))
-
-        #if is_library_elem:
-        #    self.port_models[port] = model
-
-        return model
-
-    def create_contract_model(self, contract, index, is_library_elem=True):
-        '''
-        override from SMTModelFactory method
-        '''
-        #TODO
-        #get rid of the is_library_elem param
-        #create port_list
-        #input_list = self.ZPortList.bottom
-        #output_list = self.ZPortList.bottom
-
-        #for port in contract.input_ports_dict.values():
-        #    z_port = self.create_port_model(port, is_library_elem)
-            #input_list = self.ZPortList.node(z_port, input_list)
-
-        #for port in contract.output_ports_dict.values():
-        #    z_port = self.create_port_model(port, is_library_elem)
-            #output_list = self.ZPortList.node(z_port, output_list)
-
-
-        #declare ammissible names for each contract
-        #it's ok to store this data now
-        self.contracts_dict[contract.unique_name] = contract
-
-        #dtype = z3.Datatype(contract.unique_name)
-        #_ = [dtype.declare(port_base_name) for port_base_name in contract.ports_dict]
-        #self.portc_types[contract] = dtype.create()
-
-
-        #model = self.ZContract.contract(getattr(self.ContractBaseName,
-        #                                        contract.base_name),
-        #                                #getattr(self.ContractUniqueName,
-        #                                #        contract.unique_name),
-        #                                len(contract.input_ports_dict),
-        #                                input_list,
-        #                                len(contract.output_ports_dict),
-        #                                output_list, 0,
-        #                                self.counter.next())
-
-        model = self.ZContract.contract(getattr(self.ContractBaseName,
-                                                contract.base_name),
-                                        #        self.hierarchy.get(contract.base_name, 0),
-                                        #        index)
-                                        BitVecVal(self.hierarchy.get(contract.base_name, 0),
-                                                     2),
-                                        BitVecVal(index, 8))
-
-
-        #add hash
-        model.__hash__ = types.MethodType(zcontract_hash, model)
-        #add eq
-        #model.__eq__ = types.MethodType(zcontract_eq, model)
-        #if is_library_elem:
-        #    self.contract_model_instances[model] = contract
-
-        return model
-
-    def create_component_model(self, component, index, is_library_elem=True):
-        '''
-        override from SMTModelFactory method
-        '''
-        #create contract list
-        #c_list = self.ZContractList.bottom
-
-        model = self.create_contract_model(component.contract, index, is_library_elem)
-
-        #add constraints from component
-        self.distinct_ports_by_component[model] = component.distinct_set
-
-        return model
-
-
-    def quantified_initial_contraints(self):
-        '''
-        Same as 'define intial contraints, but using quantifiers'
-        '''
-        constraints = []
-
-        #define functions from scratch.
-        #Since we are adding components for each n, we need to re-declare all the
-        #function values. We could try to incrementally add constraints,
-        #without recreating everything each time...
-
-        #define structural properties:
-
-        #The first loop defines the library, we cannot quantify
-
-        #LOG.debug(self.extended_instances.items())
-
-        extended_instances = self.extended_instances
-
-        #for (model, contract) in extended_instances.items():
-        #    for port_name in self.port_names:
-
-         #       port_name_model = getattr(self.PortBaseName, port_name)
-
-
-                #if port_name in contract.input_ports_dict:
-                    #constraints.append(self.contract_has_port_wbase_name(model, port_name_model) == True)
-                    #constraints.append(self.port_is_input(port_name_model, model) == True)
-                    #constraints.append(self.port_is_output(port_name_model, model) == False)
-                #elif port_name in contract.output_ports_dict:
-                    #constraints.append(self.contract_has_port_wbase_name(model, port_name_model) == True)
-                    #constraints.append(self.port_is_input(port_name_model, model) == False)
-                    #constraints.append(self.port_is_output(port_name_model, model) == True)
-                #else:
-                    #constraints.append(self.contract_has_port_wbase_name(model, port_name_model) == False)
-                    #constraints.append(self.port_is_input(port_name_model, model) == False)
-                    #constraints.append(self.port_is_output(port_name_model, model) == False)
-
-
-        c_a, c_b = Consts('c_a c_b', self.ZContract)
-        p_a, p_b = Consts('p_a p_b', self.PortBaseName)
-
-        #all the inputs connected -> full_input
-        #in_conn_conditions = [z3.Implies(self.port_is_input(p_a, c_a),
-        #                                  self.port_is_connected(c_a, p_a)) for p_a in self.port_dict.values()]
-
-        #condition = [z3.If(z3.And(in_conn_conditions),
-        #                                   self.full_input(c_a),
-        #                                   z3.Not(self.full_input(c_a))))
-
-        #condition = [z3.If(z3.And([z3.Implies(self.port_is_input(p_a, c_a),
-        #                                  self.port_is_connected(c_a, p_a))
-        #                           for p_a in self.port_dict.values()]),
-        #                           self.full_input(c_a),
-        #                           z3.Not(self.full_input(c_a)))
-        #            for c_a in extended_instances]
-        
-        #skip use of is_input
-        condition = [If(And([self.port_is_connected(m_a, p_a)
-                                   for n_a, p_a in self.port_dict.items()
-                                   if n_a in c_a.input_ports_dict]),
-                                   self.full_input(m_a),
-                                   Not(self.full_input(m_a)))
-                    for m_a, c_a in extended_instances.items()]
-
-        constraints += condition
-
-
-
-        #all outputs connectedf -> full_output
-        #out_conn_conditions = z3.ForAll([p_a], z3.Implies(self.port_is_output(p_a, c_a),
-        #                                              self.port_is_connected(c_a, p_a)))
-        #condition = z3.ForAll([c_a], z3.If(out_conn_conditions,
-        #                                   self.full_output(c_a),
-        #                                   z3.Not(self.full_output(c_a))))
-        #constraints.append(condition)
-
-        #condition = [z3.If(z3.And([z3.Implies(self.port_is_output(port, contract),
-        #                                      self.port_is_connected(contract, port))
-        #                           for port in self.port_dict.values()]),
-        #                   self.full_output(contract),
-        #                   z3.Not(self.full_output(contract)))
-        #             for contract in extended_instances]
-
-        #skip use of is_output
-        condition = [If(And([self.port_is_connected(m_a, p_a)
-                                   for n_a, p_a in self.port_dict.items()
-                                   if n_a in c_a.output_ports_dict]),
-                           self.full_output(m_a),
-                           Not(self.full_output(m_a)))
-                     for m_a, c_a in extended_instances.items()]
-        constraints += condition
-
-        #all inputs and all outputs -> fully connected
-        #condition = z3.ForAll([c_a], z3.If(z3.And(self.full_input(c_a),
-        #                                          self.full_output(c_a)),
-        #                                   self.fully_connected(c_a),
-        #                                   z3.Not(self.fully_connected(c_a))))
-        #constraints.append(condition)
-
-        condition = [If(And(self.full_input(contract),
-                                  self.full_output(contract)),
-                           self.fully_connected(contract),
-                           Not(self.fully_connected(contract)))
-                     for contract in extended_instances]
-
-        constraints += condition
-
-        #at least a connection -> port connected
-        #condition = z3.ForAll([c_a, p_a], z3.If(z3.And(self.contract_has_port_wbase_name(c_a, p_a),
-        #                                               z3.Exists([c_b, p_b],
-        #                                                         #self.connected_ports(c_a, c_b,
-        #                                                         #                     p_a, p_b)
-        #                                                         z3.And(self.connected_ports(c_a, c_b,
-        #                                                                              p_a, p_b),
-        #                                                                z3.Or(z3.Distinct([c_a, c_b]),
-        #                                                                      z3.Distinct([p_a, p_b]))
-        #                                                                )
-        #                                                         )
-        #                                               ),
-        #                                        self.port_is_connected(c_a, p_a),
-        #                                        z3.Not(self.port_is_connected(c_a, p_a))
-        #                                        )
-        #                     )
-        #constraints.append(condition)
-
-        #condition = [z3.If(z3.And(self.contract_has_port_wbase_name(contract, port),
-        #                           z3.Or([z3.And(self.connected_ports(contract, contract1,
-        #                                                              port, port1),
-        #                                         z3.Or(z3.Not(contract == contract1),
-        #                                               z3.Not(port == port1)))
-        #                                  for port1 in self.port_dict.values()
-        #                                  for contract1 in extended_instances]
-        #                                )
-        #                           ),
-        #                    self.port_is_connected(contract, port),
-        #                    z3.Not(self.port_is_connected(contract, port)))
-        #             for port in self.port_dict.values() for contract in extended_instances]
-        
-        #rewrite with less SMT functions
-        condition = [If(Or([self.connected_ports(model, model1,
-                                                                      port, port1)                                  for name1, port1 in self.port_dict.items()
-                                  for model1, contract1 in extended_instances.items()
-                                  if name1 in contract1.ports_dict and
-                                     (contract1 != contract or name != name1)]
-                                        ),
-                            self.port_is_connected(model, port),
-                            Not(self.port_is_connected(model, port)))
-                     for name, port in self.port_dict.items()
-                     for model, contract in extended_instances.items()
-                     if name in contract.ports_dict]
-
-        constraints += condition
-
-        c_a, c_b = Consts('c_a c_b', self.ZContract)
-        p_a, p_b = Consts('p_a p_b', self.PortBaseName)
-        c_c = Const('c_c', self.ZContract)
-        p_c = Const('p_c', self.PortBaseName)
-
-        #connected_ports is symmetric
-        #condition = z3.ForAll([c_a, c_b, p_a, p_b],
-        #                      (self.connected_ports(c_a, c_b, p_a, p_b) ==
-        #                       self.connected_ports(c_b, c_a, p_b, p_a)))
-        #constraints.append(condition)
-
-
-        #connected_ports is also transitive
-        condition = ForAll([c_a, c_b, c_c, p_a, p_b, p_c],
-                              Implies(And(self.connected_ports(c_a, c_b, p_a, p_b),
-                                                self.connected_ports(c_b, c_c, p_b, p_c)),
-                                         self.connected_ports(c_a, c_c, p_a, p_c)
-                                        )
-                             )
-        constraints.append(condition)
-
-
-        # SLOWER  
-        #condition = [z3.Implies(z3.And(self.connected_ports(c_a, c_b, self.port_dict[p_a],
-        #                                                    self.port_dict[p_b]),
-        #                               self.connected_ports(c_b, c_c, self.port_dict[p_b],
-        #                                                        self.port_dict[p_c])),
-        #                        self.connected_ports(c_a, c_c, self.port_dict[p_a],
-        #                            self.port_dict[p_c])
-        #                       )
-        #             for c_a, cc_a in self.extended_instances.items()
-        #             for c_b, cc_b in self.extended_instances.items()
-        #             for c_c, cc_c in self.extended_instances.items()
-        #             for p_a in cc_a.ports_dict for p_b in cc_b.ports_dict
-        #             for p_c in cc_c.ports_dict ]
-
-        #constraints += condition
-
-        #connected
-        #condition = z3.ForAll([c_a, c_b],
-        #                      z3.If(z3.Exists([p_a, p_b],
-        #                                      self.connected_ports(c_a, c_b, p_a, p_b),
-        #                                      ),
-        #                            self.connected(c_a, c_b) == True,
-        #                            self.connected(c_a, c_b) == False,
-        #                            )
-        #                      )
-        #constraints.append(condition)
-
-        #connected_output
-        #condition = z3.ForAll([c_a, c_b],
-        #                      z3.If(z3.Exists([p_a, p_b],
-        #                                      z3.And(self.connected_ports(c_a, c_b, p_a, p_b),
-        #                                             self.port_is_output(p_a, c_a),
-        #                                             self.port_is_output(p_b, c_b)
-        #                                            )
-        #                                      ),
-        #                            self.connected_output(c_a, c_b) == True,
-        #                            self.connected_output(c_a, c_b) == False,
-        #                            )
-        #                      )
-        #constraints.append(condition)
-
-
-        return constraints
-
-    def define_initial_connections_fast(self):
-        '''
-        A version of define_initial_connections using list comprehension
-        Two outputs cannot be connected. Ports not related to contracts, cannot be connected
-        Connections are transitive and symmetric
-        '''
-        constraints = []
-
-        extended_instances = self.extended_instances
-        product_f = itertools.product
-
-        #p_model_pairs = itertools.product(self.port_dict.values(), repeat=2)
-        #c_model_pairs = itertools.product(extended_instances, repeat=2)
-
-        #symmetric
-        #symmetric = lambda m_a,m_b,p_a,p_b: self.connected_ports(m_a, m_b, p_a, p_b) == self.connected_ports(m_b, m_a, p_b, p_a)
-
-        #disconnected
-        #disc = lambda m_a,m_b,p_a,p_b: z3.Not(self.connected_ports(m_a, m_b, p_a, p_b))
-
-        #connected
-        #conn = lambda m_a,m_b,p_a,p_b: self.connected_ports(m_a, m_b, p_a, p_b)
-
-        print '2.1'
-
-        constraints += [self.connected_ports(m_a, m_b, p_a, p_b) ==
-                                   self.connected_ports(m_b, m_a, p_b, p_a)
-                        for p_a, p_b in product_f(self.port_dict.values(), repeat=2)
-                        for m_a, m_b in product_f(extended_instances, repeat=2)
-                        ]
-
-
-
-        #constraints += [self.connected_ports(m_a, m_b, self.port_dict[n_a],
-        #                                    self.port_dict[n_b]) ==
-        #                           self.connected_ports(m_b, m_a, self.port_dict[n_b],
-        #                                                self.port_dict[n_a])
-        #                for m_a, c_a in extended_instances.items()
-        #                for m_b, c_b in extended_instances.items()
-        #                for n_a in c_a.output_ports_dict
-        #                for n_b in c_b.output_ports_dict
-        #                ]
-
-        print '2.2'
-
-        #constraints += list(chain_f((symmetric(m_a, m_b, p_a, p_b),
-        #                            conn_stat(m_a, c_a, m_b, c_b,
-        #                                           p_name_a, p_a, p_name_b, p_b))
-        #                for (p_name_a, p_a), (p_name_b, p_b)
-        #                    in itertools.product(self.port_dict.items(), repeat=2)
-        #                for (m_a, c_a), (m_b, c_b)
-        #                    in itertools.product(extended_instances.items(), repeat=2)
-        #                ))
-
-
-        #since we use cartesian product,
-        #simmetricity of connected_ports is implicit
-        constraints += [Not(self.connected_ports(m_a, m_b, p_a, p_b))
-                        if (p_name_a not in c_a.ports_dict) or
-                             (p_name_b not in c_b.ports_dict)
-                        else (
-                            self.connected_ports(m_a, m_b, p_a, p_b)
-                            if is_true(simplify(m_a == m_b)) and
-                                is_true(simplify(p_a == p_b))
-                            else (
-                                Not(self.connected_ports(m_a, m_b, p_a, p_b))
-                                if (is_false(simplify(m_a == self.property_model)) and
-                                    is_false(simplify(m_b == self.property_model)) and
-                                    (p_name_a in c_a.output_ports_dict) and
-                                    (p_name_b in c_b.output_ports_dict))
-                                else True #z3.Z3_OP_TRUE
-                                 )
-                        )
-                        for (p_name_a, p_a), (p_name_b, p_b)
-                            in itertools.product(self.port_dict.items(), repeat=2)
-                        for (m_a, c_a), (m_b, c_b)
-                            in itertools.product(extended_instances.items(), repeat=2)
-                        ]
-
-
-
-        print '2.3'
-        #constraints.append(z3.If(z3.Or([self.connected_ports(m_a, m_b, p_a, p_b)
-        #                                for p_a, p_b in product_f(self.port_dict.values(), repeat=2)
-        #                                for m_a, m_b in product_f(extended_instances, repeat=2)
-        #                            ]),
-        #                             self.connected(m_a, m_b)==True,
-        #                             self.connected(m_a, m_b)==False)
-        #                   )
-
-        #constraints.append(self.connected(m_a, m_b) == self.connected(m_b, m_a))
-
-        #output_connection
-        #constraints.append(self.connected_output(m_a, m_b) == self.connected_output(m_b, m_a))
-
-        print '2.4'
-        #constraints.append(z3.If(z3.Or([z3.And(self.connected_ports(m_a, m_b,
-        #                                                           p_a, p_b),
-        #                                   self.port_is_output(p_a, m_a),
-        #                                   self.port_is_output(p_b, m_b))
-        #                                for p_a, p_b in product_f(self.port_dict.values(), repeat=2)
-        #                                for m_a, m_b in product_f(extended_instances, repeat=2)
-        #                               ]),
-        #                             self.connected_output(m_a, m_b) == True,
-        #                             self.connected_output(m_a, m_b) == False
-        #                             )
-        #                      )
-
-        #uses less functions
-        #constraints += [z3.If(z3.Or([self.connected_ports(m_a, m_b,
-        #                                                    self.port_dict[n_a],
-        #                                                    self.port_dict[n_b])
-        #                                for n_a in c_a.output_ports_dict
-        #                                for n_b in c_b.output_ports_dict
-        #                            ]),
-        #                             self.connected_output(m_a, m_b) == True,
-        #                             self.connected_output(m_a, m_b) == False
-        #                             )
-        #                for m_a, c_a in extended_instances.items()
-        #                for m_b, c_b in extended_instances.items()
-        #                ]
-
-        print '2.5'
-        return constraints
-
-    def define_initial_connections(self):
-        '''
-        Two outputs cannot be connected. Ports not related to contracts, cannot be connected
-        Connections are transitive and symmetric
-        '''
-        constraints = []
-
-        extended_instances = self.extended_instances
-        product_f = itertools.product
-        #loop over all the possible instances
-        #NOT considering the spec   
-        #for (m_a, m_b) in itertools.permutations(self.extended_instances.keys(), 2):
-        for (m_a, c_a), (m_b, c_b) in product_f(extended_instances.items(), repeat=2):
-            #c_a = self.contract_model_instances[m_a]
-            #c_b = self.contract_model_instances[m_b]
-            #c_a = extended_instances[m_a]
-            #c_b = extended_instances[m_b]
-
-            #sub_constr_and = []
-            sub_constr = []
-            conn_out_constr = []
-            diff_model = []
-
-            #LOG.debug('iteration')
-            for (p_a, p_a_model), (p_b, p_b_model) in product_f(self.port_dict.items(), repeat=2):
-            #for item in itertools.combinations_with_replacement(set(self.port_names), 2):
-
-                #LOG.debug(item)
-                #(p_a, p_b) = item
-                #p_a_model = getattr(self.PortBaseName, p_a)
-                #p_b_model = getattr(self.PortBaseName, p_b)
-
-                #if a is connected to b, then b is connected to a and vice versa
-                #symmetric
-                constraints.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model) ==
-                                   self.connected_ports(m_b, m_a, p_b_model, p_a_model))
-
-                #used in implication, later, but only if not the same component and port
-                sub_constr.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model))
-                conn_out_constr.append(And(self.connected_ports(m_a, m_b,
-                                                                   p_a_model, p_b_model),
-                                           self.port_is_output(p_a_model, m_a),
-                                           self.port_is_output(p_b_model, m_b)))
-                #LOG.debug('test-----------')
-                #LOG.debug(m_a)
-                #LOG.debug(m_b)
-                #LOG.debug(p_a)
-                #LOG.debug(p_b)
-                #LOG.debug(z3.is_true(z3.simplify(m_a == self.property_model)))
-
-                if (p_a not in c_a.ports_dict) or (p_b not in c_b.ports_dict):
-                    #LOG.debug('1')
-                    constraints.append(Not(self.connected_ports(m_a, m_b, p_a_model, p_b_model)))
-                #connected_port is reflexive - but never in the case without replacement, or product
-                elif (is_true(simplify(m_a == m_b)) and
-                     is_true(simplify(p_a_model == p_b_model))):
-                    #LOG.debug('2')
-                    constraints.append(self.connected_ports(m_a, m_b, p_a_model, p_b_model))
-
-                elif (is_false(simplify(m_a == self.property_model)) and
-                        is_false(simplify(m_b == self.property_model))
-                       and (p_a in c_a.output_ports_dict) and (p_b in c_b.output_ports_dict)):
-                #elif (p_a in c_a.output_ports_dict) and (p_b in c_b.output_ports_dict):
-                    #no connections between outputs of library elements
-                    #LOG.debug('no output-----------')
-                    #LOG.debug(m_a)
-                    #LOG.debug(m_b)
-                    #LOG.debug(p_a)
-                    #LOG.debug(p_b)
-                    constraints.append(Not(self.connected_ports(m_a, m_b, p_a_model, p_b_model)))
-                    #pass
-
-            #two contracts connected if there is at least a common connection
-            #constraints.append(z3.Implies(z3.Not(z3.Or(sub_constr)), self.connected(m_a, m_b) == False))
-            #constraints.append(z3.Implies(z3.Or(sub_constr), self.connected(m_a, m_b) == True))
-            constraints.append(If(Or(sub_constr),
-                                     self.connected(m_a, m_b)==True,
-                                     self.connected(m_a, m_b)==False))
-            
-            constraints.append(self.connected(m_a, m_b) == self.connected(m_b, m_a))
-
-            #output_connection
-            constraints.append(self.connected_output(m_a, m_b) == self.connected_output(m_b, m_a))
-            #constraints.append(z3.Implies(z3.Not(z3.Or(conn_out_constr)),
-            #                              self.connected_output(m_a, m_b) == False))
-            #constraints.append(z3.Implies(z3.Or(conn_out_constr),
-            #                              self.connected_output(m_a, m_b) == True))
-            constraints.append(If(Or(conn_out_constr),
-                                     self.connected_output(m_a, m_b) == True,
-                                     self.connected_output(m_a, m_b) == False
-                                     )
-                              )
-
-        return constraints
+        LOG.debug('ok')
+        LOG.debug(self.lib_model)
 
 
 
@@ -873,248 +372,70 @@ class Z3Interface(object):
         return constraints
 
 
-    def all_models_completely_connected(self, candidate_models):
-        '''
-        All ports need to be connected
-        '''
 
-        constraints = [self.fully_connected(model) for model in candidate_models]
 
-        return constraints
-
-    def models_disconnected_if_not_solution(self, candidate_models):
+    def all_zero(self):
         '''
-        if not part of solution, everything disconnected
+        all zeros
         '''
         constraints = []
-        part1 = {}
+        constraints = [port == 0 for port in self.spec_ins]
+        constraints += [port == 0 for port in self.spec_outs]
+        constraints += [model == 0 for model in self.lib_model.models]
 
-        constraints = [Implies(Not(Or([m_a == candidate
-                                                for candidate in candidate_models])),
-                                  And([Not(self.port_is_connected(m_a, p_a))
-                                          for (p_name, p_a) in self.port_dict.items()
-                                          if p_name in c_a.ports_dict]))
-                       for (m_a, c_a) in self.contract_model_instances.items()]
+        self.solver.add(constraints)
 
-        return constraints
+#    def full_spec_out(self):
+#        '''
+#        all the outputs must be zeros or connected to a spec out,
+#        but distinct.
+#        At least a model is connected to output
+#
+#        '''
+#
+#        constraints = []
+#        constraints += [model >= 0 for model in self.lib_model.models]
+#        constraints += [model <= self.num_out for model in self.lib_model.models]
+#        constraints += [Or(model == 0,
+#                           And([model != other
+#                                for other in self.lib_model.all_other_models(model)]))]
+#
+#        constraints += [Or([model == index for model in self.lib_model.models])
+#                        for index in range(1, self.num_out + 1)]
+#
+#        self.solver.add(constraints)
 
-    def property_inputs_no_on_candidate_outputs(self):
+    def full_spec_out(self):
         '''
-        property inputs cannot be connected to models outputs
-        '''
+        all the outputs must be zeros or connected to a spec out,
+        but distinct.
+        At least a model is connected to output
 
-        constraints = [Not(self.connected_ports(self.property_model, m_b, p_p, p_b))
-                        for n_p, p_p in self.port_dict.items()
-                        if n_p in self.property_contract.input_ports_dict
-                        for n_b, p_b in self.port_dict.items()
-                        for m_b, c_b in self.extended_instances.items()
-                        if n_b in c_b.output_ports_dict]
-
-        return constraints
-
-    def property_inputs_to_candidates(self):
-        '''
-        property inputs have to  be connected to models inputs
-        '''
-
-        constraints = [Or([self.connected_ports(self.property_model, m_b,
-                                                          p_p, p_b)
-                               for n_b, p_b in self.port_dict.items()
-                               for m_b, c_b in self.contract_model_instances.items()
-                               if n_b in c_b.input_ports_dict
-                              ])
-                        for n_p, p_p in self.port_dict.items()
-                        if n_p in self.property_contract.input_ports_dict
-                      ]
-
-        return constraints
-
-    def property_outputs_to_candidates(self):
-        '''
-        property outputs have to  be connected to models outputs
         '''
 
-        constraints = [Or([self.connected_ports(self.property_model, m_b,
-                                                          p_p, p_b)
-                               for n_b, p_b in self.port_dict.items()
-                               for m_b, c_b in self.contract_model_instances.items()
-                               if n_b in c_b.output_ports_dict
-                              ])
-                        for n_p, p_p in self.port_dict.items()
-                        if n_p in self.property_contract.output_ports_dict
-                      ]
-
-        return constraints
-
-    def property_outputs_not_together(self):
-        '''
-        Output ports of property can be connected to other outputs, but not only
-        among themselves
-        '''
         constraints = []
+        constraints += [port >= 0 for port in self.spec_outs]
+        constraints += [port <= self.lib_model.max_index for port in self.spec_outs]
+        constraints += [Distinct(self.spec_outs)]
 
-        #TODO: refactor as list comprehension
+        self.solver.add(constraints)
 
-        #do not consider the same port twice e.g. (a, a): in that case reflexivity guarantees
-        #the property to be true
-        for (p_a, p_b) in itertools.combinations(self.property_contract.output_ports_dict.keys(), 2):
-            port_model_a = getattr(self.PortBaseName, p_a)
-            port_model_b = getattr(self.PortBaseName, p_b)
-
-            constraints.append(self.connected_ports(self.property_model,
-                                                    self.property_model,
-                                                    port_model_a,
-                                                    port_model_b)==False)
-
-        return constraints
-
-    def inputs_on_property_inputs_or_candidate_out(self, candidates):
+    def spec_out_to_out(self):
         '''
-        An input of a candidate can be only connected to inputs of the
-        property or to an output of any candidate
+        a spec out can connect only to another output
         '''
 
-        constraints = [And([Implies(cand == m_a,
-                                  Or([self.connected_ports(m_a, m_b, p_a, p_b)
-                                    for n_b, p_b in self.port_dict.items()
-                                    for m_b, c_b in self.contract_model_instances.items()
-                                    if n_b in c_b.output_ports_dict
-                                    ] +
-                                    [self.connected_ports(m_a, self.property_model, p_a, p_b)
-                                    for n_b, p_b in self.port_dict.items()
-                                    if n_b in self.property_contract.input_ports_dict
-                                    ])
-                                    )
-                                for n_a, p_a in self.port_dict.items()
-                                for m_a, c_a in self.contract_model_instances.items()
-                                if n_a in c_a.input_ports_dict
-                              ])
-                        for cand in candidates]
+        constraints = []
+        #get all the duplicates
+        constraints += [And([model != (index + self.lib_model.max_single_level_index*level)
+                             for level in range(0, self.lib_model.max_components)
+                             for index in range(0, self.lib_model.max_index)
+                             if self.lib_model.port_by_index(index).is_output])
+                        for model in self.spec_outs]
 
-        return constraints
-
-    def property_ports_controlled_by_same_component(self, port_name_a, port_name_b):
-        '''
-        Specify that property ports port_name_a and b are controlled
-        by the same component
-        '''
-        port_a = getattr(self.PortBaseName, port_name_a)
-        port_b = getattr(self.PortBaseName, port_name_b)
-
-        constraints = Or([And(self.connected_ports(self.property_model, m_a,
-                                                         port_a, p_x),
-                                    self.connected_ports(self.property_model, m_a,
-                                                         port_b, p_y))
-                        for p_name_x, p_x in self.port_dict.items()
-                        for p_name_y, p_y in self.port_dict.items()
-                        for m_a, c_a in self.contract_model_instances.items()
-                        if p_name_x in c_a.ports_dict and p_name_y in c_a.ports_dict])
-
-        return constraints
-
-    def compute_same_block_constraints(self):
-        '''
-        computes same block constraints according to the info given
-        by the user
-        '''
-        constraints = [self.property_ports_controlled_by_same_component(name_a, name_b)
-                        for name_a, name_b in self.same_block_constraints]
-
-        return constraints
-
-    #def map_property_ports_on_distinct_ports(self, port_name_a, port_name_b):
-    #    '''
-    #    prevents two ports of the property to be mapped on the same candidate port
-    #    '''
-    #    port_a = getattr(self.PortBaseName, port_name_a)
-    #    port_b = getattr(self.PortBaseName, port_name_b)
-    #
-    #    constraints = z3.And([z3.Not(self.connected_ports(self.property_model,
-    #                                                             m_x, port_a, p_x))
-    #                         for name_x, p_x in self.port_dict.items()
-    #                         for m_x, c_x in self.contract_model_instances.items()
-    #                         if name_x in c_x.ports_dict])
-    #    #LOG.debug(constraints)
-    #    return constraints
-
-    def compute_distinct_port_constraints(self):
-        '''
-        computes the set of distinct ports according the info from the user
-        '''
-
-        #constraints = [self.map_property_ports_on_distinct_ports(name_a, name_b)
-        #               for name_a, name_b in self.distinct_mapping_constraints]
-        constraints = [Not(self.connected_ports(self.property_model,
-                                                   self.property_model,
-                                                   self.port_dict[name_a],
-                                                   self.port_dict[name_b])
-                              )
-                        for name_a, name_b in self.distinct_mapping_constraints]
-
-        return constraints
-
-
-    def process_candidate_type_compatibility(self):
-        '''
-        Prevents connections among incompatible types.
-        OK only if inputs are connected and with same type
-        or if an input gets fed by a subtype
-        '''
-
-        constraints = [Not(self.connected_ports(m_a, m_b, p_a, p_b))
-                        for p_name_a, p_a in self.port_dict.items()
-                        for p_name_b, p_b in self.port_dict.items()
-                        for m_a, c_a in self.contract_model_instances.items()
-                        for m_b, c_b in self.contract_model_instances.items()
-                        if p_name_a in c_a.ports_dict and
-                           p_name_b in c_b.ports_dict and
-                           (
-                            ((c_a.port_type[p_name_a], c_b.port_type[p_name_b]) not in
-                           self.type_compatibility_set) and
-                            (c_a.port_type[p_name_a] != c_b.port_type[p_name_b]) and 
-                            (p_name_a in c_a.input_ports_dict and
-                             p_name_b in c_b.output_ports_dict and not
-                             issubclass(c_b.port_type[p_name_b], c_a.port_type[p_name_a])) or
-                            (p_name_a in c_a.output_ports_dict and
-                             p_name_b in c_b.input_ports_dict and not
-                             issubclass(c_a.port_type[p_name_a], c_b.port_type[p_name_b]))
-                            )]
         #LOG.debug(constraints)
-        return constraints
 
-    def process_spec_type_compatibility(self):
-        '''
-        Allows spec to be connected only to similar types
-        '''
-
-        constraints = [Not(self.connected_ports(self.property_model, m_b, p_a, p_b))
-                        for p_name_a, p_a in self.port_dict.items()
-                        for p_name_b, p_b in self.port_dict.items()
-                        for m_b, c_b in self.contract_model_instances.items()
-                        if p_name_a in self.property_contract.ports_dict and
-                           p_name_b in c_b.ports_dict and
-                           not issubclass(c_b.port_type[p_name_b],
-                                          self.property_contract.port_type[p_name_a])]
-        #LOG.debug(constraints)
-        return constraints
-
-
-    def compute_component_port_constraints(self):
-        '''
-        Adds constraints (distinct ports) taken from library components
-        '''
-
-
-        constraints = [Not(self.connected_ports(m_a, m_a,
-                                                   self.port_dict[name_a],
-                                                   self.port_dict[name_b])
-                             )
-                             for m_a, port_set in self.distinct_ports_by_component.items()
-                             for name_a, name_b in port_set
-                       ]
-        #LOG.debug(constraints)
-        return constraints
-
+        self.solver.add(constraints)
 
     def synthesize(self, property_contracts, same_block_constraints,
                     distinct_mapping_constraints):
@@ -1139,17 +460,19 @@ class Z3Interface(object):
         #property model has to be fully connected - always true
         #self.solver.add(self.fully_connected(self.property_model))
 
-        for size_n in range(1, max_components+1):
-            try:
-                candidate, composition, spec, c_list = self.synthesize_fixed_size(size_n)
-            except NotSynthesizableError:
-                LOG.debug("size %d synthesis failed" % size_n)
-            else:
-                LOG.debug(candidate)
-                LOG.debug(composition)
-                LOG.debug(spec)
-                LOG.debug(self.time)
-                return candidate, composition, spec, c_list
+        #self.all_zero()
+        LOG.debug(property_contract)
+        self.full_spec_out()
+        self.spec_out_to_out()
+
+        stat = self.solver.check()
+        print stat
+        if stat != sat:
+            LOG.debug(self.solver.proof())
+        else:
+            m = self.solver.model()
+
+            print m
 
         raise NotSynthesizableError
 

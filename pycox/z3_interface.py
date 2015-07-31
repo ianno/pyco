@@ -35,6 +35,8 @@ class Z3Library(object):
         self.ports = []
         self.index = {}
         self.model_index = {}
+        self.model_in_index = {}
+        self.model_out_index = {}
         self.contract_index = {}
         self.out_models = []
         self.out_ports = []
@@ -46,7 +48,7 @@ class Z3Library(object):
         self.in_contract_index = {}
         self.model_levels = {}
         self.model_contracts = {}
-        self.contracts = []
+        self.contracts = set()
 
         self.spec = spec
         self.max_components = len(spec.output_ports_dict)
@@ -61,7 +63,7 @@ class Z3Library(object):
 
             for component in self.library.components:
                 contract = component.contract
-                self.contracts.append(contract)
+                self.contracts.add(contract)
                 self.contract_index[level][contract] = []
                 self.in_contract_index[level][contract] = []
                 self.out_contract_index[level][contract] = []
@@ -77,6 +79,7 @@ class Z3Library(object):
 
                     #reverse lookup
                     self.model_index[model.get_id()] = len(self.models) - 1
+                    self.model_in_index[model.get_id()] = len(self.models) - 1
                     self.index[level][port] = len(self.models) - 1
                     self.in_index[level][port] = len(self.in_models) - 1
 
@@ -94,6 +97,7 @@ class Z3Library(object):
 
                     #reverse lookup
                     self.model_index[model.get_id()] = len(self.models) - 1
+                    self.model_out_index[model.get_id()] = len(self.models) - 1
                     self.index[level][port] = len(self.models) - 1
                     self.out_index[level][port] = len(self.out_models) - 1
 
@@ -256,6 +260,14 @@ class Z3Library(object):
         return [self.models[index] for index in range(0, self.max_index)
                 if index != self.model_index[model.get_id()]]
 
+    def all_other_in_models(self, model):
+        '''
+        returns all the models minus the one given as param
+        '''
+
+        return [other for other in self.in_models
+                if model.get_id() != other.get_id()]
+
     def related_models(self, model):
         '''
         Given a model, finds all the models related to the same contract
@@ -265,11 +277,20 @@ class Z3Library(object):
         #get contract
         contract = self.model_contracts[model.get_id()]
 
-        print [self.models[index]
-                                 for index in self.contract_index[level][contract]]
-
         return [self.models[index]
                  for index in self.contract_index[level][contract]]
+
+    def related_in_models(self, model):
+        '''
+        Given a model, finds all the models related to the same contract
+        '''
+        #infer level
+        level = self.model_levels[model.get_id()]
+        #get contract
+        contract = self.model_contracts[model.get_id()]
+
+        return [self.in_models[index]
+                 for index in self.in_contract_index[level][contract]]
 
     def models_by_contracts(self):
         '''
@@ -286,6 +307,14 @@ class Z3Library(object):
         return [models
                 for contract in self.contracts
                 for models in self.contract_out_models(contract)]
+
+    def models_in_by_contracts(self):
+        '''
+        returns all the models grouped by contracts
+        '''
+        return [models
+                for contract in self.contracts
+                for models in self.contract_in_models(contract)]
 
     def index_by_model(self, model):
         '''
@@ -441,12 +470,12 @@ class Z3Interface(object):
         '''
 
         constraints = []
-        constraints += [model >= 0 for model in self.lib_model.models]
-        constraints += [model <= self.num_out for model in self.lib_model.models]
+        constraints += [model >= 0 for model in self.lib_model.in_models]
+        constraints += [model <= self.num_out for model in self.lib_model.in_models]
         constraints += [Or(model == 0,
                            And([model != other
-                                for other in self.lib_model.all_other_models(model)]))
-                        for model in self.lib_model.models]
+                                for other in self.lib_model.all_other_in_models(model)]))
+                        for model in self.lib_model.in_models]
 
         #constraints += [Or([model == index for model in self.lib_model.models])
         #                for index in range(1, self.num_out + 1)]
@@ -486,7 +515,7 @@ class Z3Interface(object):
 
     def full_spec_in(self):
         '''
-        all the outputs must be connected (0 < spec < max),
+        all the inputs must be connected (0 < spec < max),
         but distinct.
 
         '''
@@ -500,11 +529,10 @@ class Z3Interface(object):
 
     def spec_in_to_in(self):
         '''
-        a spec out can connect only to another output
+        a spec input can connect only to another input
         '''
 
         constraints = []
-        #get all the duplicates
         constraints += [And([model != (index + self.lib_model.max_single_level_index*level)
                              for level in range(0, self.lib_model.max_components)
                              for index in range(0, self.lib_model.max_index)
@@ -512,6 +540,20 @@ class Z3Interface(object):
                         for model in self.spec_ins]
 
         #LOG.debug(constraints)
+
+        self.solver.add(constraints)
+
+    def inputs_from_selected(self):
+        '''
+        inputs only to non-zero ports
+        '''
+
+        constraints = []
+        constraints += [And([Implies(port == self.lib_model.index_by_model(model),
+                                     model != 0)
+                             for model in self.lib_model.in_models]
+                           )
+                        for port in self.spec_ins]
 
         self.solver.add(constraints)
 
@@ -523,11 +565,11 @@ class Z3Interface(object):
 
         constraints = []
         constraints += [And([Implies(spec_port == index,
-                                     And([self.lib_model.model_by_index(index) > 0]
-                                         + [model != 0 for model
-                                            in self.lib_model.related_models(self.lib_model.model_by_index(index))]))
+                                     And([model != 0 for model
+                                            in self.lib_model.related_in_models(self.lib_model.model_by_index(index))]))
                              for index in range(0, self.lib_model.max_index)])
                         for spec_port in self.spec_outs]
+
 
         self.solver.add(constraints)
 
@@ -538,11 +580,15 @@ class Z3Interface(object):
 
         constraints = []
         constraints += [Implies(And([And([spec_out != self.lib_model.index_by_model(model)
-                                          for model in model_set])
+                                          for model
+                                          in self.lib_model.contract_out_models(contract)[level]])
                                      for spec_out in self.spec_outs]),
-                                And([model == 0 for model in model_set])
+                                And([model == 0 for model in self.lib_model.contract_in_models(contract)[level]])
                                 )
-                        for model_set in self.lib_model.models_by_contracts()]
+                        for contract in self.lib_model.contracts
+                        for level in range(0, self.num_out)]
+
+        print constraints
 
         self.solver.add(constraints)
 
@@ -575,9 +621,15 @@ class Z3Interface(object):
         self.spec_out_to_out()
         self.full_spec_in()
         self.spec_in_to_in()
+        self.inputs_from_selected()
         self.lib_chosen_not_zeros()
         self.lib_not_chosen_zero()
         #self.lib_distinct()
+
+
+        LOG.debug(self.lib_model.models_by_contracts())
+        LOG.debug(self.lib_model.models_in_by_contracts())
+        #LOG.debug(self.solver.assertions())
 
         stat = self.solver.check()
         print stat
@@ -585,7 +637,9 @@ class Z3Interface(object):
             LOG.debug(self.solver.proof())
         else:
             m = self.solver.model()
-            for spec in self.spec_outs + self.spec_ins:
+            for spec in self.spec_ins:
+                LOG.debug('%s -> %s' % (spec, self.lib_model.model_by_index(simplify(m[spec]).as_long())))
+            for spec in self.spec_outs:
                 LOG.debug('%s -> %s' % (spec, self.lib_model.model_by_index(simplify(m[spec]).as_long())))
 
             print m

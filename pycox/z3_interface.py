@@ -624,27 +624,66 @@ class Z3Interface(object):
         self.inputs_from_selected()
         self.lib_chosen_not_zeros()
         self.lib_not_chosen_zero()
-        #self.lib_distinct()
+        self.lib_distinct()
 
 
         LOG.debug(self.lib_model.models_by_contracts())
         LOG.debug(self.lib_model.models_in_by_contracts())
         #LOG.debug(self.solver.assertions())
 
-        stat = self.solver.check()
-        print stat
-        if stat != sat:
-            LOG.debug(self.solver.proof())
+
+
+        while True:
+            try:
+                model = self.propose_candidate()
+            except NotSynthesizableError as err:
+                raise err
+            else:
+                try:
+                    pass
+                    #composition, spec, contract_list = self.verify_candidate(model, c_list)
+                except NotSynthesizableError as err:
+                    LOG.debug("candidate not valid")
+                else:
+                    return 0
+                    return model, composition, spec, contract_list
+
+
+    def propose_candidate(self):
+        '''
+        generate a model
+        '''
+
+        LOG.debug('start solving')
+        res = self.solver.check()
+        LOG.debug(res)
+        if res == sat:
+            #LOG.debug(self.solver.model())
+            #LOG.debug('func eval')
+            #LOG.debug(self.solver.model()[self.fully_connected])
+            pass
         else:
-            m = self.solver.model()
+            #LOG.debug(self.solver.proof())
+            pass
+
+        try:
+            model = self.solver.model()
+        except Z3Exception:
+            raise NotSynthesizableError()
+        else:
             for spec in self.spec_ins:
-                LOG.debug('%s -> %s' % (spec, self.lib_model.model_by_index(simplify(m[spec]).as_long())))
+                LOG.debug('%s -> %s'
+                    % (spec, self.lib_model.model_by_index(simplify(model[spec]).as_long())))
             for spec in self.spec_outs:
-                LOG.debug('%s -> %s' % (spec, self.lib_model.model_by_index(simplify(m[spec]).as_long())))
+                LOG.debug('%s -> %s'
+                    % (spec, self.lib_model.model_by_index(simplify(model[spec]).as_long())))
 
-            print m
+            LOG.debug(model)
 
-        raise NotSynthesizableError
+
+        return model
+
+
 
     def connected_output(self, candidate):
         '''
@@ -812,32 +851,7 @@ class Z3Interface(object):
 
         return constraints
 
-    def propose_candidate(self, size):
-        '''
-        generate a model
-        '''
-        #z3.set_option(max_args=10000000, max_lines=1000000, max_depth=10000000, max_visited=1000000)
-        #LOG.debug(self.solver.assertions)
 
-        LOG.debug('start solving')
-        res = self.solver.check()
-        LOG.debug(res)
-        LOG.debug('done')
-        if res == sat:
-            #LOG.debug(self.solver.model())
-            #LOG.debug('func eval')
-            #LOG.debug(self.solver.model()[self.fully_connected])
-            pass
-        else:
-            #LOG.debug(self.solver.proof())
-            pass
-
-        try:
-            model = self.solver.model()
-        except Z3Exception:
-            raise NotSynthesizableError()
-
-        return model
 
 
 

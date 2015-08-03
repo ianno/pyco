@@ -105,6 +105,10 @@ class Z3Library(object):
                     self.out_contract_index[level][contract].append(len(self.out_models) - 1)
 
 
+
+        LOG.debug({i:self.models[i] for i in range(0,self.max_index)})
+
+
     @property
     def max_index(self):
         '''
@@ -131,8 +135,7 @@ class Z3Library(object):
         '''
         returns the max index not considering levels
         '''
-
-        return len(self.models)/(self.max_components + 1)
+        return len(self.models)/(self.max_components)
 
     @property
     def max_single_level_in_index(self):
@@ -207,21 +210,21 @@ class Z3Library(object):
         return [self.out_contract_index[level][contract]
                 for level in range(0, self.max_components)]
 
-    def models_by_port(self, port):
+    def model_by_port(self, port):
         '''
         returns the model given a port
         '''
         return [self.models[self.index[port]]
                 for level in range(0, self.max_components)]
 
-    def in_models_by_port(self, port):
+    def in_model_by_port(self, port):
         '''
         returns the model given a port
         '''
         return [self.in_models[self.in_index[level][port]]
                 for level in range(0, self.max_components)]
 
-    def out_models_by_port(self, port):
+    def out_model_by_port(self, port):
         '''
         returns the model given a port
         '''
@@ -321,6 +324,40 @@ class Z3Library(object):
         returns the index of the model
         '''
         return self.model_index[model.get_id()]
+
+
+    def contract_by_model(self, model):
+        '''
+        returns contract and level associate to a model
+        '''
+        #infer level
+        level = self.model_levels[model.get_id()]
+        #get contract
+        contract = self.model_contracts[model.get_id()]
+
+        return (level, contract)
+
+    def contract_copies_by_models(self, model_list):
+        '''
+        makes copies of contracts considering models
+        and levels, and put them in a dictionary
+        '''
+        levels = [{} for level in range(0, self.max_components)]
+        model_map_contract = {}
+        contract_map = {}
+
+        for model in model_list:
+            level, contract = self.contract_by_model(model)
+            if contract not in levels[level]:
+                levels[level][contract] = contract.copy()
+
+            model_map_contract[model.get_id()] = levels[level][contract]
+            contract_map[contract] = levels[level][contract]
+
+
+        return model_map_contract, contract_map
+
+
 
 class Z3Interface(object):
     '''
@@ -470,9 +507,9 @@ class Z3Interface(object):
         '''
 
         constraints = []
-        constraints += [model >= 0 for model in self.lib_model.in_models]
+        constraints += [model >= -1 for model in self.lib_model.in_models]
         constraints += [model <= self.num_out for model in self.lib_model.in_models]
-        constraints += [Or(model == 0,
+        constraints += [Or(model == -1,
                            And([model != other
                                 for other in self.lib_model.all_other_in_models(model)]))
                         for model in self.lib_model.in_models]
@@ -490,7 +527,7 @@ class Z3Interface(object):
         '''
 
         constraints = []
-        constraints += [port > 0 for port in self.spec_outs]
+        constraints += [port > -1 for port in self.spec_outs]
         constraints += [port < self.lib_model.max_index for port in self.spec_outs]
         constraints += [Distinct(self.spec_outs)]
 
@@ -502,10 +539,11 @@ class Z3Interface(object):
         '''
 
         constraints = []
+        print self.lib_model.max_single_level_index
         #get all the duplicates
         constraints += [And([model != (index + self.lib_model.max_single_level_index*level)
                              for level in range(0, self.lib_model.max_components)
-                             for index in range(0, self.lib_model.max_index)
+                             for index in range(0, self.lib_model.max_single_level_index)
                              if self.lib_model.port_by_index(index).is_input])
                         for model in self.spec_outs]
 
@@ -521,7 +559,7 @@ class Z3Interface(object):
         '''
 
         constraints = []
-        constraints += [port > 0 for port in self.spec_ins]
+        constraints += [port > -1 for port in self.spec_ins]
         constraints += [port < self.lib_model.max_index for port in self.spec_ins]
         constraints += [Distinct(self.spec_ins)]
 
@@ -549,11 +587,25 @@ class Z3Interface(object):
         '''
 
         constraints = []
-        constraints += [And([Implies(port == self.lib_model.index_by_model(model),
-                                     model != 0)
-                             for model in self.lib_model.in_models]
-                           )
-                        for port in self.spec_ins]
+        #constraints += [And([Implies(port == self.lib_model.index_by_model(model),
+        #                             model > -1)
+        #                     for model in self.lib_model.in_models]
+        #                   )
+        #                for port in self.spec_ins]
+
+
+        constraints += [Implies(And([And([spec_out != self.lib_model.index_by_model(model)
+                                          for model
+                                          in self.lib_model.contract_out_models(contract)[level]])
+                                     for spec_out in self.spec_outs]),
+                                And([And([port != self.lib_model.index_by_model(model)
+                                         for model in self.lib_model.contract_in_models(contract)[level]])
+                                     for port in self.spec_ins])
+                                )
+                        for contract in self.lib_model.contracts
+                        for level in range(0, self.num_out)]
+
+      
 
         self.solver.add(constraints)
 
@@ -565,11 +617,69 @@ class Z3Interface(object):
 
         constraints = []
         constraints += [And([Implies(spec_port == index,
-                                     And([model != 0 for model
+                                     And([And(model >= -1,
+                                              model < self.lib_model.max_index)
+                                          for model
                                             in self.lib_model.related_in_models(self.lib_model.model_by_index(index))]))
                              for index in range(0, self.lib_model.max_index)])
                         for spec_port in self.spec_outs]
 
+
+        self.solver.add(constraints)
+
+    def spec_inputs_no_feedback(self):
+        '''
+        spec inputs cannot be connected
+        '''
+
+        constraints = []
+        constraints += [And([Implies(port == self.lib_model.index_by_model(model),
+                                     model == -1)
+                             for model in self.lib_model.in_models]
+                           )
+                        for port in self.spec_ins]
+
+        self.solver.add(constraints)
+
+
+    def lib_to_outputs(self):
+        '''
+        If a component is not chosen, then it's all zeros.
+
+        '''
+
+        constraints = []
+
+        constraints += [And([model != (index + self.lib_model.max_single_level_index*level)
+                             for level in range(0, self.lib_model.max_components)
+                             for index in range(0, self.lib_model.max_single_level_index)
+                             if self.lib_model.port_by_index(index).is_input])
+                        for model in self.lib_model.in_models]
+
+        print constraints
+
+        self.solver.add(constraints)
+
+    def lib_chosen_to_chosen(self):
+        '''
+        Input of a chosen contract can be connected only to the output of a chosen contract
+        '''
+        constraints = []
+
+        constraints += [Implies(And([And([spec_out != self.lib_model.index_by_model(model)
+                                          for model
+                                          in self.lib_model.contract_out_models(contract)[level]])
+                                     for spec_out in self.spec_outs]),
+                                And([And([port != self.lib_model.index_by_model(model)
+                                         for model in self.lib_model.contract_out_models(contract)[level]])
+                                     for port in self.lib_model.in_models])
+                                )
+                        for contract in self.lib_model.contracts
+                        for level in range(0, self.num_out)]
+
+
+
+        print constraints
 
         self.solver.add(constraints)
 
@@ -583,12 +693,11 @@ class Z3Interface(object):
                                           for model
                                           in self.lib_model.contract_out_models(contract)[level]])
                                      for spec_out in self.spec_outs]),
-                                And([model == 0 for model in self.lib_model.contract_in_models(contract)[level]])
+                                And([model == -1 for model in self.lib_model.contract_in_models(contract)[level]])
                                 )
                         for contract in self.lib_model.contracts
                         for level in range(0, self.num_out)]
 
-        print constraints
 
         self.solver.add(constraints)
 
@@ -621,10 +730,13 @@ class Z3Interface(object):
         self.spec_out_to_out()
         self.full_spec_in()
         self.spec_in_to_in()
+        self.spec_inputs_no_feedback()
         self.inputs_from_selected()
         self.lib_chosen_not_zeros()
+        self.lib_to_outputs()
+        self.lib_chosen_to_chosen()
         self.lib_not_chosen_zero()
-        self.lib_distinct()
+        #self.lib_distinct()
 
 
         LOG.debug(self.lib_model.models_by_contracts())
@@ -640,8 +752,7 @@ class Z3Interface(object):
                 raise err
             else:
                 try:
-                    pass
-                    #composition, spec, contract_list = self.verify_candidate(model, c_list)
+                    composition, spec, contract_list = self.verify_candidate(model)
                 except NotSynthesizableError as err:
                     LOG.debug("candidate not valid")
                 else:
@@ -682,6 +793,144 @@ class Z3Interface(object):
 
 
         return model
+
+    def verify_candidate(self, model):
+        '''
+        check if a candidate is valid or not.
+        Here we need to:
+        1) transform the model to a contract composition
+        2) LEARN
+            2a)
+        '''
+
+        #self.reject_candidate(model, candidates)
+        state, composition, connected_spec, contract_inst = \
+                self.check_all_specs(model)
+        if not state:
+            #learn
+            #as first step, we reject the actual solution
+            #self.solver.add(self.exclude_candidate_type())
+            #LOG.debug('exclude')
+            #LOG.debug(z3.Not(self.connected_ports==model[self.connected_ports]))
+            #self.solver.add(z3.Not(self.connected_ports==model[self.connected_ports]))
+            self.solver.add(self.reject_candidate(model, candidates))
+
+            #then check for consistency
+            self.solver.add(self.check_for_consistency(model, candidates, contract_inst, connected_spec))
+
+            raise NotSynthesizableError
+
+        return composition, connected_spec, contract_inst
+
+    def check_all_specs(self, model):
+        '''
+        check if the model satisfies a number of specs, if provided
+        '''
+        composition = None
+        connected_spec = None
+        contract_inst = None
+        for spec in self.specification_list:
+            composition, connected_spec, contract_inst = \
+                    self.build_composition_from_model(model, spec, complete_model=True)
+
+            LOG.debug('ref check')
+            if not composition.is_refinement(connected_spec):
+                LOG.debug('ref check done 1')
+                return False, composition, connected_spec,contract_inst
+
+            LOG.debug('ref check done 2')
+
+        return True, composition, connected_spec,contract_inst
+
+
+    def build_composition_from_model(self, model, spec, complete_model=True):
+        '''
+        builds a contract composition out of a model
+        '''
+
+        #contracts = set()
+        spec_contract = spec.copy()
+
+        #LOG.debug(spec_contract)
+
+        #find all contracts from model
+        #a set will help us remove duplicates
+        #contracts = set()
+
+        #get all the models, checking outputs
+        models = [self.lib_model.model_by_index(simplify(model[port]).as_long()) for port in self.spec_outs]
+
+        #now we get all the contracts related.
+        #by construction fetching only the outputs, we have the full set of contracts
+        model_map, contract_map = self.lib_model.contract_copies_by_models(models)
+
+        LOG.debug(model_map)
+        LOG.debug(contract_map)
+
+        contracts = set(model_map.values())
+        #extended_contracts = dict(list(contracts) + [spec_contract])
+
+        #start composition
+        #c_set = contracts
+        #c_set.add(contracts.values()[0])
+        mapping = CompositionMapping(contracts)
+
+        #start witn spec
+        for p_model in self.spec_outs + self.spec_ins:
+            name = str(p_model)
+
+            spec_port = spec_contract.ports_dict[name]
+
+            index = simplify(model[p_model]).as_long()
+            orig_port = self.lib_model.port_by_index(index)
+
+            other_contract_orig = orig_port.contract
+            other_contract = contract_map[other_contract_orig]
+
+            port = other_contract.ports_dict[orig_port.base_name]
+
+            spec_contract.connect_to_port(spec_port, port)
+
+
+        #connections among candidates
+        non_zero_port_models = [p_model for p_model in self.lib_model.in_models
+                                if simplify(model[p_model]).as_long() > -1]
+        for p_model in non_zero_port_models:
+            current_index = self.lib_model.index_by_model(p_model)
+            other_index = simplify(model[p_model]).as_long()
+
+            current_port_orig = self.lib_model.port_by_index(current_index)
+            other_port_orig = self.lib_model.port_by_index(other_index)
+
+            current_contract = contract_map[current_port_orig.contract]
+            other_contract = contract_map[other_port_orig.contract]
+
+            current_port = current_contract.ports_dict[current_port_orig.base_name]
+            other_port = other_contract.ports_dict[other_port_orig.base_name]
+
+            mapping.connect(current_port, other_port,
+                            '%s_%s' % (current_contract.unique_name, current_port.base_name))
+
+
+
+        for contract in contracts:
+            LOG.debug(contract)
+        LOG.debug(spec_contract)
+
+        if not complete_model:
+            c_set = self.filter_candidate_contracts_for_composition(contracts, spec_contract)
+
+        #compose
+        root = contracts.pop()
+
+        #c_set.add(root.copy())
+
+        composition = root.compose(contracts, composition_mapping=mapping)
+
+        LOG.debug(composition)
+        LOG.debug(spec_contract)
+
+        return composition, spec_contract, contracts
 
 
 
@@ -855,53 +1104,7 @@ class Z3Interface(object):
 
 
 
-    def verify_candidate(self, model, candidates):
-        '''
-        check if a candidate is valid or not.
-        Here we need to:
-        1) transform the model to a contract composition
-        2) LEARN
-            2a)
-        '''
 
-        #self.reject_candidate(model, candidates)
-        state, composition, connected_spec, contract_inst = \
-                self.check_all_specs(model, candidates)
-        if not state:
-            #learn
-            #as first step, we reject the actual solution
-            #self.solver.add(self.exclude_candidate_type())
-            #LOG.debug('exclude')
-            #LOG.debug(z3.Not(self.connected_ports==model[self.connected_ports]))
-            #self.solver.add(z3.Not(self.connected_ports==model[self.connected_ports]))
-            self.solver.add(self.reject_candidate(model, candidates))
-
-            #then check for consistency
-            self.solver.add(self.check_for_consistency(model, candidates, contract_inst, connected_spec))
-
-            raise NotSynthesizableError
-
-        return composition, connected_spec, contract_inst
-
-    def check_all_specs(self, model, candidates):
-        '''
-        check if the model satisfies a number of specs, if provided
-        '''
-        composition = None
-        connected_spec = None
-        contract_inst = None
-        for spec in self.specification_list:
-            composition, connected_spec, contract_inst = \
-                    self.build_composition_from_model(model, spec, candidates, complete_model=True)
-
-            LOG.debug('ref check')
-            if not composition.is_refinement(connected_spec):
-                LOG.debug('ref check done 1')
-                return False, composition, connected_spec,contract_inst
-
-            LOG.debug('ref check done 2')
-
-        return True, composition, connected_spec,contract_inst
 
 
 
@@ -1171,100 +1374,6 @@ class Z3Interface(object):
 
 
 
-    def build_composition_from_model(self, model, spec, candidates, complete_model=False):
-        '''
-        builds a contract composition out of a model
-        '''
-
-        contracts = {}
-        spec_contract = spec.copy()
-
-        #LOG.debug(spec_contract)
-
-        #instantiate single contracts
-        for candidate in candidates:
-            c_m = model[candidate]
-            c_m.__hash__ = types.MethodType(zcontract_hash, c_m)
-            c_name = str(simplify(self.ZContract.base_name(c_m)))
-            id_c = str(simplify(self.ZContract.id(c_m)))
-            #LOG.debug(c_name, id_c)
-            contract = type(self.contract_model_instances[c_m])(c_name+id_c)
-
-            #LOG.debug(contract)
-            #LOG.debug(c_m)
-            contracts[c_m] = contract
-
-        extended_contracts = dict(contracts.items() + [(self.property_model, spec_contract)])
-
-        #start composition
-        c_set = set(contracts.viewvalues())
-        #c_set.add(contracts.values()[0])
-        mapping = CompositionMapping(c_set)
-
-        #start with connections for the spec
-        for m_b in contracts:
-            c_b = extended_contracts[m_b]
-
-            for ((p_a_name, p_a), (p_b_name, p_b)) in itertools.product(spec_contract.ports_dict.items(), c_b.ports_dict.items()):
-                if p_a != p_b:
-                    pm_a = getattr(self.PortBaseName, p_a_name)
-                    pm_b = getattr(self.PortBaseName, p_b_name)
-                    if is_true(model.eval(self.connected_ports(self.property_model, m_b, pm_a, pm_b),
-                                       model_completion=True)):
-                        #LOG.debug(c_a)
-                        #LOG.debug(p_a_name)
-                        #LOG.debug(p_a.unique_name)
-                        #LOG.debug('--')
-                        #LOG.debug(c_b)
-                        #LOG.debug(p_b_name)
-                        #LOG.debug(p_b.unique_name)
-                        #LOG.debug('**')
-                        #c_a.connect_to_port(p_a, p_b)
-                        #connect directly
-                        spec_contract.connect_to_port(p_a, p_b)
-
-        #connections among candidates
-        for m_a, m_b in itertools.combinations_with_replacement(contracts, 2):
-            c_a = contracts[m_a]
-            c_b = contracts[m_b]
-            for ((p_a_name, p_a), (p_b_name, p_b)) in itertools.product(c_a.ports_dict.items(), c_b.ports_dict.items()):
-                if p_a != p_b:
-                    pm_a = getattr(self.PortBaseName, p_a_name)
-                    pm_b = getattr(self.PortBaseName, p_b_name)
-                    if is_true(model.eval(self.connected_ports(m_a, m_b, pm_a, pm_b),
-                                       model_completion=True)):
-                        #LOG.debug(c_a)
-                        #LOG.debug(p_a_name)
-                        #LOG.debug(p_a.unique_name)
-                        #LOG.debug('--')
-                        #LOG.debug(c_b)
-                        #LOG.debug(p_b_name)
-                        #LOG.debug(p_b.unique_name)
-                        #LOG.debug('**')
-                        #c_a.connect_to_port(p_a, p_b)
-                        mapping.connect(p_a, p_b, '%s_%s' % (c_a.unique_name, p_a.base_name))
-                        assert(not (p_a.is_output and p_b.is_output))
-                    else:
-                        mapping.add(p_a, '%s_%s' % (c_a.unique_name, p_a.base_name))
-                        mapping.add(p_b, '%s_%s' % (c_b.unique_name, p_b.base_name))
-
-        for contract in extended_contracts.values():
-            LOG.debug(contract)
-
-        if not complete_model:
-            c_set = self.filter_candidate_contracts_for_composition(c_set, spec_contract)
-
-        #compose
-        root = c_set.pop()
-        
-        #c_set.add(root.copy())
-        
-        composition = root.compose(c_set, composition_mapping=mapping)
-
-        LOG.debug(composition)
-        LOG.debug(spec_contract)
-        
-        return composition, spec_contract, contracts
 
 
 SMTModelFactory.register(Z3Interface)

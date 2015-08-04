@@ -408,8 +408,8 @@ class Z3Library(object):
                 #define contract position
                 contract_lev.append((level, contract))
 
-            positions.update({port: len(contract_lev)-1
-                          for port in self.contract_indices(contract)[level]})
+                positions.update({ind: len(contract_lev)-1
+                          for ind in self.contract_indices(contract)[level]})
 
             initial_allocation[(level, contract)] = [simplify(model[self.in_models[p_index]]).as_long()
                                for p_index in self.contract_in_indices(contract)[level]]
@@ -435,14 +435,14 @@ class Z3Library(object):
         new_indices = {}
 
         for elem in itertools.product(range(0, num_elem), repeat=len(contract_lev)):
+
+
+            new_contracts = [((contract_lev[i][0] + elem[i])%self.max_components, contract_lev[i][1]) for i in range(0, len(contract_lev))]
+
+            print new_contracts
+
             new_indices = [specs[i] == self.index_shift(indices[i], elem[positions[indices[i]]])
                            for i in range(0, len(indices))]
-            #print new_indices
-
-            new_contracts = [((contract_lev[i][0] + elem[i])%self.max_components, contract_lev[i][1]) for i in range(0, num_elem)]
-
-            #print new_contracts
-
             #elaborate connections
             new_models = []
             for i in range(0, len(new_contracts)):
@@ -469,15 +469,6 @@ class Z3Library(object):
             #print new_models
             yield new_indices + new_models
 
-
-            #new_models = [[self.models[self.index_shift(port, elem[positions[port]])] == self.index_shift(initial_allocation[simplify(model[self.models[port]]).as_long()], elem[positions[simplify(model[self.models[port]]).as_long()]])
-            #               for port in self.contract_in_indices(contract_lev[i][1])[contract_lev[i][0]]]
-             #             for i in range(0, len(new_contracts))]
-
-            #print new_models
-        #print shift
-
-        #print 'done'
 
 
 class Z3Interface(object):
@@ -1040,8 +1031,8 @@ class Z3Interface(object):
         #by construction fetching only the outputs, we have the full set of contracts
         model_map, contract_map = self.lib_model.contract_copies_by_models(models)
 
-        #LOG.debug(model_map)
-        #LOG.debug(contract_map)
+        LOG.debug(model_map)
+        LOG.debug(contract_map)
 
         contracts = set(model_map.values())
         #extended_contracts = dict(list(contracts) + [spec_contract])
@@ -1069,40 +1060,44 @@ class Z3Interface(object):
 
 
         #connections among candidates
-        #non_zero_port_models = [p_model for p_model in self.lib_model.in_models
-        #                        if simplify(model[p_model]).as_long() > -1]
-        for old_contract in contract_map:
+        non_zero_port_models = [p_model for p_model in self.lib_model.in_models
+                                if simplify(model[p_model]).as_long() > -1]
+
+        processed_ports = set()
+        for p_model in non_zero_port_models:
+            level, old_contract = self.lib_model.contract_by_model(p_model)
             current_contract = contract_map[old_contract]
+            old_port = self.lib_model.port_by_model(p_model)
+            current_port = current_contract.ports_dict[old_port.base_name]
+            other_index = simplify(model[p_model]).as_long()
 
-            for old_in_port in old_contract.input_ports_dict:
-                current_port = current_contract.ports_dict[old_in_port]
+            other_port_orig = self.lib_model.port_by_index(other_index)
 
-                if simplify(model[p_model]).as_long() > -1:
-                    other_index = simplify(model[p_model]).as_long()
+            other_contract = contract_map[other_port_orig.contract]
 
-                    other_port_orig = self.lib_model.port_by_index(other_index)
+            other_port = other_contract.ports_dict[other_port_orig.base_name]
 
-                    other_contract = contract_map[other_port_orig.contract]
 
-                    other_port = other_contract.ports_dict[other_port_orig.base_name]
+            mapping.connect(current_port, other_port,
+                                '%s_%s' % (current_contract.unique_name,
+                                           current_port.base_name))
 
-                    mapping.connect(current_port, other_port,
-                                    '%s_%s' % (current_contract.unique_name,
-                                               current_port.base_name))
-                else:
+            processed_ports.add(current_port)
+            processed_ports.add(other_port)
+
+        for old_contract in contract_map:
+            for old_port in old_contract.ports_dict.values():
+                current_contract = contract_map[old_contract]
+                current_port = current_contract.ports_dict[old_port.base_name]
+                if current_port not in processed_ports:
                     mapping.add(current_port, '%s_%s' % (current_contract.unique_name,
-                                                         current_port.base_name))
-
-            for old_out_port in old_contract.output_ports_dict:
-                current_port = current_contract.ports_dict[old_out_port]
-
-                mapping.add(current_port, '%s_%s' % (current_contract.unique_name,
                                                      current_port.base_name))
+                    processed_ports.add(current_port)
 
 
-        #for contract in contracts:
-        #    LOG.debug(contract)
-        #LOG.debug(spec_contract)
+        for contract in contracts:
+            LOG.debug(contract)
+        LOG.debug(spec_contract)
 
         #if not complete_model:
         #    c_set = self.filter_candidate_contracts_for_composition(contracts, spec_contract)
@@ -1114,8 +1109,8 @@ class Z3Interface(object):
 
         composition = root.compose(contracts, composition_mapping=mapping)
 
-        #LOG.debug(composition)
-        #LOG.debug(spec_contract)
+        LOG.debug(composition)
+        LOG.debug(spec_contract)
 
         return composition, spec_contract, contracts
 
@@ -1162,7 +1157,7 @@ class Z3Interface(object):
 
         for excluded in self.lib_model.build_equivalence_sets(self.spec_ins + self.spec_outs, selected_indices, model):
 
-            #LOG.debug(Not(And(excluded)))
+            LOG.debug(Not(And(excluded)))
             self.solver.add(Not(And(excluded)))
 
         LOG.debug('add rejected models constraints')

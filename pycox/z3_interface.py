@@ -337,6 +337,7 @@ class Z3Library(object):
 
         return (level, contract)
 
+
     def contract_copies_by_models(self, model_list):
         '''
         makes copies of contracts considering models
@@ -357,6 +358,119 @@ class Z3Library(object):
 
         return model_map_contract, contract_map
 
+    def index_shift(self, index, shift_lev):
+        '''
+        returns the index shifted by shift_lev position.
+        works as a circular buffer
+        '''
+        if index == -1:
+            return -1
+
+        return (index + self.max_single_level_index * shift_lev) % self.max_index
+
+    def index_in_shift(self, index, shift_lev):
+        '''
+        returns the index shifted by shift_lev position.
+        works as a circular buffer
+        '''
+        if index == -1:
+            return -1
+
+        return (index + self.max_single_level_in_index * shift_lev) % self.max_in_index
+
+
+    def build_equivalence_sets(self, specs, indices, model):
+        '''
+        return a list with all the possible combinations of contracts and levels
+        for a given set of indices
+        '''
+        #get all the contracts. at most len(indices) contracts.
+        #maybe less if two ports refer to the same contract and level
+        contract_lev = []
+        contract_map = {}
+        initial_allocation = {}
+        port_ref = {}
+        positions = {}
+
+        for index in indices:
+            p_model = self.models[index]
+            level = self.model_levels[p_model.get_id()]
+            contract = self.model_contracts[p_model.get_id()]
+
+            if (level, contract) not in contract_lev:
+                #define contract position
+                contract_lev.append((level, contract))
+
+            positions.update({port: len(contract_lev)-1
+                          for port in self.contract_indices(contract)[level]})
+
+            initial_allocation[(level, contract)] = [simplify(model[self.in_models[p_index]]).as_long()
+                               for p_index in self.contract_in_indices(contract)[level]]
+
+            if (level, contract) not in port_ref:
+                port_ref[(level, contract)] = []
+
+            port_ref[(level, contract)].append(index)
+
+
+        print initial_allocation
+        print positions
+        #build map
+        #contract_map = {(level, contract): self.contract_indices(contract)[level]
+        #                for contract in self.contracts
+        #                for level in range(0, self.max_components)}
+
+        #now we know how many elements we need
+        num_elem = len(contract_lev)
+
+        #shift_matrix
+        #shift = [elem for elem in itertools.product(range(0, num_elem), repeat=num_elem)]
+        new_indices = {}
+
+        for elem in itertools.product(range(0, num_elem), repeat=num_elem):
+            new_indices = [specs[i] == self.index_shift(indices[i], elem[positions[indices[i]]])
+                           for i in range(0, len(indices))]
+            print new_indices
+
+            new_contracts = [((contract_lev[i][0] + elem[i])%self.max_components, contract_lev[i][1]) for i in range(0, num_elem)]
+
+            print new_contracts
+
+            #elaborate connections
+            new_models = []
+            for i in range(0, len(new_contracts)):
+                n_l = new_contracts[i][0]
+                n_c = new_contracts[i][1]
+
+                o_l = contract_lev[i][0]
+                o_c = contract_lev[i][1]
+
+                p_inds = self.contract_in_indices(o_c)[o_l]
+                values = initial_allocation[(o_l, o_c)]
+
+                for index, value in zip(p_inds, values):
+                    new_p_ind = self.index_in_shift(index, elem[i])
+                    new_p = self.in_models[new_p_ind]
+
+                    if value == -1:
+                        new_value = -1
+                    else:
+                        new_value = self.index_shift(value, elem[positions[value]])
+
+                    new_models.append(new_p == new_value)
+
+            print new_models
+            yield new_indices + new_models
+
+
+            #new_models = [[self.models[self.index_shift(port, elem[positions[port]])] == self.index_shift(initial_allocation[simplify(model[self.models[port]]).as_long()], elem[positions[simplify(model[self.models[port]]).as_long()]])
+            #               for port in self.contract_in_indices(contract_lev[i][1])[contract_lev[i][0]]]
+             #             for i in range(0, len(new_contracts))]
+
+            print new_models
+        #print shift
+
+        print 'done'
 
 
 class Z3Interface(object):
@@ -813,10 +927,10 @@ class Z3Interface(object):
             #LOG.debug('exclude')
             #LOG.debug(z3.Not(self.connected_ports==model[self.connected_ports]))
             #self.solver.add(z3.Not(self.connected_ports==model[self.connected_ports]))
-            self.solver.add(self.reject_candidate(model, candidates))
+            self.reject_candidate(model)
 
             #then check for consistency
-            self.solver.add(self.check_for_consistency(model, candidates, contract_inst, connected_spec))
+            #self.solver.add(self.check_for_consistency(model, contract_inst, connected_spec))
 
             raise NotSynthesizableError
 
@@ -893,24 +1007,35 @@ class Z3Interface(object):
 
 
         #connections among candidates
-        non_zero_port_models = [p_model for p_model in self.lib_model.in_models
-                                if simplify(model[p_model]).as_long() > -1]
-        for p_model in non_zero_port_models:
-            current_index = self.lib_model.index_by_model(p_model)
-            other_index = simplify(model[p_model]).as_long()
+        #non_zero_port_models = [p_model for p_model in self.lib_model.in_models
+        #                        if simplify(model[p_model]).as_long() > -1]
+        for old_contract in contract_map:
+            current_contract = contract_map[old_contract]
 
-            current_port_orig = self.lib_model.port_by_index(current_index)
-            other_port_orig = self.lib_model.port_by_index(other_index)
+            for old_in_port in old_contract.input_ports_dict:
+                current_port = current_contract.ports_dict[old_in_port]
 
-            current_contract = contract_map[current_port_orig.contract]
-            other_contract = contract_map[other_port_orig.contract]
+                if simplify(model[p_model]).as_long() > -1:
+                    other_index = simplify(model[p_model]).as_long()
 
-            current_port = current_contract.ports_dict[current_port_orig.base_name]
-            other_port = other_contract.ports_dict[other_port_orig.base_name]
+                    other_port_orig = self.lib_model.port_by_index(other_index)
 
-            mapping.connect(current_port, other_port,
-                            '%s_%s' % (current_contract.unique_name, current_port.base_name))
+                    other_contract = contract_map[other_port_orig.contract]
 
+                    other_port = other_contract.ports_dict[other_port_orig.base_name]
+
+                    mapping.connect(current_port, other_port,
+                                    '%s_%s' % (current_contract.unique_name,
+                                               current_port.base_name))
+                else:
+                    mapping.add(current_port, '%s_%s' % (current_contract.unique_name,
+                                                         current_port.base_name))
+
+            for old_out_port in old_contract.output_ports_dict:
+                current_port = current_contract.ports_dict[old_out_port]
+
+                mapping.add(current_port, '%s_%s' % (current_contract.unique_name,
+                                                     current_port.base_name))
 
 
         for contract in contracts:
@@ -932,6 +1057,33 @@ class Z3Interface(object):
 
         return composition, spec_contract, contracts
 
+
+
+
+    def reject_candidate(self, model):
+        '''
+        reject model
+        '''
+        #import pdb
+        #pdb.set_trace()
+
+        #identify involved contracts in formula
+        #TODO
+
+        #all for now. include copies...
+        constraints = []
+
+        #we need to reject the current model, plus all the possible combinations
+        #of redundant copies...
+
+        selected_indices = [simplify(model[p_model]).as_long() for p_model in self.spec_ins + self.spec_outs]
+
+        for excluded in self.lib_model.build_equivalence_sets(self.spec_ins + self.spec_outs, selected_indices, model):
+
+            LOG.debug(Not(And(excluded)))
+            self.solver.add(Not(And(excluded)))
+
+        LOG.debug('add rejected models constraints')
 
 
     def connected_output(self, candidate):
@@ -1234,98 +1386,6 @@ class Z3Interface(object):
         #LOG.debug(constraints)
         return constraints
 
-    def reject_candidate(self, model, candidates):
-        '''
-        I'm so sorry, but we need efficiency...if any
-        reject proposed solution.
-        we have a set of contracts, and a set of functions.
-        We can reject the actual evaluation of port connections.
-        Also, discard the evaluation of the functions for all
-        the n possibilities. This means that for n instances
-        of a contract A, we exclude all the n from future
-        appearance
-        '''
-        #import pdb
-        #pdb.set_trace()
-        LOG.debug('elaborate rejection list')
-        contract_instances = [model[candidate] for candidate in candidates]
-        for c_m in contract_instances:
-            c_m.__hash__ = types.MethodType(zcontract_hash, c_m)
-
-
-        size = len(candidates)
-        c_set = set([self.contract_model_instances[c_model] for c_model in contract_instances])
-
-        c_list = [self.contract_model_instances[c_model] for c_model in contract_instances]
-        #create inverse dict: contract to index
-        c_pos = {c_list[ind]: ind for ind in range(0, size) }
-
-        #create inverse model dict: contract to candidate model
-        c_mod = {self.contract_model_instances[c_model]: c_model
-                 for c_model in contract_instances}
-
-        all_cand = {c_a:
-                {simplify(self.ZContract.id(m_a)).as_long(): m_a
-                 for m_a in self.contract_model_instances
-                 if self.contract_model_instances[m_a] == c_a}
-                for c_a in c_set}
-
-        spec_c = self.property_contract
-        spec_m = self.property_model
-        #ports
-        ports = self.port_dict
-
-        #funcs
-        func = self.connected_ports
-        not_f = Not
-        and_f = And
-
-        constraints = [not_f(and_f([func(all_cand[c_a][order[c_pos[c_a]]],
-                                                           all_cand[c_b][order[c_pos[c_b]]],
-                                                           ports[name_a],
-                                                           ports[name_b]) ==
-                                      model.eval(func(c_mod[c_a],
-                                                                      c_mod[c_b],
-                                                                      ports[name_a],
-                                                                      ports[name_b]),
-                                                 model_completion=True)
-                                      for c_a in all_cand
-                                      #if (z3.simplify(self.ZContract.id(c_mod[c_a])).as_long() ==
-                                      #   order[c_pos[c_a]])
-                                      for c_b in all_cand
-                                      #if (z3.simplify(self.ZContract.id(c_mod[c_b])).as_long() ==
-                                      #   order[c_pos[c_b]])
-                                      for name_a in c_a.ports_dict
-                                      for name_b in c_b.ports_dict
-                                      #if name_a in c_a.ports_dict
-                                      #if name_b in c_b.ports_dict
-                                      ] +
-                                      [func(spec_m,
-                                                            all_cand[c_c][order[c_pos[c_c]]],
-                                                            ports[name_p],
-                                                            ports[name_c]) ==
-                                       model.eval(func(spec_m,
-                                                                       c_mod[c_c],
-                                                                       ports[name_p],
-                                                                       ports[name_c]),
-                                                  model_completion=True)
-                                      for c_c in all_cand
-                                      #if (z3.simplify(self.ZContract.id(c_mod[c_c])).as_long() ==
-                                      #   order[c_pos[c_c]])
-                                      for name_p in spec_c.ports_dict
-                                      for name_c in c_c.ports_dict
-                                      ]
-                                    )
-                            )
-                        for order in itertools.product(range(size), repeat=size)
-                      ]
-
-        #apply the same set of rules for candidates of the same type
-
-        #LOG.debug('log rejection constraints')
-        #LOG.debug(constraints)
-        LOG.debug('add rejected models constraints')
-        return constraints
 
     def filter_candidate_contracts_for_composition(self, candidates, spec_contract):
         '''

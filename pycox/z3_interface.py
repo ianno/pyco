@@ -360,7 +360,7 @@ class Z3Library(object):
                 levels[level][contract] = contract.copy()
 
             model_map_contract[model.get_id()] = levels[level][contract]
-            contract_map[contract] = levels[level][contract]
+            contract_map[(level, contract)] = levels[level][contract]
 
 
         return model_map_contract, contract_map
@@ -385,6 +385,77 @@ class Z3Library(object):
 
         return (index + self.max_single_level_in_index * shift_lev) % self.max_in_index
 
+
+    def build_rejection_matrix(self, spec_in_models, spec_out_models):
+        '''
+        precompute the rejection matrix
+        '''
+
+        #we need a dict based structure with all the possible redirections
+        #once we have the actual data, we can just filter it out
+
+        num_contracts = len(self.contracts)
+        num_out = len(spec_out_models)
+        num_elem = min([MAX_REDUNDANCY, num_out])
+
+        all_specs = spec_in_models + spec_out_models
+
+        limit_spec_out = len(spec_in_models)
+
+        #for every contract, collect all the input models
+        contracts_mod = {}
+        for contract in self.contracts:
+            contracts_mod[contract] = {}
+
+            models = self.contract_in_models(contract)
+
+            for level in range(0, self.max_components):
+               contracts_mod[contract][level] = models[level]
+
+        spec_out_matrix = {spec.get_id(): {} for spec in spec_out_models}
+        spec_in_matrix = {spec.get_id(): {} for spec in spec_in_models}
+        lib_matrix = {mod.get_id(): {} for mod in self.in_models}
+        model_shift_matrix = {mod.get_id(): {} for mod in self.in_models}
+
+        for spec in spec_out_models:
+            for index in range(0, self.max_index):
+                if self.ports[index].is_output:
+                    spec_out_matrix[spec.get_id()][index] = {}
+
+        for spec in spec_in_models:
+            for index in range(0, self.max_index):
+                if self.ports[index].is_input:
+                    spec_in_matrix[spec.get_id()][index] = {}
+
+        for mod in self.in_models:
+            for index in range(0, self.max_index):
+                if self.ports[index].is_output:
+                    lib_matrix[mod.get_id()][index] = {}
+
+        for level in range(0, self.max_components):
+
+            #outputs specs
+            for j in range(0, limit_spec_out):
+                spec = all_specs[j]
+                for index in spec_in_matrix[spec.get_id()]:
+                    spec_in_matrix[spec.get_id()][index][level] = self.index_shift(index, level)
+
+            #outputs specs
+            for j in range(limit_spec_out, len(all_specs)):
+                spec = all_specs[j]
+                for index in spec_out_matrix[spec.get_id()]:
+                    spec_out_matrix[spec.get_id()][index][level] = self.index_shift(index, level)
+
+            #model_shift
+            for model_id in model_shift_matrix:
+                index = self.model_index[model_id]
+                model_shift_matrix[model_id][level] = self.index_shift(index, level)
+
+
+        print spec_in_matrix
+        print spec_out_matrix
+
+        pass
 
     def build_equivalence_sets(self, specs, indices, model):
         '''
@@ -411,7 +482,7 @@ class Z3Library(object):
                 positions.update({ind: len(contract_lev)-1
                           for ind in self.contract_indices(contract)[level]})
 
-            initial_allocation[(level, contract)] = [simplify(model[self.in_models[p_index]]).as_long()
+            initial_allocation[(level, contract)] = [model[self.in_models[p_index]].as_long()
                                for p_index in self.contract_in_indices(contract)[level]]
 
             if (level, contract) not in port_ref:
@@ -438,8 +509,6 @@ class Z3Library(object):
 
 
             new_contracts = [((contract_lev[i][0] + elem[i])%self.max_components, contract_lev[i][1]) for i in range(0, len(contract_lev))]
-
-            print new_contracts
 
             new_indices = [specs[i] == self.index_shift(indices[i], elem[positions[indices[i]]])
                            for i in range(0, len(indices))]
@@ -893,9 +962,9 @@ class Z3Interface(object):
         self.lib_to_outputs()
         self.lib_chosen_to_chosen()
         self.lib_not_chosen_zero()
-        self.spec_process_in_types()
-        self.spec_process_out_types()
-        self.lib_process_types()
+        #self.spec_process_in_types()
+        #self.spec_process_out_types()
+        #self.lib_process_types()
         #self.lib_distinct()
 
         #LOG.debug(self.lib_model.index)
@@ -1025,14 +1094,14 @@ class Z3Interface(object):
         #contracts = set()
 
         #get all the models, checking outputs
-        models = [self.lib_model.model_by_index(simplify(model[port]).as_long()) for port in self.spec_outs]
+        models = [self.lib_model.model_by_index(model[port].as_long()) for port in self.spec_outs]
 
         #now we get all the contracts related.
         #by construction fetching only the outputs, we have the full set of contracts
         model_map, contract_map = self.lib_model.contract_copies_by_models(models)
 
-        LOG.debug(model_map)
-        LOG.debug(contract_map)
+        #LOG.debug(model_map)
+        #LOG.debug(contract_map)
 
         contracts = set(model_map.values())
         #extended_contracts = dict(list(contracts) + [spec_contract])
@@ -1048,11 +1117,13 @@ class Z3Interface(object):
 
             spec_port = spec_contract.ports_dict[name]
 
-            index = simplify(model[p_model]).as_long()
+            index = model[p_model].as_long()
+            i_mod = self.lib_model.models[index]
+            level = self.lib_model.model_levels[i_mod.get_id()]
             orig_port = self.lib_model.port_by_index(index)
 
             other_contract_orig = orig_port.contract
-            other_contract = contract_map[other_contract_orig]
+            other_contract = contract_map[(level, other_contract_orig)]
 
             port = other_contract.ports_dict[orig_port.base_name]
 
@@ -1061,19 +1132,21 @@ class Z3Interface(object):
 
         #connections among candidates
         non_zero_port_models = [p_model for p_model in self.lib_model.in_models
-                                if simplify(model[p_model]).as_long() > -1]
+                                if model[p_model].as_long() > -1]
 
         processed_ports = set()
         for p_model in non_zero_port_models:
             level, old_contract = self.lib_model.contract_by_model(p_model)
-            current_contract = contract_map[old_contract]
+            current_contract = contract_map[(level, old_contract)]
             old_port = self.lib_model.port_by_model(p_model)
             current_port = current_contract.ports_dict[old_port.base_name]
-            other_index = simplify(model[p_model]).as_long()
+            other_index = model[p_model].as_long()
+            other_mod = self.lib_model.models[other_index]
+            other_level = self.lib_model.model_levels[other_mod.get_id()]
 
             other_port_orig = self.lib_model.port_by_index(other_index)
 
-            other_contract = contract_map[other_port_orig.contract]
+            other_contract = contract_map[(other_level, other_port_orig.contract)]
 
             other_port = other_contract.ports_dict[other_port_orig.base_name]
 
@@ -1082,12 +1155,16 @@ class Z3Interface(object):
                                 '%s_%s' % (current_contract.unique_name,
                                            current_port.base_name))
 
+            #LOG.debug(current_contract.unique_name)
+            #LOG.debug(other_contract.unique_name)
+            #LOG.debug(current_port.unique_name)
+            #LOG.debug(other_port.unique_name)
             processed_ports.add(current_port)
             processed_ports.add(other_port)
 
-        for old_contract in contract_map:
+        for (level, old_contract) in contract_map.keys():
             for old_port in old_contract.ports_dict.values():
-                current_contract = contract_map[old_contract]
+                current_contract = contract_map[(level, old_contract)]
                 current_port = current_contract.ports_dict[old_port.base_name]
                 if current_port not in processed_ports:
                     mapping.add(current_port, '%s_%s' % (current_contract.unique_name,
@@ -1095,9 +1172,9 @@ class Z3Interface(object):
                     processed_ports.add(current_port)
 
 
-        for contract in contracts:
-            LOG.debug(contract)
-        LOG.debug(spec_contract)
+        #for contract in contracts:
+        #    LOG.debug(contract)
+        #LOG.debug(spec_contract)
 
         #if not complete_model:
         #    c_set = self.filter_candidate_contracts_for_composition(contracts, spec_contract)
@@ -1109,15 +1186,67 @@ class Z3Interface(object):
 
         composition = root.compose(contracts, composition_mapping=mapping)
 
-        LOG.debug(composition)
-        LOG.debug(spec_contract)
+        #LOG.debug(composition)
+        #LOG.debug(spec_contract)
 
         return composition, spec_contract, contracts
 
 
+    def reject_candidate(self, model, failed_spec):
+        '''
+        reject a model and its equivalents
+        '''
+
+        c_sets = {}
+        #create contract sets
+        for spec in self.spec_outs:
+            index = model[spec].as_long()
+            mod = self.lib_model.models[index]
+            (level, contract) = self.lib_model.contract_by_model(mod)
+            if (level, contract) not in c_sets:
+                c_sets[(level, contract)] = {}
+                #find all related models
+                #in_models = self.lib_model.related_in_models(mod)
+                #for mod in in_models:
+                #    c_sets[(level, contract)][mod.get_id()] = (mod, model[mod].as_long())
+
+            c_sets[(level, contract)][spec.get_id()] = (spec, index)
+
+        size = len(c_sets)
+
+        #create containers as nested lists
+        #one per each c_set and n lists inside
+        classes = []
 
 
-    def reject_candidate(self, model, spec):
+        for (level, contract) in c_sets:
+            s_class = []
+            s_pairs = c_sets[(level, contract)].values()
+            mods = self.lib_model.contract_in_models(contract)
+
+            for l in range(0, self.lib_model.max_components):
+                l_class = []
+                shift = self.lib_model.max_components - level + l
+                for pair in s_pairs:
+                    l_class.append(pair[0] == self.lib_model.index_shift(pair[1], shift))
+
+                for i in range(0, len(mods[l])):
+                    l_class.append(mods[l][i] ==
+                        self.lib_model.index_shift(model[mods[level][i]].as_long(), shift))
+                s_class.append(l_class)
+            classes.append(s_class)
+
+        rej_formula = Not(And([Or([And([line for line in l_class])
+                                   for l_class in s_class])
+                               for s_class in classes])
+                         )
+
+        LOG.debug(rej_formula)
+
+        self.solver.add(rej_formula)
+
+
+    def reject_candidate_old(self, model, spec):
         '''
         reject model
         '''
@@ -1152,15 +1281,17 @@ class Z3Interface(object):
         #we need to reject the current model, plus all the possible combinations
         #of redundant copies...
 
-        selected_indices = [simplify(model[p_model]).as_long() for p_model in self.spec_ins + self.spec_outs]
+        selected_indices = [model[p_model].as_long() for p_model in self.spec_ins + self.spec_outs]
         #selected_indices = [simplify(model[p_model]).as_long() for p_model in models]
+
+        self.lib_model.build_rejection_matrix(self.spec_ins, self.spec_outs)
 
         for excluded in self.lib_model.build_equivalence_sets(self.spec_ins + self.spec_outs, selected_indices, model):
 
-            LOG.debug(Not(And(excluded)))
+            #LOG.debug(Not(And(excluded)))
             self.solver.add(Not(And(excluded)))
 
-        LOG.debug('add rejected models constraints')
+        #LOG.debug('add rejected models constraints')
 
 
     def connected_output(self, candidate):

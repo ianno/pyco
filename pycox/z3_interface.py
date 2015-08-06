@@ -860,6 +860,7 @@ class Z3Interface(object):
                     for lev in range(0, self.lib_model.max_components):
                         constraints.append(s_mod != self.lib_model.index[lev][port])
 
+        LOG.debug(constraints)
         self.solver.add(constraints)
 
     def spec_process_in_types(self):
@@ -878,7 +879,6 @@ class Z3Interface(object):
                 p_name = port.base_name
                 contract = port.contract
                 p_type = contract.port_type[p_name]
-                LOG.debug(not issubclass(p_type, s_port_type))
                 if (
                     #(not issubclass(s_port_type, p_type))):
                     #CHECK YOUR DEFINITION OF TYPE COMPATIBILITY
@@ -927,6 +927,19 @@ class Z3Interface(object):
 
         self.solver.add(constraints)
 
+
+    def compute_distinct_port_constraints(self):
+        '''
+        computes the set of distinct ports according the info from the user
+        '''
+
+        constraints = []
+
+        constraints += [self.spec_dict[name1] != self.spec_dict[name2]
+                        for name1, name2 in self.distinct_mapping_constraints]
+
+        self.solver.add(constraints)
+
     def synthesize(self, property_contracts, same_block_constraints,
                     distinct_mapping_constraints):
         '''
@@ -962,14 +975,19 @@ class Z3Interface(object):
         self.lib_to_outputs()
         self.lib_chosen_to_chosen()
         self.lib_not_chosen_zero()
-        #self.spec_process_in_types()
-        #self.spec_process_out_types()
-        #self.lib_process_types()
+        self.spec_process_in_types()
+        self.spec_process_out_types()
+        self.lib_process_types()
+        self.compute_distinct_port_constraints()
         #self.lib_distinct()
 
         #LOG.debug(self.lib_model.index)
         LOG.debug(self.lib_model.models)
-        LOG.debug(self.lib_model.models_by_contracts())
+        models = self.lib_model.models_by_contracts()
+        for model in models:
+            LOG.debug('--')
+            for elem in model:
+                LOG.debug('%d -> %s', self.lib_model.index_by_model(elem), elem)
         LOG.debug(self.lib_model.models_in_by_contracts())
         #LOG.debug(self.solver.assertions())
 

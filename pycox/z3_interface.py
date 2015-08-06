@@ -860,7 +860,7 @@ class Z3Interface(object):
                     for lev in range(0, self.lib_model.max_components):
                         constraints.append(s_mod != self.lib_model.index[lev][port])
 
-        LOG.debug(constraints)
+        #LOG.debug(constraints)
         self.solver.add(constraints)
 
     def spec_process_in_types(self):
@@ -940,6 +940,24 @@ class Z3Interface(object):
 
         self.solver.add(constraints)
 
+
+    def compute_same_block_constraints(self):
+        '''
+        computes same block constraints according to the info given
+        by the user
+        '''
+
+        constraints = []
+
+        for name_a, name_b in self.same_block_constraints:
+            constraints += [Or([And(self.spec_dict[name_a] == port1,
+                                    self.spec_dict[name_b] == port2)
+                                for models in self.lib_model.models_by_contracts()
+                                for port1, port2 in itertools.permutations(models, 2) ])]
+
+        #LOG.debug(constraints)
+        self.solver.add(constraints)
+
     def synthesize(self, property_contracts, same_block_constraints,
                     distinct_mapping_constraints):
         '''
@@ -979,6 +997,7 @@ class Z3Interface(object):
         self.spec_process_out_types()
         self.lib_process_types()
         self.compute_distinct_port_constraints()
+        self.compute_same_block_constraints()
         #self.lib_distinct()
 
         #LOG.debug(self.lib_model.index)
@@ -1406,23 +1425,6 @@ class Z3Interface(object):
 
         #LOG.debug('add rejected models constraints')
 
-
-    def connected_output(self, candidate):
-        '''
-        spec and candidate have to have a output pirt in common
-        '''
-        constraints = [Implies(candidate == m_a,
-                                  Or([self.connected_ports(self.property_model,
-                                                            candidate,
-                                                self.port_dict[n_p],
-                                                self.port_dict[n_a])
-                                  for n_p in self.property_contract.output_ports_dict
-                                  for n_a in c_a.output_ports_dict]
-                                        )
-                                  )
-                        for m_a, c_a in self.contract_model_instances.items()]
-
-        return constraints
 
     def synthesize_fixed_size(self, size):
         '''

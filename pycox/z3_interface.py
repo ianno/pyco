@@ -1016,14 +1016,14 @@ class Z3Interface(object):
             raise NotSynthesizableError()
         else:
             pass
-            for spec in self.spec_ins:
-                LOG.debug('%s -> %s'
-                    % (spec, self.lib_model.model_by_index(simplify(model[spec]).as_long())))
-            for spec in self.spec_outs:
-                LOG.debug('%s -> %s'
-                    % (spec, self.lib_model.model_by_index(simplify(model[spec]).as_long())))
+            #for spec in self.spec_ins:
+            #    LOG.debug('%s -> %s'
+            #        % (spec, self.lib_model.model_by_index(simplify(model[spec]).as_long())))
+            #for spec in self.spec_outs:
+            #    LOG.debug('%s -> %s'
+            #        % (spec, self.lib_model.model_by_index(simplify(model[spec]).as_long())))
 
-            LOG.debug(model)
+            #LOG.debug(model)
 
 
         return model
@@ -1192,6 +1192,96 @@ class Z3Interface(object):
         return composition, spec_contract, contracts
 
 
+    def reject_candidate_dnf(self, model, failed_spec):
+        '''
+        reject a model and its equivalents
+        '''
+        max_lev = self.lib_model.max_components
+
+        c_sets = {}
+        mod_sets = {}
+        #create contract sets
+        for spec in self.spec_outs:
+            index = model[spec].as_long()
+            mod = self.lib_model.models[index]
+            (level, contract) = self.lib_model.contract_by_model(mod)
+            if (level, contract) not in c_sets:
+                c_sets[(level, contract)] = {}
+                #find all related models
+                in_models = self.lib_model.related_in_models(mod)
+                mod_sets[(level, contract)] = in_models
+                #for mod in in_models:
+                #    c_sets[(level, contract)][mod.get_id()] = (mod, model[mod].as_long())
+
+            c_sets[(level, contract)][spec.get_id()] = (spec, index)
+
+        print mod_sets
+        print c_sets
+
+        constraints = []
+
+        for (level, contract), spec_map in c_sets.items():
+            s_class = []
+            mods = mod_sets[(level, contract)]
+            all_mods = self.lib_model.contract_in_models(contract)
+
+            contr_sets = []
+            m_eval = []
+            for mod in all_mods[level]:
+                m_eval.append(model[mod].as_long())
+
+
+            c_class = []
+            d_class = []
+            m_class = []
+            for elem in itertools.combinations(range(0, max_lev), 2):
+                #specs/specs
+                for ((spec_1, ind_1), (spec_2, ind_2)) in itertools.combinations_with_replacement(spec_map.values(), 2):
+                    c_class.append(Not(Or(spec_1 == self.lib_model.index_shift(ind_1, elem[0]),
+                                      spec_2 == self.lib_model.index_shift(ind_2, elem[1]))))
+
+            #specs/models
+            #for elem in itertools.combinations(range(0, max_lev), 2):
+                for l in range(0, max_lev):
+                    ms = all_mods[l]
+                    s_shift = max_lev - l + elem[0]
+                    v_shift = max_lev - l + elem[1]
+
+                    for spec, index in spec_map.values():
+                        for ind in range(0, len(ms)):
+                            d_class.append(Not(Or(spec ==
+                                    self.lib_model.index_shift(index, s_shift),
+                                    ms[ind] ==
+                                    self.lib_model.index_shift(model[all_mods[level][ind]].as_long(), v_shift))))
+
+
+
+            #mode/model
+            for l1, l2 in itertools.combinations_with_replacement(range(0, max_lev), 2):
+                ms1 = all_mods[l1]
+                ms2 = all_mods[l2]
+                for ind1, ind2 in itertools.combinations_with_replacement(range(0, len(ms1)), 2):
+                    for shift1, shift2 in itertools.product(range(0, max_lev), repeat=2):
+                        if not (l1==l2 and ind1==ind2 and shift1==shift2):
+                            m_class.append(Not(Or(ms1[ind1] == self.lib_model.index_shift(m_eval[ind1], shift1),
+                                          ms2[ind2] == self.lib_model.index_shift(m_eval[ind2], shift2))))
+
+
+
+            s_class += c_class
+            s_class += d_class
+            s_class += m_class
+
+
+            constraints += s_class
+
+
+        self.solver.add(Or(constraints))
+
+        #print Or(constraints)
+
+
+
     def reject_candidate(self, model, failed_spec):
         '''
         reject a model and its equivalents
@@ -1228,20 +1318,25 @@ class Z3Interface(object):
                 l_class = []
                 shift = self.lib_model.max_components - level + l
                 for pair in s_pairs:
-                    l_class.append(pair[0] == self.lib_model.index_shift(pair[1], shift))
+                    l_class.append([pair[0] == self.lib_model.index_shift(pair[1], shift)])
 
                 for i in range(0, len(mods[l])):
-                    l_class.append(mods[l][i] ==
-                        self.lib_model.index_shift(model[mods[level][i]].as_long(), shift))
+                    m_class = []
+                    for l2 in range(0, self.lib_model.max_components):
+                        shift = self.lib_model.max_components - level + l2
+                        m_class.append(mods[l][i] ==
+                            self.lib_model.index_shift(model[mods[level][i]].as_long(), shift))
+                    l_class.append(m_class)
                 s_class.append(l_class)
             classes.append(s_class)
 
-        rej_formula = Not(And([Or([And([line for line in l_class])
+        rej_formula = Not(And([Or([And([Or([And(line) for line in m_class])
+                                        for m_class in l_class])
                                    for l_class in s_class])
                                for s_class in classes])
                          )
 
-        LOG.debug(rej_formula)
+        #LOG.debug(rej_formula)
 
         self.solver.add(rej_formula)
 
@@ -1284,7 +1379,7 @@ class Z3Interface(object):
         selected_indices = [model[p_model].as_long() for p_model in self.spec_ins + self.spec_outs]
         #selected_indices = [simplify(model[p_model]).as_long() for p_model in models]
 
-        self.lib_model.build_rejection_matrix(self.spec_ins, self.spec_outs)
+        #self.lib_model.build_rejection_matrix(self.spec_ins, self.spec_outs)
 
         for excluded in self.lib_model.build_equivalence_sets(self.spec_ins + self.spec_outs, selected_indices, model):
 

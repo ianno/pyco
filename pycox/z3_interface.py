@@ -122,7 +122,7 @@ class Z3Library(object):
 
 
 
-        LOG.debug({i:self.models[i] for i in range(0,self.max_index)})
+        #LOG.debug({i:self.models[i] for i in range(0,self.max_index)})
 
 
     @property
@@ -236,7 +236,7 @@ class Z3Library(object):
         '''
         returns the model given a port
         '''
-        return [self.models[self.index[port]]
+        return [self.models[self.index[level][port]]
                 for level in range(0, self.max_components)]
 
     def in_model_by_port(self, port):
@@ -474,6 +474,16 @@ class Z3Interface(object):
         return dict(self.contract_model_instances.items() + [(self.property_model, self.property_contract)])
 
 
+    def process_distinct_ports_by_component(self, library):
+        '''
+        add all the distinct ports constraints retrieved by library components
+        '''
+
+        for component in library.components:
+            self.distinct_ports_by_component[component.contract] = component.distinct_set
+
+
+
     def initiliaze_solver(self, property_contract):
         '''
         Create environment and models from library
@@ -521,6 +531,9 @@ class Z3Interface(object):
         #LOG.debug(self.lib_model.models_by_contracts())
         self.spec_ports = self.preprocess_specifications(self.specification_list)
 
+        #get all the distinct ports contractints from components
+        self.process_distinct_ports_by_component(self.library)
+
         #reorder specification list
         #LOG.debug(self.specification_list)
         self.specification_list = sorted(self.specification_list, key=lambda x: len(self.spec_ports[x][0]))
@@ -564,7 +577,7 @@ class Z3Interface(object):
             spec_ports[spec][0] = out_models
             spec_ports[spec][1] = in_models
 
-        LOG.debug(spec_ports)
+        #LOG.debug(spec_ports)
         return spec_ports
 
     def use_n_components(self, n):
@@ -595,7 +608,7 @@ class Z3Interface(object):
 
         constraints += [Sum(self.lib_model.contract_use_flags) == n]
 
-        LOG.debug(constraints)
+        #LOG.debug(constraints)
         #self.solver.add(constraints)
         return constraints
 
@@ -757,7 +770,7 @@ class Z3Interface(object):
 
 
 
-        print constraints
+        #print constraints
 
         self.solver.add(constraints)
 
@@ -865,11 +878,11 @@ class Z3Interface(object):
                             in_mod = self.lib_model.in_models[ind]
                             constraints.append(in_mod != self.lib_model.index[lev][out_port])
 
-        LOG.debug(constraints)
+        #LOG.debug(constraints)
         self.solver.add(constraints)
 
 
-    def compute_distinct_port_constraints(self):
+    def compute_distinct_port_spec_constraints(self):
         '''
         computes the set of distinct ports according the info from the user
         '''
@@ -879,6 +892,30 @@ class Z3Interface(object):
         constraints += [self.spec_dict[name1] != self.spec_dict[name2]
                         for name1, name2 in self.distinct_mapping_constraints]
 
+        self.solver.add(constraints)
+
+    def compute_distinct_port_lib_constraints(self):
+        '''
+        computes the set of distinct ports according the info from the user
+        '''
+
+        constraints = []
+
+        for contract in self.lib_model.contracts:
+            for name1, name2 in self.distinct_ports_by_component[contract]:
+                port1 = contract.ports_dict[name1]
+                port2 = contract.ports_dict[name2]
+
+                models_1 = self.lib_model.model_by_port(port1)
+                models_2 = self.lib_model.model_by_port(port2)
+
+                for level in range(0, self.lib_model.max_components):
+
+                    constraints.append(Or(And(models_1[level] == -1,
+                                              models_2[level] == -1),
+                                          models_1[level] != models_2[level]))
+
+        #LOG.debug(constraints)
         self.solver.add(constraints)
 
 
@@ -946,7 +983,8 @@ class Z3Interface(object):
         self.spec_process_in_types()
         self.spec_process_out_types()
         self.lib_process_types()
-        self.compute_distinct_port_constraints()
+        self.compute_distinct_port_spec_constraints()
+        self.compute_distinct_port_lib_constraints()
         self.compute_same_block_constraints()
         #self.lib_distinct()
 
@@ -957,13 +995,13 @@ class Z3Interface(object):
         self.solver.add(size_constraints[size])
 
         #LOG.debug(self.lib_model.index)
-        LOG.debug(self.lib_model.models)
+        #LOG.debug(self.lib_model.models)
         models = self.lib_model.models_by_contracts()
         for model in models:
             LOG.debug('--')
             for elem in model:
                 LOG.debug('%d -> %s', self.lib_model.index_by_model(elem), elem)
-        LOG.debug(self.lib_model.models_in_by_contracts())
+        #LOG.debug(self.lib_model.models_in_by_contracts())
         #LOG.debug(self.solver.assertions())
 
 

@@ -317,6 +317,18 @@ class Z3Library(object):
         return [self.in_models[index]
                  for index in self.in_contract_index[level][contract]]
 
+    def related_out_models(self, model):
+        '''
+        Given a model, finds all the models related to the same contract
+        '''
+        #infer level
+        level = self.model_levels[model.get_id()]
+        #get contract
+        contract = self.model_contracts[model.get_id()]
+
+        return [self.out_models[index]
+                 for index in self.out_contract_index[level][contract]]
+
     def models_by_contracts(self):
         '''
         returns all the models grouped by contracts
@@ -507,12 +519,53 @@ class Z3Interface(object):
         self.lib_model = Z3Library(self.library, spec)
 
         #LOG.debug(self.lib_model.models_by_contracts())
+        self.spec_ports = self.preprocess_specifications(self.specification_list)
+
+        #reorder specification list
+        #LOG.debug(self.specification_list)
+        self.specification_list = sorted(self.specification_list, key=lambda x: len(self.spec_ports[x][0]))
+        #LOG.debug(self.specification_list)
 
         self.solver = Solver()
 
         LOG.debug('ok')
         LOG.debug(self.lib_model)
 
+
+    def preprocess_specifications(self, specifications):
+        '''
+        Finds what ports are actually necessary to evaluate the property.
+        If they are a proper subset of the total set of ports, rejection of
+        candidates could be more efficient
+        '''
+
+        spec_ports = {}
+
+        for spec in specifications:
+            spec_ports[spec] = {}
+
+            literals = (spec.assume_formula.get_literal_items()
+                        | spec.guarantee_formula.get_literal_items())
+
+            literal_unames = set([literal.unique_name for _, literal in literals])
+
+            #match literals and ports
+            ports = [port for port in spec.ports_dict.values() if port.unique_name in literal_unames]
+
+            #LOG.debug(ports)
+
+            ports_names = set([port.base_name for port in ports])
+            in_models = [s_mod for s_mod in self.spec_ins
+                      if str(s_mod) in ports_names]
+
+            out_models = [s_mod for s_mod in self.spec_outs
+                      if str(s_mod) in ports_names]
+
+            spec_ports[spec][0] = out_models
+            spec_ports[spec][1] = in_models
+
+        LOG.debug(spec_ports)
+        return spec_ports
 
     def use_n_components(self, n):
         '''
@@ -1145,8 +1198,31 @@ class Z3Interface(object):
         '''
 
         c_sets = {}
-        #create contract sets
+
+        #retrieve failed_spec used ports
+        port_models = self.spec_ports[failed_spec]
+
+        #get_ids
+        port_ids = set([mod.get_id() for mod in port_models[0]])
+
+        #include all the outputs of the contracts connected to inputs
+        out_indices = []
+        for in_port in port_models[1]:
+            out_models = self.lib_model.related_out_models(self.lib_model.models[model[in_port].as_long()])
+            out_indices += [self.lib_model.index_by_model(mod) for mod in out_models]
+
+        out_indices = set(out_indices)
         for spec in self.spec_outs:
+            if spec.get_id() not in port_ids:
+                if model[spec].as_long() in out_indices:
+                    port_models[0].append(spec)
+
+        #create contract sets
+        LOG.debug('-------------')
+        LOG.debug(port_models[0])
+        LOG.debug(self.spec_outs)
+        LOG.debug('-------------')
+        for spec in port_models[0]:
             index = model[spec].as_long()
             mod = self.lib_model.models[index]
             (level, contract) = self.lib_model.contract_by_model(mod)

@@ -214,9 +214,12 @@ class DCLoadContactor(Contract):
     Always closed if everything is fine
     '''
     INPUT_PORTS = [('fail1', RectifierT), ('fail2', RectifierT)]
-    OUTPUT_PORTS = [('c', DCLoadContactorT)]
+    OUTPUT_PORTS = [('p_fail1', RectifierT), (('p_fail2', RectifierT)),
+                    ('c', DCLoadContactorT)]
     ASSUMPTIONS = '!fail1 & !fail2 & G(!(fail1 & fail2))'
-    GUARANTEES = 'G(c)'
+    GUARANTEES = '''G(c) &
+                    G(fail1 <-> p_fail1) &
+                    G(fail2 <-> p_fail2)'''
 
 
 #now add specs
@@ -232,6 +235,7 @@ class GenIsolation1(Contract):
     #ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) '''
     GUARANTEES = 'G(fail1 -> F!c1)'
 
+
 class GenIsolation2(Contract):
     '''
     generator 1 is eventually disconnected if faulty.
@@ -241,20 +245,9 @@ class GenIsolation2(Contract):
     ASSUMPTIONS = '''!fail1 & !fail2 & G(!(fail1 & fail2)) &
                      G(fail1 -> Xfail1) & G(fail2 -> Xfail2)'''
     #ASSUMPTIONS = '''!fail2 & G(fail2 -> Xfail2) '''
-    GUARANTEES = 'G(fail2 -> F!c2)'
+    GUARANTEES = 'G(fail2 -> X!c2)'
 
 
-class GenIsolationBoth(Contract):
-    '''
-    generator 1 and 2 is eventually disconnected if faulty.
-    '''
-    INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT)]
-    OUTPUT_PORTS = [('c1', ACContactorT), ('c2', ACContactorT)]
-    #ASSUMPTIONS = '''!fail1 & !fail2 & G(!(fail1 & fail2)) &
-    #                 G(fail1 -> Xfail1) & G(fail2 -> Xfail2)'''
-    ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) &
-                     !fail2 & G(fail2 -> Xfail2) '''
-    GUARANTEES = 'G(fail1 -> F!c1) & G(fail2 -> F!c2)'
 
 
 #case B: 4 generators, 6 contactors, only AC (3 components needed)
@@ -271,7 +264,7 @@ class GenIsolation1B(Contract):
                      !fail2 & G(fail2 -> Xfail2) &
                      !fail3 & G(fail3 -> Xfail3) &
                      !fail4 & G(fail4 -> Xfail4)'''
-    GUARANTEES = 'G(fail1 -> F!c1)'
+    GUARANTEES = 'G(fail1 -> X!c1)'
 
 class GenIsolation2B(Contract):
     '''
@@ -286,7 +279,7 @@ class GenIsolation2B(Contract):
                      !fail2 & G(fail2 -> Xfail2) &
                      !fail3 & G(fail3 -> Xfail3) &
                      !fail4 & G(fail4 -> Xfail4)'''
-    GUARANTEES = 'G(fail2 -> F!c2)'
+    GUARANTEES = 'G(fail2 -> X!c2)'
 
 class GenIsolation3B(Contract):
     '''
@@ -301,7 +294,7 @@ class GenIsolation3B(Contract):
                      !fail2 & G(fail2 -> Xfail2) &
                      !fail3 & G(fail3 -> Xfail3) &
                      !fail4 & G(fail4 -> Xfail4)'''
-    GUARANTEES = 'G(fail3 -> F!c3)'
+    GUARANTEES = 'G(fail3 -> X!c3)'
 
 class GenIsolation4B(Contract):
     '''
@@ -316,7 +309,7 @@ class GenIsolation4B(Contract):
                      !fail2 & G(fail2 -> Xfail2) &
                      !fail3 & G(fail3 -> Xfail3) &
                      !fail4 & G(fail4 -> Xfail4)'''
-    GUARANTEES = 'G(fail4 -> F!c4)'
+    GUARANTEES = 'G(fail4 -> X!c4)'
 
 #test C: as per test B, but more specs
 class NoShort(Contract):
@@ -347,7 +340,7 @@ class NoParallelShort(Contract):
                      !fail2 & G(fail2 -> Xfail2) &
                      !fail3 & G(fail3 -> Xfail3) &
                      !fail4 & G(fail4 -> Xfail4)'''
-    GUARANTEES = 'G((!fail1 & !fail4) -> (!(c5 & c6)))'
+    GUARANTEES = 'G((!fail1 & !fail4) -> F(!(c5 & c6)))'
 
 class IsolateEmergencyBus(Contract):
     '''
@@ -362,4 +355,193 @@ class IsolateEmergencyBus(Contract):
                      !fail2 & G(fail2 -> Xfail2) &
                      !fail3 & G(fail3 -> Xfail3) &
                      !fail4 & G(fail4 -> Xfail4)'''
-    GUARANTEES = 'G((!fail1 & !fail2 & ! fail3 & !fail4) -> (!c2 & !c3 & !c5 & !c6))'
+    GUARANTEES = 'G((!fail1 & !fail2 & ! fail3 & !fail4) -> F(!c2 & !c3 & !c5 & !c6))'
+
+
+
+#case D -> include DC
+class GenIsolation1D(Contract):
+    '''
+    generator 1 is eventually disconnected if faulty.
+    '''
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT),
+                   ('fail_r1', RectifierT), ('fail_r2', RectifierT)]
+    OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
+                    ('c3', ACGenContactorT), ('c4', ACGenContactorT),
+                    ('c6', ACBackContactorT), ('c5', ACBackContactorT),
+                    ('c7', DCBackContactorT), ('c8', DCBackContactorT),
+                    ('c9', DCLoadContactorT), ('c10', DCLoadContactorT)]
+    ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) &
+                     !fail2 & G(fail2 -> Xfail2) &
+                     !fail3 & G(fail3 -> Xfail3) &
+                     !fail4 & G(fail4 -> Xfail4) &
+                     !fail_r1 & G(fail_r1 -> Xfail_r1) &
+                     !fail_r2 & G(fail_r2 -> Xfail_r2)'''
+    GUARANTEES = 'G(fail1 -> X!c1)'
+
+class GenIsolation2D(Contract):
+    '''
+    generator 2 is eventually disconnected if faulty.
+    '''
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT),
+                   ('fail_r1', RectifierT), ('fail_r2', RectifierT)]
+    OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
+                    ('c3', ACGenContactorT), ('c4', ACGenContactorT),
+                    ('c6', ACBackContactorT), ('c5', ACBackContactorT),
+                    ('c7', DCBackContactorT), ('c8', DCBackContactorT),
+                    ('c9', DCLoadContactorT), ('c10', DCLoadContactorT)]
+    ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) &
+                     !fail2 & G(fail2 -> Xfail2) &
+                     !fail3 & G(fail3 -> Xfail3) &
+                     !fail4 & G(fail4 -> Xfail4) &
+                     !fail_r1 & G(fail_r1 -> Xfail_r1) &
+                     !fail_r2 & G(fail_r2 -> Xfail_r2)'''
+    GUARANTEES = 'G(fail2 -> X!c2)'
+
+class GenIsolation3D(Contract):
+    '''
+    generator 2 is eventually disconnected if faulty.
+    '''
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT),
+                   ('fail_r1', RectifierT), ('fail_r2', RectifierT)]
+    OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
+                    ('c3', ACGenContactorT), ('c4', ACGenContactorT),
+                    ('c6', ACBackContactorT), ('c5', ACBackContactorT),
+                    ('c7', DCBackContactorT), ('c8', DCBackContactorT),
+                    ('c9', DCLoadContactorT), ('c10', DCLoadContactorT)]
+    ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) &
+                     !fail2 & G(fail2 -> Xfail2) &
+                     !fail3 & G(fail3 -> Xfail3) &
+                     !fail4 & G(fail4 -> Xfail4) &
+                     !fail_r1 & G(fail_r1 -> Xfail_r1) &
+                     !fail_r2 & G(fail_r2 -> Xfail_r2)'''
+    GUARANTEES = 'G(fail3 -> X!c3)'
+
+class GenIsolation4D(Contract):
+    '''
+    generator 1 is eventually disconnected if faulty.
+    '''
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT),
+                   ('fail_r1', RectifierT), ('fail_r2', RectifierT)]
+    OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
+                    ('c3', ACGenContactorT), ('c4', ACGenContactorT),
+                    ('c6', ACBackContactorT), ('c5', ACBackContactorT),
+                    ('c7', DCBackContactorT), ('c8', DCBackContactorT),
+                    ('c9', DCLoadContactorT), ('c10', DCLoadContactorT)]
+    ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) &
+                     !fail2 & G(fail2 -> Xfail2) &
+                     !fail3 & G(fail3 -> Xfail3) &
+                     !fail4 & G(fail4 -> Xfail4) &
+                     !fail_r1 & G(fail_r1 -> Xfail_r1) &
+                     !fail_r2 & G(fail_r2 -> Xfail_r2)'''
+    GUARANTEES = 'G(fail4 -> X!c4)'
+
+class NoShortD(Contract):
+    '''
+    generator 1 is eventually disconnected if faulty.
+    '''
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT),
+                   ('fail_r1', RectifierT), ('fail_r2', RectifierT)]
+    OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
+                    ('c3', ACGenContactorT), ('c4', ACGenContactorT),
+                    ('c6', ACBackContactorT), ('c5', ACBackContactorT),
+                    ('c7', DCBackContactorT), ('c8', DCBackContactorT),
+                    ('c9', DCLoadContactorT), ('c10', DCLoadContactorT)]
+    ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) &
+                     !fail2 & G(fail2 -> Xfail2) &
+                     !fail3 & G(fail3 -> Xfail3) &
+                     !fail4 & G(fail4 -> Xfail4) &
+                     !fail_r1 & G(fail_r1 -> Xfail_r1) &
+                     !fail_r2 & G(fail_r2 -> Xfail_r2)'''
+    GUARANTEES = 'G(!(c2 & c3))'
+
+class NoParallelShortD(Contract):
+    '''
+    generator 1 is eventually disconnected if faulty.
+    '''
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT),
+                   ('fail_r1', RectifierT), ('fail_r2', RectifierT)]
+    OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
+                    ('c3', ACGenContactorT), ('c4', ACGenContactorT),
+                    ('c6', ACBackContactorT), ('c5', ACBackContactorT),
+                    ('c7', DCBackContactorT), ('c8', DCBackContactorT),
+                    ('c9', DCLoadContactorT), ('c10', DCLoadContactorT)]
+    ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) &
+                     !fail2 & G(fail2 -> Xfail2) &
+                     !fail3 & G(fail3 -> Xfail3) &
+                     !fail4 & G(fail4 -> Xfail4) &
+                     !fail_r1 & G(fail_r1 -> Xfail_r1) &
+                     !fail_r2 & G(fail_r2 -> Xfail_r2)'''
+    GUARANTEES = 'G((!fail1 & !fail4) -> F(!(c5 & c6)))'
+
+class IsolateEmergencyBusD(Contract):
+    '''
+    generator 1 is eventually disconnected if faulty.
+    '''
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT),
+                   ('fail_r1', RectifierT), ('fail_r2', RectifierT)]
+    OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
+                    ('c3', ACGenContactorT), ('c4', ACGenContactorT),
+                    ('c6', ACBackContactorT), ('c5', ACBackContactorT),
+                    ('c7', DCBackContactorT), ('c8', DCBackContactorT),
+                    ('c9', DCLoadContactorT), ('c10', DCLoadContactorT)]
+    ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) &
+                     !fail2 & G(fail2 -> Xfail2) &
+                     !fail3 & G(fail3 -> Xfail3) &
+                     !fail4 & G(fail4 -> Xfail4) &
+                     !fail_r1 & G(fail_r1 -> Xfail_r1) &
+                     !fail_r2 & G(fail_r2 -> Xfail_r2)'''
+    GUARANTEES = 'G((!fail1 & !fail2 & ! fail3 & !fail4) -> F(!c2 & !c3 & !c5 & !c6))'
+
+
+class DCRightD(Contract):
+    '''
+    Right side of dc is always powered
+    '''
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT),
+                   ('fail_r1', RectifierT), ('fail_r2', RectifierT)]
+    OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
+                    ('c3', ACGenContactorT), ('c4', ACGenContactorT),
+                    ('c6', ACBackContactorT), ('c5', ACBackContactorT),
+                    ('c7', DCBackContactorT), ('c8', DCBackContactorT),
+                    ('c9', DCLoadContactorT), ('c10', DCLoadContactorT)]
+    ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) &
+                     !fail2 & G(fail2 -> Xfail2) &
+                     !fail3 & G(fail3 -> Xfail3) &
+                     !fail4 & G(fail4 -> Xfail4) &
+                     !fail_r1 & G(fail_r1 -> Xfail_r1) &
+                     !fail_r2 & G(fail_r2 -> Xfail_r2)'''
+
+    GUARANTEES = 'G(!(fail_r1 & fail_r2) -> c10)'
+
+
+class DCLeftD(Contract):
+    '''
+    Right side of dc is always powered
+    '''
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', BackupGeneratorT),
+                   ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT),
+                   ('fail_r1', RectifierT), ('fail_r2', RectifierT)]
+    OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
+                    ('c3', ACGenContactorT), ('c4', ACGenContactorT),
+                    ('c6', ACBackContactorT), ('c5', ACBackContactorT),
+                    ('c7', DCBackContactorT), ('c8', DCBackContactorT),
+                    ('c9', DCLoadContactorT), ('c10', DCLoadContactorT)]
+    ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) &
+                     !fail2 & G(fail2 -> Xfail2) &
+                     !fail3 & G(fail3 -> Xfail3) &
+                     !fail4 & G(fail4 -> Xfail4) &
+                     !fail_r1 & G(fail_r1 -> Xfail_r1) &
+                     !fail_r2 & G(fail_r2 -> Xfail_r2)'''
+
+    GUARANTEES = 'G(!(fail_r1 & fail_r2) -> c9)'
+
+

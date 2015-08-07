@@ -125,6 +125,26 @@ class Z3Library(object):
         LOG.debug({i:self.models[i] for i in range(0,self.max_index)})
 
 
+    def include_spec_inputs(self, spec_contract):
+        '''
+        assign an id also to spec_ids
+        '''
+
+        self.spec_contract = spec_contract
+        self.spec_map = {}
+        self.spec_by_index_map = {}
+        m_index = len(self.models)
+
+        for name, port in spec_contract.input_ports_dict.items():
+            self.spec_map[name] = m_index
+            self.spec_by_index_map[m_index] = name
+
+            m_index = m_index + 1
+
+        self.specs_at = len(self.models)
+        self.positions = m_index
+
+
     @property
     def max_index(self):
         '''
@@ -236,7 +256,7 @@ class Z3Library(object):
         '''
         returns the model given a port
         '''
-        return [self.models[self.index[port]]
+        return [self.models[self.index[level][port]]
                 for level in range(0, self.max_components)]
 
     def in_model_by_port(self, port):
@@ -517,6 +537,7 @@ class Z3Interface(object):
         self.num_out = len(self.spec_outs)
 
         self.lib_model = Z3Library(self.library, spec)
+        self.lib_model.include_spec_inputs(spec)
 
         #LOG.debug(self.lib_model.models_by_contracts())
         self.spec_ports = self.preprocess_specifications(self.specification_list)
@@ -696,7 +717,7 @@ class Z3Interface(object):
                                      And([Or([spec_in == self.lib_model.index_by_model(model)
                                               for spec_in in self.spec_ins] +
                                             [And(model > -1,
-                                              model < self.lib_model.max_index)])
+                                              model < self.lib_model.positions)])
                                           for model
                                             in self.lib_model.related_in_models(self.lib_model.model_by_index(index))]))
                              for index in range(0, self.lib_model.max_index)])
@@ -728,9 +749,7 @@ class Z3Interface(object):
 
         constraints = []
 
-        constraints += [And([Implies(And([spec_in != index + self.lib_model.max_single_level_index*level
-                                          for spec_in in self.spec_ins]),
-                                     model != (index + self.lib_model.max_single_level_index*level))
+        constraints += [And([model != (index + self.lib_model.max_single_level_index*level)
                              for level in range(0, self.lib_model.max_components)
                              for index in range(0, self.lib_model.max_single_level_index)
                              if self.lib_model.port_by_index(index).is_input])
@@ -742,7 +761,8 @@ class Z3Interface(object):
 
     def lib_chosen_to_chosen(self):
         '''
-        Input of a chosen contract can be connected only to the output of a chosen contract
+        Input of a chosen contract can be connected only to the output of a chosen contract,
+        or a spec input
         '''
         constraints = []
 
@@ -829,6 +849,10 @@ class Z3Interface(object):
 
                     for lev in range(0, self.lib_model.max_components):
                         constraints.append(s_mod != self.lib_model.index[lev][port])
+
+                        #also the other way, models to specs
+                        constraints.append(self.lib_model.model_by_port(port)[lev] != self.lib_model.spec_map[s_name])
+
 
         #LOG.debug(constraints)
         self.solver.add(constraints)
@@ -1143,26 +1167,32 @@ class Z3Interface(object):
             old_port = self.lib_model.port_by_model(p_model)
             current_port = current_contract.ports_dict[old_port.base_name]
             other_index = model[p_model].as_long()
-            other_mod = self.lib_model.models[other_index]
-            other_level = self.lib_model.model_levels[other_mod.get_id()]
 
-            other_port_orig = self.lib_model.port_by_index(other_index)
+            if other_index < self.lib_model.max_index:
+                other_mod = self.lib_model.models[other_index]
+                other_level = self.lib_model.model_levels[other_mod.get_id()]
 
-            other_contract = contract_map[(other_level, other_port_orig.contract)]
+                other_port_orig = self.lib_model.port_by_index(other_index)
 
-            other_port = other_contract.ports_dict[other_port_orig.base_name]
+                other_contract = contract_map[(other_level, other_port_orig.contract)]
 
+                other_port = other_contract.ports_dict[other_port_orig.base_name]
 
-            mapping.connect(current_port, other_port,
+                mapping.connect(current_port, other_port,
                                 '%s_%s' % (current_contract.unique_name,
                                            current_port.base_name))
 
-            #LOG.debug(current_contract.unique_name)
-            #LOG.debug(other_contract.unique_name)
-            #LOG.debug(current_port.unique_name)
-            #LOG.debug(other_port.unique_name)
-            processed_ports.add(current_port)
-            processed_ports.add(other_port)
+                #LOG.debug(current_contract.unique_name)
+                #LOG.debug(other_contract.unique_name)
+                #LOG.debug(current_port.unique_name)
+                #LOG.debug(other_port.unique_name)
+                processed_ports.add(current_port)
+                processed_ports.add(other_port)
+
+            else:
+                spec_port = spec_contract.ports_dict[self.lib_model.spec_by_index_map[other_index]]
+                spec_contract.connect_to_port(spec_port, current_port)
+
 
         for (level, old_contract) in contract_map.keys():
             for old_port in old_contract.ports_dict.values():
@@ -1257,10 +1287,14 @@ class Z3Interface(object):
 
                 for i in range(0, len(mods[l])):
                     m_class = []
-                    for l2 in range(0, self.lib_model.max_components):
-                        shift = self.lib_model.max_components - level + l2
-                        m_class.append(mods[l][i] ==
-                            self.lib_model.index_shift(model[mods[level][i]].as_long(), shift))
+                    if model[mods[level][i]].as_long() < self.lib_model.max_index:
+                        for l2 in range(0, self.lib_model.max_components):
+                            shift = self.lib_model.max_components - level + l2
+                            m_class.append(mods[l][i] ==
+                                self.lib_model.index_shift(model[mods[level][i]].as_long(), shift))
+                    else:
+                        m_class.append(mods[l][i] == model[mods[level][i]].as_long())
+
                     l_class.append(m_class)
                 s_class.append(l_class)
             classes.append(s_class)

@@ -720,15 +720,17 @@ class Z3Interface(object):
         self.solver.add(constraints)
 
 
-    def lib_to_outputs(self):
+    def lib_to_outputs_or_spec_in(self):
         '''
-        If a component is not chosen, then it's all zeros.
+        a lib element can only be connected to an output or to a port selected as spec input
 
         '''
 
         constraints = []
 
-        constraints += [And([model != (index + self.lib_model.max_single_level_index*level)
+        constraints += [And([Implies(And([spec_in != index + self.lib_model.max_single_level_index*level
+                                          for spec_in in self.spec_ins]),
+                                     model != (index + self.lib_model.max_single_level_index*level))
                              for level in range(0, self.lib_model.max_components)
                              for index in range(0, self.lib_model.max_single_level_index)
                              if self.lib_model.port_by_index(index).is_input])
@@ -940,7 +942,7 @@ class Z3Interface(object):
         self.spec_inputs_no_feedback()
         self.inputs_from_selected()
         self.lib_chosen_not_zeros()
-        self.lib_to_outputs()
+        self.lib_to_outputs_or_spec_in()
         self.lib_chosen_to_chosen()
         self.lib_not_chosen_zero()
         self.spec_process_in_types()

@@ -524,13 +524,6 @@ class Z3Interface(object):
         #limit the values
         constraints += [Or(comp == 0, comp == 1) for comp in self.lib_model.contract_use_flags]
 
-        #set if chosen
-        #constraints += [And([Implies(spec == index,
-        #                             self.lib_model.contract_used_by_models[index] == 1)
-        #                     for index in range(0, len(self.lib_model.models))
-        #                     if self.lib_model.ports[index].is_output])
-        #                for spec in self.spec_outs]
-
         constraints += [Implies(flag == 1,
                                 Or([Or([spec == index
                                           for index in self.lib_model.reverse_flag[flag.get_id()]]
@@ -623,12 +616,6 @@ class Z3Interface(object):
         '''
 
         constraints = []
-        #constraints += [And([Implies(port == self.lib_model.index_by_model(model),
-        #                             model > -1)
-        #                     for model in self.lib_model.in_models]
-        #                   )
-        #                for port in self.spec_ins]
-
 
         constraints += [Implies(And([And([spec_out != self.lib_model.index_by_model(model)
                                           for model
@@ -1220,146 +1207,6 @@ class Z3Interface(object):
         self.solver.add(rej_formula)
 
 
-
-    def synthesize_fixed_size(self, size):
-        '''
-        synthesis for a fixed size
-        includes constraints:
-        we expect 'size' components and (size-1)! mappings.
-        1) We need to generate a candidate
-        2) We need to verify refinement
-
-        1) We need to create this variables and assert the possibilities
-        2) We also need to create the mapping functions. Do we allow feedback? Not for now.
-        3) We need to define the refinement relations, where possible. Low priority
-        4) Verify and loop
-
-
-        '''
-        self.time['size%s' % size] = time()
-        self.initialize_for_fixed_size(size)
-
-        #declare variables
-        c_list = [Const('c_%s' % i, self.ZContract) for i in range(0, size)]
-
-        #constraints = []
-
-        print '4'
-        #Every component must be unique (we already duplicated)
-        self.solver.add([Distinct(c_list)])
-
-        print '5'
-        #All the candidates fully connected
-        self.solver.add(self.all_models_completely_connected(c_list))
-
-        print '6'
-        #property has to be fully connected
-        self.solver.add([self.fully_connected(self.property_model)])
-
-        #Spec cannot be connected to itself on outputs
-        #self.solver.add(self.connected_output(self.property_model, self.property_model)==False)
-        #self.solver.add(self.property_outputs_not_together())
-
-        print '7'
-        #property inputs only with inputs
-        #prevents evil feedback
-        self.solver.add(self.property_inputs_no_on_candidate_outputs())
-
-        print '8'
-        #models disconnected if not solution
-        self.solver.add(self.models_disconnected_if_not_solution(c_list))
-
-        print '9'
-        #property inputs have to be conncted to model inputs
-        self.solver.add(self.property_inputs_to_candidates())
-
-        print '10'
-        #property outputs have to be connected to model outputs
-        self.solver.add(self.property_outputs_to_candidates())
-
-        #add full input for models, too
-        #---nope
-
-        print '11'
-        #add input needs to be connected to property
-        #or outputs
-        self.solver.add(self.inputs_on_property_inputs_or_candidate_out(c_list))
-
-        print '12'
-        #from previous computation
-        self.solver.add(self.recall_not_consistent_constraints())
-
-        print '13'
-        #external hints
-        self.solver.add(self.compute_same_block_constraints())
-        print '14'
-        self.solver.add(self.compute_distinct_port_constraints())
-
-        print '15'
-        #type compatibility
-        self.solver.add(self.process_candidate_type_compatibility())
-        print '16'
-        self.solver.add(self.process_spec_type_compatibility())
-
-        print '17'
-        #library constraints
-        self.solver.add(self.compute_component_port_constraints())
-
-        print '18'
-        for candidate in c_list:
-            #candidates must be within library components
-            span = [candidate == component for component in self.contract_model_instances]
-            self.solver.add([Or(span)])
-
-            #but candidate cannot be the spec itself
-            self.solver.add([Not(candidate==self.property_model)])
-
-            #spec needs to be connected to candidates
-            #self.solver.add([self.connected_output(candidate, self.property_model)])
-            #self.solver.add(self.connected_output(candidate))
-
-        #self.solver.add(constraints)
-
-        self.time['size%s' % size] = time() - self.time['size%s' % size]
-
-        current_hierarchy = 0
-        LOG.debug('current hierarchy: %d' % current_hierarchy)
-
-
-        while True:
-            try:
-                #push current hierarchy level
-                #pop is done in the finally clause
-                self.solver.push()
-                self.solver.add(self.allow_hierarchy(current_hierarchy, c_list))
-                model = self.propose_candidate(size)
-                self.solver.pop()
-            except NotSynthesizableError as err:
-                if current_hierarchy < self.max_hierarchy:
-                    LOG.debug('increase hierarchy to %d' % (current_hierarchy + 1))
-                    current_hierarchy += 1
-                    self.solver.pop()
-                    #self.solver.push()
-                    #self.solver.add(self.allow_hierarchy(current_hierarchy, c_list))
-                    #LOG.debug(self.solver.assertions)
-                else:
-                    self.solver.pop()
-                    raise err
-            else:
-                try:
-                    composition, spec, contract_list = self.verify_candidate(model, c_list)
-                except NotSynthesizableError as err:
-                    LOG.debug("candidate not valid")
-                else:
-
-                    #(composition,
-                    # spec_contract,
-                    # contracts) = self.build_composition_from_model(model,
-                    #                                                self.property_contract,
-                    #                                                c_list,
-                    #                                                complete_model=True)
-                    return model, composition, spec, contract_list
-                
 
     def allow_hierarchy(self, hierarchy, candidate_list):
         '''

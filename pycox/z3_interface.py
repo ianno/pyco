@@ -50,6 +50,9 @@ class Z3Library(object):
         self.model_levels = {}
         self.model_contracts = {}
         self.contracts = set()
+        self.contract_used_by_models = {}
+        self.contract_use_flags = []
+        self.reverse_flag = {}
 
         self.spec = spec
         self.max_components = min([MAX_REDUNDANCY, len(spec.output_ports_dict)])
@@ -69,6 +72,10 @@ class Z3Library(object):
                 self.in_contract_index[level][contract] = []
                 self.out_contract_index[level][contract] = []
 
+                c_flag = Int('%s-%d' % (contract.base_name, level))
+                self.contract_use_flags.append(c_flag)
+                self.reverse_flag[c_flag.get_id()] = []
+
                 for port in contract.input_ports_dict.values():
                     model = z3.Int('%d-%s' % (level, port.unique_name))
                     self.models.append(model)
@@ -77,6 +84,10 @@ class Z3Library(object):
                     self.in_ports.append(port)
                     self.model_levels[model.get_id()] = level
                     self.model_contracts[model.get_id()] = contract
+
+                    #contract_indexing
+                    self.contract_used_by_models[len(self.models) - 1] = c_flag
+                    #self.reverse_flag[c_flag.get_id()].append(len(self.models) -1)
 
                     #reverse lookup
                     self.model_index[model.get_id()] = len(self.models) - 1
@@ -95,6 +106,10 @@ class Z3Library(object):
                     self.out_ports.append(port)
                     self.model_levels[model.get_id()] = level
                     self.model_contracts[model.get_id()] = contract
+
+                    #contract_indexing
+                    self.contract_used_by_models[len(self.models) - 1] = c_flag
+                    self.reverse_flag[c_flag.get_id()].append(len(self.models) -1)
 
                     #reverse lookup
                     self.model_index[model.get_id()] = len(self.models) - 1
@@ -386,160 +401,6 @@ class Z3Library(object):
         return (index + self.max_single_level_in_index * shift_lev) % self.max_in_index
 
 
-    def build_rejection_matrix(self, spec_in_models, spec_out_models):
-        '''
-        precompute the rejection matrix
-        '''
-
-        #we need a dict based structure with all the possible redirections
-        #once we have the actual data, we can just filter it out
-
-        num_contracts = len(self.contracts)
-        num_out = len(spec_out_models)
-        num_elem = min([MAX_REDUNDANCY, num_out])
-
-        all_specs = spec_in_models + spec_out_models
-
-        limit_spec_out = len(spec_in_models)
-
-        #for every contract, collect all the input models
-        contracts_mod = {}
-        for contract in self.contracts:
-            contracts_mod[contract] = {}
-
-            models = self.contract_in_models(contract)
-
-            for level in range(0, self.max_components):
-               contracts_mod[contract][level] = models[level]
-
-        spec_out_matrix = {spec.get_id(): {} for spec in spec_out_models}
-        spec_in_matrix = {spec.get_id(): {} for spec in spec_in_models}
-        lib_matrix = {mod.get_id(): {} for mod in self.in_models}
-        model_shift_matrix = {mod.get_id(): {} for mod in self.in_models}
-
-        for spec in spec_out_models:
-            for index in range(0, self.max_index):
-                if self.ports[index].is_output:
-                    spec_out_matrix[spec.get_id()][index] = {}
-
-        for spec in spec_in_models:
-            for index in range(0, self.max_index):
-                if self.ports[index].is_input:
-                    spec_in_matrix[spec.get_id()][index] = {}
-
-        for mod in self.in_models:
-            for index in range(0, self.max_index):
-                if self.ports[index].is_output:
-                    lib_matrix[mod.get_id()][index] = {}
-
-        for level in range(0, self.max_components):
-
-            #outputs specs
-            for j in range(0, limit_spec_out):
-                spec = all_specs[j]
-                for index in spec_in_matrix[spec.get_id()]:
-                    spec_in_matrix[spec.get_id()][index][level] = self.index_shift(index, level)
-
-            #outputs specs
-            for j in range(limit_spec_out, len(all_specs)):
-                spec = all_specs[j]
-                for index in spec_out_matrix[spec.get_id()]:
-                    spec_out_matrix[spec.get_id()][index][level] = self.index_shift(index, level)
-
-            #model_shift
-            for model_id in model_shift_matrix:
-                index = self.model_index[model_id]
-                model_shift_matrix[model_id][level] = self.index_shift(index, level)
-
-
-        print spec_in_matrix
-        print spec_out_matrix
-
-        pass
-
-    def build_equivalence_sets(self, specs, indices, model):
-        '''
-        return a list with all the possible combinations of contracts and levels
-        for a given set of indices
-        '''
-        #get all the contracts. at most len(indices) contracts.
-        #maybe less if two ports refer to the same contract and level
-        contract_lev = []
-        contract_map = {}
-        initial_allocation = {}
-        port_ref = {}
-        positions = {}
-
-        for index in indices:
-            p_model = self.models[index]
-            level = self.model_levels[p_model.get_id()]
-            contract = self.model_contracts[p_model.get_id()]
-
-            if (level, contract) not in contract_lev:
-                #define contract position
-                contract_lev.append((level, contract))
-
-                positions.update({ind: len(contract_lev)-1
-                          for ind in self.contract_indices(contract)[level]})
-
-            initial_allocation[(level, contract)] = [model[self.in_models[p_index]].as_long()
-                               for p_index in self.contract_in_indices(contract)[level]]
-
-            if (level, contract) not in port_ref:
-                port_ref[(level, contract)] = []
-
-            port_ref[(level, contract)].append(index)
-
-
-        #print initial_allocation
-        #print positions
-        #build map
-        #contract_map = {(level, contract): self.contract_indices(contract)[level]
-        #                for contract in self.contracts
-        #                for level in range(0, self.max_components)}
-
-        #now we know how many elements we need
-        num_elem = min([MAX_REDUNDANCY, len(contract_lev)])
-
-        #shift_matrix
-        #shift = [elem for elem in itertools.product(range(0, num_elem), repeat=num_elem)]
-        new_indices = {}
-
-        for elem in itertools.product(range(0, num_elem), repeat=len(contract_lev)):
-
-
-            new_contracts = [((contract_lev[i][0] + elem[i])%self.max_components, contract_lev[i][1]) for i in range(0, len(contract_lev))]
-
-            new_indices = [specs[i] == self.index_shift(indices[i], elem[positions[indices[i]]])
-                           for i in range(0, len(indices))]
-            #elaborate connections
-            new_models = []
-            for i in range(0, len(new_contracts)):
-                n_l = new_contracts[i][0]
-                n_c = new_contracts[i][1]
-
-                o_l = contract_lev[i][0]
-                o_c = contract_lev[i][1]
-
-                p_inds = self.contract_in_indices(o_c)[o_l]
-                values = initial_allocation[(o_l, o_c)]
-
-                for index, value in zip(p_inds, values):
-                    new_p_ind = self.index_in_shift(index, elem[i])
-                    new_p = self.in_models[new_p_ind]
-
-                    if value == -1:
-                        new_value = -1
-                    else:
-                        new_value = self.index_shift(value, elem[positions[value]])
-
-                    new_models.append(new_p == new_value)
-
-            #print new_models
-            yield new_indices + new_models
-
-
-
 class Z3Interface(object):
     '''
     Interface class for the Z3 SMT solver.
@@ -651,6 +512,46 @@ class Z3Interface(object):
 
         LOG.debug('ok')
         LOG.debug(self.lib_model)
+
+
+    def use_n_components(self, n):
+        '''
+        Force the solver to use n components for a candidate solution
+        '''
+
+        constraints = []
+
+        #limit the values
+        constraints += [Or(comp == 0, comp == 1) for comp in self.lib_model.contract_use_flags]
+
+        #set if chosen
+        #constraints += [And([Implies(spec == index,
+        #                             self.lib_model.contract_used_by_models[index] == 1)
+        #                     for index in range(0, len(self.lib_model.models))
+        #                     if self.lib_model.ports[index].is_output])
+        #                for spec in self.spec_outs]
+
+        constraints += [Implies(flag == 1,
+                                Or([Or([spec == index
+                                          for index in self.lib_model.reverse_flag[flag.get_id()]]
+                                          )
+                                     for spec in self.spec_outs]))
+                                for flag in self.lib_model.contract_use_flags]
+
+
+        #zero otherwise
+        constraints += [Implies(flag == 0,
+                                And([And([spec != index
+                                          for index in self.lib_model.reverse_flag[flag.get_id()]]
+                                          )
+                                     for spec in self.spec_outs]))
+                                for flag in self.lib_model.contract_use_flags]
+
+        constraints += [Sum(self.lib_model.contract_use_flags) == n]
+
+        LOG.debug(constraints)
+        #self.solver.add(constraints)
+        return constraints
 
 
 
@@ -970,6 +871,8 @@ class Z3Interface(object):
 
         self.specification_list = property_contracts
 
+        size = 1
+
         #let's pick a root
         #we assume all the specs have same interface
         property_contract = self.specification_list[0]
@@ -981,8 +884,15 @@ class Z3Interface(object):
         #property model has to be fully connected - always true
         #self.solver.add(self.fully_connected(self.property_model))
 
+        #configure constraints for size
+        size_constraints = {n: self.use_n_components(n) for n in range(1, self.num_out + 1)}
+
+
         #self.all_zero()
         LOG.debug(property_contract)
+
+        self.solver.reset()
+
         self.full_spec_out()
         self.spec_out_to_out()
         self.full_spec_in()
@@ -1000,6 +910,12 @@ class Z3Interface(object):
         self.compute_same_block_constraints()
         #self.lib_distinct()
 
+        #push size constraint
+        #when popping, it is ok losing the counterexamples
+        #for a given size. (it does not apply to greater sizes)
+        self.solver.push()
+        self.solver.add(size_constraints[size])
+
         #LOG.debug(self.lib_model.index)
         LOG.debug(self.lib_model.models)
         models = self.lib_model.models_by_contracts()
@@ -1016,7 +932,14 @@ class Z3Interface(object):
             try:
                 model = self.propose_candidate()
             except NotSynthesizableError as err:
-                raise err
+                if size < self.num_out:
+                    LOG.debug('Synthesis for size %d failed. Increasing number of components...', size)
+                    size = size + 1
+                    self.solver.pop()
+                    self.solver.push()
+                    self.solver.add(size_constraints[size])
+                else:
+                    raise err
             else:
                 try:
                     composition, spec, contract_list = self.verify_candidate(model)
@@ -1229,96 +1152,6 @@ class Z3Interface(object):
         return composition, spec_contract, contracts
 
 
-    def reject_candidate_dnf(self, model, failed_spec):
-        '''
-        reject a model and its equivalents
-        '''
-        max_lev = self.lib_model.max_components
-
-        c_sets = {}
-        mod_sets = {}
-        #create contract sets
-        for spec in self.spec_outs:
-            index = model[spec].as_long()
-            mod = self.lib_model.models[index]
-            (level, contract) = self.lib_model.contract_by_model(mod)
-            if (level, contract) not in c_sets:
-                c_sets[(level, contract)] = {}
-                #find all related models
-                in_models = self.lib_model.related_in_models(mod)
-                mod_sets[(level, contract)] = in_models
-                #for mod in in_models:
-                #    c_sets[(level, contract)][mod.get_id()] = (mod, model[mod].as_long())
-
-            c_sets[(level, contract)][spec.get_id()] = (spec, index)
-
-        print mod_sets
-        print c_sets
-
-        constraints = []
-
-        for (level, contract), spec_map in c_sets.items():
-            s_class = []
-            mods = mod_sets[(level, contract)]
-            all_mods = self.lib_model.contract_in_models(contract)
-
-            contr_sets = []
-            m_eval = []
-            for mod in all_mods[level]:
-                m_eval.append(model[mod].as_long())
-
-
-            c_class = []
-            d_class = []
-            m_class = []
-            for elem in itertools.combinations(range(0, max_lev), 2):
-                #specs/specs
-                for ((spec_1, ind_1), (spec_2, ind_2)) in itertools.combinations_with_replacement(spec_map.values(), 2):
-                    c_class.append(Not(Or(spec_1 == self.lib_model.index_shift(ind_1, elem[0]),
-                                      spec_2 == self.lib_model.index_shift(ind_2, elem[1]))))
-
-            #specs/models
-            #for elem in itertools.combinations(range(0, max_lev), 2):
-                for l in range(0, max_lev):
-                    ms = all_mods[l]
-                    s_shift = max_lev - l + elem[0]
-                    v_shift = max_lev - l + elem[1]
-
-                    for spec, index in spec_map.values():
-                        for ind in range(0, len(ms)):
-                            d_class.append(Not(Or(spec ==
-                                    self.lib_model.index_shift(index, s_shift),
-                                    ms[ind] ==
-                                    self.lib_model.index_shift(model[all_mods[level][ind]].as_long(), v_shift))))
-
-
-
-            #mode/model
-            for l1, l2 in itertools.combinations_with_replacement(range(0, max_lev), 2):
-                ms1 = all_mods[l1]
-                ms2 = all_mods[l2]
-                for ind1, ind2 in itertools.combinations_with_replacement(range(0, len(ms1)), 2):
-                    for shift1, shift2 in itertools.product(range(0, max_lev), repeat=2):
-                        if not (l1==l2 and ind1==ind2 and shift1==shift2):
-                            m_class.append(Not(Or(ms1[ind1] == self.lib_model.index_shift(m_eval[ind1], shift1),
-                                          ms2[ind2] == self.lib_model.index_shift(m_eval[ind2], shift2))))
-
-
-
-            s_class += c_class
-            s_class += d_class
-            s_class += m_class
-
-
-            constraints += s_class
-
-
-        self.solver.add(Or(constraints))
-
-        #print Or(constraints)
-
-
-
     def reject_candidate(self, model, failed_spec):
         '''
         reject a model and its equivalents
@@ -1367,63 +1200,25 @@ class Z3Interface(object):
                 s_class.append(l_class)
             classes.append(s_class)
 
-        rej_formula = Not(And([Or([And([Or([And(line) for line in m_class])
-                                        for m_class in l_class])
-                                   for l_class in s_class])
-                               for s_class in classes])
+        rej_formula = Not(
+                          And(
+                              [Or(
+                                  [And(
+                                       [Or(
+                                           [And(line) for line in m_class]
+                                           )
+                                        for m_class in l_class]
+                                       )
+                                   for l_class in s_class]
+                                  )
+                               for s_class in classes]
+                              )
                          )
 
         #LOG.debug(rej_formula)
 
         self.solver.add(rej_formula)
 
-
-    def reject_candidate_old(self, model, spec):
-        '''
-        reject model
-        '''
-        #import pdb
-        #pdb.set_trace()
-
-        #identify involved contracts in formula
-        #TODO
-        #get spec literals
-        #literals = (spec.assume_formula.get_literal_items()
-        #           | spec.guarantee_formula.get_literal_items())
-
-        #literal_unames = set([literal.unique_name for _, literal in literals])
-
-        #match literals and ports
-        #ports = [port for port in spec.ports_dict.values() if port.unique_name in literal_unames]
-
-        #LOG.debug(ports)
-
-        #ports_names = set([port.base_name for port in ports])
-        #models = [s_mod for s_mod in self.spec_ins + self.spec_outs
-        #          if str(s_mod) in ports_names]
-
-        #LOG.debug(literals)
-        #LOG.debug(ports)
-        #LOG.debug(models)
-        #return
-
-        #all for now. include copies...
-        constraints = []
-
-        #we need to reject the current model, plus all the possible combinations
-        #of redundant copies...
-
-        selected_indices = [model[p_model].as_long() for p_model in self.spec_ins + self.spec_outs]
-        #selected_indices = [simplify(model[p_model]).as_long() for p_model in models]
-
-        #self.lib_model.build_rejection_matrix(self.spec_ins, self.spec_outs)
-
-        for excluded in self.lib_model.build_equivalence_sets(self.spec_ins + self.spec_outs, selected_indices, model):
-
-            #LOG.debug(Not(And(excluded)))
-            self.solver.add(Not(And(excluded)))
-
-        #LOG.debug('add rejected models constraints')
 
 
     def synthesize_fixed_size(self, size):

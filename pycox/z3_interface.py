@@ -865,7 +865,7 @@ class Z3Interface(object):
                             in_mod = self.lib_model.in_models[ind]
                             constraints.append(in_mod != self.lib_model.index[lev][out_port])
 
-
+        LOG.debug(constraints)
         self.solver.add(constraints)
 
 
@@ -1218,10 +1218,10 @@ class Z3Interface(object):
                     port_models[0].append(spec)
 
         #create contract sets
-        LOG.debug('-------------')
-        LOG.debug(port_models[0])
-        LOG.debug(self.spec_outs)
-        LOG.debug('-------------')
+        #LOG.debug('-------------')
+        #LOG.debug(port_models[0])
+        #LOG.debug(self.spec_outs)
+        #LOG.debug('-------------')
         for spec in port_models[0]:
             index = model[spec].as_long()
             mod = self.lib_model.models[index]

@@ -148,6 +148,19 @@ def ac_lib(abstr_gen, dumb_gen, std_gen, slow_gen, ac_single_back, ac_2_back,
 
     return library
 
+@pytest.fixture
+def acdc_lib(ac_lib, dc_tie, dc_load):
+    '''
+    extended library
+    '''
+
+    ac_lib.add(dc_load)
+    ac_lib.add(dc_tie)
+
+    ac_lib.verify_library()
+
+    return ac_lib
+
 def test_synth_2gen_2c_1(ac_lib):
     '''
     Performs simple synthesis
@@ -338,3 +351,32 @@ def test_synth_4gen_6c_ac_7spec(ac_lib):
 
     interface.synthesize()
 
+def test_synth_6_10_dc_9spec(acdc_lib):
+    '''
+    Performs simple synthesis
+    '''
+
+    spec1 = GenIsolation1D('G1')
+    spec2 = GenIsolation2D('G2')
+    spec3 = GenIsolation3D('G3')
+    spec4 = GenIsolation4D('G4')
+    spec5 = NoShortD('G5')
+    spec6 = NoParallelShortD('G6')
+    spec7 = IsolateEmergencyBusD('G7')
+    spec8 = DCRightD('G8')
+    spec9 = DCLeftD('G9')
+
+    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
+                                    spec5, spec6, spec7, spec8,
+                                    spec9], acdc_lib)
+
+    interface.same_block_constraint([spec1.fail1, spec1.c1])
+    interface.same_block_constraint([spec1.fail2, spec1.c2])
+    interface.same_block_constraint([spec1.fail3, spec1.c3])
+    interface.same_block_constraint([spec1.fail4, spec1.c4])
+    interface.distinct_ports_constraints([spec1.fail1, spec1.fail2, spec1.fail3, spec1.fail4,
+                                          spec1.c1, spec1.c2, spec1.c3,
+                                          spec1.c4, spec1.c5, spec1.c6,
+                                          spec1.fail_r1, spec1.fail_r2])
+
+    interface.synthesize()

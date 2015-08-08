@@ -1162,14 +1162,14 @@ class Z3Interface(object):
             raise NotSynthesizableError()
         else:
             pass
-            #for spec in self.spec_ins:
+            ##for spec in self.spec_ins:
+            ##    LOG.debug('%s -> %s'
+            ##        % (spec, self.lib_model.model_by_index(simplify(model[spec]).as_long())))
+            #for spec in self.spec_outs:
             #    LOG.debug('%s -> %s'
             #        % (spec, self.lib_model.model_by_index(simplify(model[spec]).as_long())))
-            for spec in self.spec_outs:
-                LOG.debug('%s -> %s'
-                    % (spec, self.lib_model.model_by_index(simplify(model[spec]).as_long())))
 
-            LOG.debug(model)
+            #LOG.debug(model)
 
 
         return model

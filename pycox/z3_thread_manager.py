@@ -9,29 +9,18 @@ from pycox import LOG
 import threading
 from Queue import Queue, Empty
 import pycox.z3_interface
-import multiprocessing
+#import multiprocessing
 
 MAX_THREADS = 8
 
-def check_refinement_in_process(queue):
-    '''
-    check refinement and write the result in queue
-    '''
-    LOG.debug('reading')
-    item = queue.get()
-    LOG.debug('read')
-    result = concrete.is_refinement(abstract)
-    queue.put(result)
-
-    return
-
+#NotSynthesizableError = z3_interface.NotSynthesizableError
 
 class ModelVerificationManager(object):
     '''
     manages refinement threads
     '''
 
-    def __init__(self, z3_interface, size, candidate_list):
+    def __init__(self, z3_interface):
         '''
         set up solver and thread status
         '''
@@ -40,9 +29,6 @@ class ModelVerificationManager(object):
         self.z3_interface = z3_interface
         self.semaphore = threading.Semaphore(MAX_THREADS)
         self.found_refinement = threading.Event()
-
-        self.candidate_list = candidate_list
-        self.size = size
 
         self.composition = None
         self.connected_spec = None
@@ -74,38 +60,26 @@ class ModelVerificationManager(object):
 
         return
 
-    def synthesize(self):
+    def synthesize(self, size_constraints):
         '''
         picks candidates and generates threads
         '''
-
-        current_hierarchy = 0
-        c_list = self.candidate_list
-
-        LOG.debug('current hierarchy: %d' % current_hierarchy)
+        size = 1
 
         while True:
             try:
-                #push current hierarchy level
-                #pop is done in the finally clause
-                LOG.debug('lock')
                 with self.z3_lock:
-                    #LOG.debug('pre push')
-                    #self.solver.push()
-                    #LOG.debug('pre add hier')
-                    #self.solver.add(self.z3_interface.allow_hierarchy(current_hierarchy, c_list))
-                    LOG.debug('pre-propose')
-                    model = self.z3_interface.propose_candidate(self.size)
+                    model = self.z3_interface.propose_candidate()
             except pycox.z3_interface.NotSynthesizableError as err:
-
-                if current_hierarchy < self.z3_interface.max_hierarchy:
-                    LOG.debug('increase hierarchy to %d' % (current_hierarchy + 1))
-                    current_hierarchy += 1
+                if size < self.z3_interface.num_out:
+                    LOG.debug('Synthesis for size %d failed. Increasing number of components...', size)
+                    size = size + 1
+                    self.solver.pop()
+                    self.solver.push()
+                    self.solver.add(size_constraints[size])
                 else:
-                    return self.terminate()
-
+                    raise err
             else:
-
                 #acquire semaphore
                 self.semaphore.acquire()
 
@@ -115,7 +89,7 @@ class ModelVerificationManager(object):
                     return self.terminate()
 
                 #new refinement checker
-                thread = RefinementChecker(model, c_list, self, self.found_refinement)
+                thread = RefinementChecker(model, self, self.found_refinement)
                 #go
                 thread.start()
                 with self.pool_lock:
@@ -125,26 +99,86 @@ class ModelVerificationManager(object):
                 LOG.debug('pre-lock')
                 with self.z3_lock:
                     LOG.debug('pre-reject')
-                    self.solver.add(self.z3_interface.reject_candidate(model, c_list))
+                    self.solver.add(self.z3_interface.reject_candidate(model))
                     LOG.debug('done')
 
-                #empty queue with additional constraints
-                while True:
-                    try:
-                        constraints = self.constraint_queue.get_nowait()
-                    except Empty:
-                        break
-                    else:
-                        LOG.debug('lock')
-                        with self.z3_lock:
-                            LOG.debug('add %s' % constraints)
-                            self.solver.add(constraints)
-            finally:
-                LOG.debug('lock')
-                with self.z3_lock:
-                    #LOG.debug('pre-pop')
-                    #self.solver.pop()
-                    LOG.debug('popped')
+                #try:
+                #    composition, spec, contract_list = self.verify_candidate(model)
+                #except NotSynthesizableError as err:
+                #    LOG.debug("candidate not valid")
+                #else:
+                #    LOG.debug(model)
+                #    for c in contract_list:
+                #        LOG.debug(c)
+                #    LOG.debug(composition)
+                #    return model, composition, spec, contract_list
+
+        #current_hierarchy = 0
+        #c_list = self.candidate_list
+
+        #LOG.debug('current hierarchy: %d' % current_hierarchy)
+
+        #while True:
+        #    try:
+        #        #push current hierarchy level
+        #        #pop is done in the finally clause
+        #        LOG.debug('lock')
+        #        with self.z3_lock:
+        #            #LOG.debug('pre push')
+        #            #self.solver.push()
+        #            #LOG.debug('pre add hier')
+        #            #self.solver.add(self.z3_interface.allow_hierarchy(current_hierarchy, c_list))
+        #            LOG.debug('pre-propose')
+        #            model = self.z3_interface.propose_candidate(self.size)
+        #    except pycox.z3_interface.NotSynthesizableError as err:
+
+        #        if current_hierarchy < self.z3_interface.max_hierarchy:
+        #            LOG.debug('increase hierarchy to %d' % (current_hierarchy + 1))
+        #            current_hierarchy += 1
+        #        else:
+        #            return self.terminate()
+
+        #    else:
+
+        #        #acquire semaphore
+        #        self.semaphore.acquire()
+
+        #        #check if event is successful
+        #        if self.found_refinement.is_set():
+        #            #we are done. kill all running threads and exit
+        #            return self.terminate()
+
+        #        #new refinement checker
+        #        thread = RefinementChecker(model, c_list, self, self.found_refinement)
+        #        #go
+        #        thread.start()
+        #        with self.pool_lock:
+        #            self.thread_pool.add(thread)
+
+        #        #now reject the model, to get a new candidate
+        #        LOG.debug('pre-lock')
+        #        with self.z3_lock:
+        #            LOG.debug('pre-reject')
+        #            self.solver.add(self.z3_interface.reject_candidate(model, c_list))
+        #            LOG.debug('done')
+
+        #        #empty queue with additional constraints
+        #        while True:
+        #            try:
+        #                constraints = self.constraint_queue.get_nowait()
+        #            except Empty:
+        #                break
+        #            else:
+        #                LOG.debug('lock')
+        #                with self.z3_lock:
+        #                    LOG.debug('add %s' % constraints)
+        #                    self.solver.add(constraints)
+        #    finally:
+        #        LOG.debug('lock')
+        #        with self.z3_lock:
+        #            #LOG.debug('pre-pop')
+        #            #self.solver.pop()
+        #            LOG.debug('popped')
 
 
     def terminate(self):
@@ -170,57 +204,43 @@ class RefinementChecker(threading.Thread):
     this thread executes a refinement checks and dies
     '''
 
-    def __init__(self, model, candidates, manager, found_event):
+    def __init__(self, model, manager, found_event):
         '''
         instantiate
         '''
         self.model = model
-        self.candidates = candidates
         self.z3_interface = manager.z3_interface
         self.found_event = found_event
         self.manager = manager
         self.z3_lock = manager.z3_lock
-        self.result_queue = multiprocessing.Queue()
+        self.result_queue = Queue()
 
         super(RefinementChecker, self).__init__()
 
 
-    def check_all_specs_threadsafe(self, model, candidates, z3_lock):
+    def check_all_specs_threadsafe(self, model, z3_lock):
         '''
         check if the model satisfies a number of specs, if provided
         '''
+
         composition = None
         connected_spec = None
         contract_inst = None
+        failed_spec = None
         for spec in self.z3_interface.specification_list:
-            LOG.debug('pre-lock')
             with z3_lock:
-                LOG.debug('pre-build')
                 composition, connected_spec, contract_inst = \
-                    self.z3_interface.build_composition_from_model(model, spec,
-                                                                   candidates,
-                                                                   complete_model=False)
-                LOG.debug('built')
-            #LOG.debug('start process')
-            #process = multiprocessing.Process(target=check_refinement_in_process,
-            #                        args=((self.result_queue, )))
-            #
-            #process.start()
+                    self.z3_interface.build_composition_from_model(model, spec, complete_model=True)
 
-            #LOG.debug('send contracts')
-            #self.result_queue.put([composition, connected_spec])
-            #is_refinement = self.result_queue.get()
-
-            #LOG.debug('got results!!')
-
-
-            #if not is_refinement:
-            LOG.debug('pre-refinement')
             if not composition.is_refinement(connected_spec):
-                LOG.debug('yes')
-                return (False, composition, connected_spec, contract_inst)
-            LOG.debug('no')
-        return (True, composition, connected_spec, contract_inst)
+                LOG.debug('ref check done 1')
+                failed_spec = spec
+                return False, composition, connected_spec,contract_inst, failed_spec
+
+            LOG.debug('ref check done 2')
+
+        return True, composition, connected_spec,contract_inst, None
+
 
     def run(self):
         '''
@@ -230,22 +250,22 @@ class RefinementChecker(threading.Thread):
         #pdb.set_trace()
         print 'thread %s running' % self.ident
         #return
-        state, composition, connected_spec, contract_inst = \
-            self.check_all_specs_threadsafe(self.model, self.candidates, z3_lock=self.z3_lock)
+        state, composition, connected_spec, contract_inst, failed_spec= \
+            self.check_all_specs_threadsafe(self.model, z3_lock=self.z3_lock)
 
         if state:
             self.found_event.set()
             self.manager.set_successful_candidate(self.model, composition,
                                                   connected_spec, contract_inst)
-        else:
-            #check for consistency
-            LOG.debug('pre consistency')
-            constraints = self.z3_interface.check_for_consistency(self.model, self.candidates,
-                                                     contract_inst, connected_spec, z3_lock=self.z3_lock)
+        #else:
+        #    #check for consistency
+        #    LOG.debug('pre consistency')
+        #    constraints = self.z3_interface.check_for_consistency(self.model, self.candidates,
+        #                                             contract_inst, connected_spec, z3_lock=self.z3_lock)
 
-            if constraints:
-                #add them to the constraint queue
-                self.manager.constraint_queue.put(constraints)
+        #    if constraints:
+        #        #add them to the constraint queue
+        #        self.manager.constraint_queue.put(constraints)
 
         #we are done, release semaphore
         self.manager.semaphore.release()

@@ -12,6 +12,7 @@ import itertools
 import types
 from pycox.contract import CompositionMapping, RefinementMapping
 from time import time
+from pycox.z3_thread_manager import ModelVerificationManager
 
 #LOG = logging.getLogger()
 LOG.debug('in z3_interface')
@@ -1005,6 +1006,15 @@ class Z3Interface(object):
         #LOG.debug(self.solver.assertions())
 
 
+        thread_manager = ModelVerificationManager(self)
+
+        try:
+            (model, composition,
+             spec, contract_list) = thread_manager.synthesize(size_constraints)
+        except NotSynthesizableError:
+            raise
+
+        return model, composition, spec, contract_list
 
         while True:
             try:
@@ -1229,37 +1239,39 @@ class Z3Interface(object):
         return composition, spec_contract, contracts
 
 
-    def reject_candidate(self, model, failed_spec):
+    #def reject_candidate(self, model, failed_spec):
+    def reject_candidate(self, model):
         '''
         reject a model and its equivalents
         '''
 
         c_sets = {}
 
-        #retrieve failed_spec used ports
-        port_models = self.spec_ports[failed_spec]
+       # #retrieve failed_spec used ports
+       # port_models = self.spec_ports[failed_spec]
 
-        #get_ids
-        port_ids = set([mod.get_id() for mod in port_models[0]])
+       # #get_ids
+       # port_ids = set([mod.get_id() for mod in port_models[0]])
 
-        #include all the outputs of the contracts connected to inputs
-        out_indices = []
-        for in_port in port_models[1]:
-            out_models = self.lib_model.related_out_models(self.lib_model.models[model[in_port].as_long()])
-            out_indices += [self.lib_model.index_by_model(mod) for mod in out_models]
+       # #include all the outputs of the contracts connected to inputs
+       # out_indices = []
+       # for in_port in port_models[1]:
+       #     out_models = self.lib_model.related_out_models(self.lib_model.models[model[in_port].as_long()])
+       #     out_indices += [self.lib_model.index_by_model(mod) for mod in out_models]
 
-        out_indices = set(out_indices)
+       # out_indices = set(out_indices)
+       # for spec in self.spec_outs:
+       #     if spec.get_id() not in port_ids:
+       #         if model[spec].as_long() in out_indices:
+       #             port_models[0].append(spec)
+
+       # #create contract sets
+       # #LOG.debug('-------------')
+       # #LOG.debug(port_models[0])
+       # #LOG.debug(self.spec_outs)
+       # #LOG.debug('-------------')
+       # for spec in port_models[0]:
         for spec in self.spec_outs:
-            if spec.get_id() not in port_ids:
-                if model[spec].as_long() in out_indices:
-                    port_models[0].append(spec)
-
-        #create contract sets
-        #LOG.debug('-------------')
-        #LOG.debug(port_models[0])
-        #LOG.debug(self.spec_outs)
-        #LOG.debug('-------------')
-        for spec in port_models[0]:
             index = model[spec].as_long()
             mod = self.lib_model.models[index]
             (level, contract) = self.lib_model.contract_by_model(mod)
@@ -1317,8 +1329,8 @@ class Z3Interface(object):
 
         #LOG.debug(rej_formula)
 
-        self.solver.add(rej_formula)
-
+        #self.solver.add(rej_formula)
+        return rej_formula
 
 
     def allow_hierarchy(self, hierarchy, candidate_list):
@@ -1362,11 +1374,11 @@ class Z3Interface(object):
             c_m.__hash__ = types.MethodType(zcontract_hash, c_m)
             c_name = str(simplify(self.ZContract.base_name(c_m)))
 
-                #get base instance
-                contract = contract_instances[c_m]
+            #get base instance
+            contract = contract_instances[c_m]
 
-                if c_name not in self.consistency_dict:
-                    self.consistency_dict[c_name] = {}
+            if c_name not in self.consistency_dict:
+                self.consistency_dict[c_name] = {}
 
             #contracts[c_m] = contract
 

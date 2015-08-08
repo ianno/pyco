@@ -17,7 +17,7 @@ from pycox.z3_thread_manager import ModelVerificationManager
 #LOG = logging.getLogger()
 LOG.debug('in z3_interface')
 
-MAX_REDUNDANCY = 4
+MAX_REDUNDANCY = 2
 
 class Z3Library(object):
     '''

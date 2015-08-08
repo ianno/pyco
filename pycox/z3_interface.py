@@ -636,6 +636,44 @@ class Z3Interface(object):
 
         self.solver.add(constraints)
 
+    def lib_full_chosen_output(self):
+        '''
+        All the outputs of chosen components must be connected to spec or inputs
+        '''
+        constraints = []
+
+        for spec in self.spec_outs:
+            for model in self.lib_model.out_models:
+                index = self.lib_model.index_by_model(model)
+                if_part = (spec == index)
+
+                #get all inputs for model
+                other_outs = self.lib_model.related_out_models(model)
+
+                then_part = []
+                for mod in other_outs:
+                    i_mod = self.lib_model.index_by_model(mod)
+                    if i_mod != index:
+                        inner_part = []
+                        #either connected to a spec
+                        inner_part += [s_out == i_mod for s_out in self.spec_outs
+                                      if s_out.get_id() != spec.get_id()]
+                        #or another model
+                        inner_part += [other_m == i_mod
+                                      for other_m in self.lib_model.in_models
+                                      if other_m.get_id() != model.get_id()]
+
+                        if inner_part:
+                            then_part.append(Or(inner_part))
+
+                if then_part:
+                    constraints.append(Implies(if_part, And(then_part)))
+
+        #LOG.debug(constraints)
+        if constraints:
+            self.solver.add(constraints)
+
+
     def spec_out_to_out(self):
         '''
         a spec out can connect only to another output
@@ -829,7 +867,7 @@ class Z3Interface(object):
 
 
 
-        print constraints
+        #LOG.debug(constraints)
 
         self.solver.add(constraints)
 
@@ -1039,6 +1077,7 @@ class Z3Interface(object):
         self.solver.reset()
 
         self.full_spec_out()
+        self.lib_full_chosen_output()
         self.spec_out_to_out()
         self.full_spec_in()
         #_self.spec_in_to_in()

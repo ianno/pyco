@@ -12,6 +12,7 @@ Author: Antonio Iannopollo
 
 import pytest
 from pycox.examples.example_eps_excape import *
+from pycox.contract import CompositionMapping
 
 @pytest.fixture
 def abstr_gen():
@@ -380,3 +381,72 @@ def test_synth_6_10_dc_9spec(acdc_lib):
                                           spec1.fail_r1, spec1.fail_r2])
 
     interface.synthesize()
+
+
+def test_synth_6_10_dc_9spec_manual(acdc_lib):
+    '''
+    Performs simple synthesis
+    '''
+
+    spec11 = GenIsolation1D('G1')
+    spec2 = GenIsolation2D('G2')
+    spec3 = GenIsolation3D('G3')
+    spec4 = GenIsolation4D('G4')
+    spec5 = NoShortD('G5')
+    spec6 = NoParallelShortD('G6')
+    spec7 = IsolateEmergencyBusD('G7')
+    spec8 = DCRightD('G8')
+    spec1 = DCLeftD('G9')
+
+    gl = StdGenerator('gl')
+    gr = StdGenerator('gr')
+    gtie = AC4WayBackup('gtie')
+    ll = DCLoadContactor('ll')
+    lr = DCLoadContactor('rl')
+    ltie = DCTwoSideTie('ltie')
+
+    contracts = [gr, gtie, ll, lr, ltie]
+    mapping = CompositionMapping([gl] + contracts)
+    mapping.connect(gtie.fail1, gl.fail)
+    mapping.connect(gtie.fail4, gr.fail)
+    mapping.connect(ltie.fail1, ll.fail1)
+    mapping.connect(ltie.fail2, lr.fail2)
+    mapping.connect(ll.fail2, lr.fail2)
+    mapping.connect(lr.fail1, ll.fail1)
+
+    mapping.add(gl.c, 'cs1')
+    #mapping.add(gr.c, 'cs4')
+    #mapping.add(ll.fail1, 'lfail1')
+    #mapping.add(lr.fail1, 'lfail2')
+    #mapping.add(gr.c, 'cs4')
+    #mapping.add(gr.c, 'cs4')
+    #mapping.add(gr.c, 'cs4')
+    mapping.add(ll.c, 'c_dcl')
+    #gtie.connect_to_port(gtie.fail1, gl.fail)
+    #gtie.connect_to_port(gtie.fail4, gr.fail)
+    #ltie.connect_to_port(ltie.fail1, ll.p_fail1)
+    #ltie.connect_to_port(ltie.fail2, lr.p_fail2)
+
+    spec1.connect_to_port(spec1.fail1, gl.fail)
+    spec1.connect_to_port(spec1.fail4, gr.fail)
+    spec1.connect_to_port(spec1.fail2, gtie.fail2)
+    spec1.connect_to_port(spec1.fail3, gtie.fail3)
+    spec1.connect_to_port(spec1.fail_r1, ll.fail1)
+    spec1.connect_to_port(spec1.fail_r2, lr.fail2)
+
+    spec1.connect_to_port(spec1.c1, gl.c)
+    spec1.connect_to_port(spec1.c4, gr.c)
+    spec1.connect_to_port(spec1.c2, gtie.c2)
+    spec1.connect_to_port(spec1.c3, gtie.c3)
+    spec1.connect_to_port(spec1.c5, gtie.c1)
+    spec1.connect_to_port(spec1.c6, gtie.c2)
+    spec1.connect_to_port(spec1.c7, ltie.c1)
+    spec1.connect_to_port(spec1.c8, ltie.c2)
+    spec1.connect_to_port(spec1.c9, ll.c)
+    spec1.connect_to_port(spec1.c10, lr.c)
+
+
+    comp = gl.compose([gr, gtie, ll, lr, ltie], composition_mapping=mapping)
+
+    assert comp.is_refinement(spec1)
+

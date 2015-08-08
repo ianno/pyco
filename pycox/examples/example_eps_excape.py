@@ -176,8 +176,8 @@ class AC4WayBackup(Contract):
                    ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT)]
     OUTPUT_PORTS = [('c1', ACBackContactorT), ('c2', ACGenContactorT),
                     ('c3', ACGenContactorT), ('c4', ACBackContactorT)]
-    ASSUMPTIONS = '!fail1 & !fail2 & !fail3 & !fail4 & G(fail1 -> Xfail1) & G(fail2 -> Xfail2) &\
-                   G(fail3 -> Xfail3) & G(fail4 -> Xfail4)'
+    ASSUMPTIONS = 'true'#'!fail1 & !fail2 & !fail3 & !fail4 & G(fail1 -> Xfail1) & G(fail2 -> Xfail2) &\
+                  # G(fail3 -> Xfail3) & G(fail4 -> Xfail4)'
     GUARANTEES = '''G(fail2 -> !c2) & G(fail3 -> !c3) &
                     G(!(c2 & c3)) &
                   G((!fail1 & !fail4) -> (!c1 & !c2 & !c3 & !c4)) &
@@ -205,7 +205,7 @@ class DCTwoSideTie(Contract):
     '''
     INPUT_PORTS = [('fail1', RectifierT), ('fail2', RectifierT)]
     OUTPUT_PORTS = [('c1', DCBackContactorT), ('c2', DCBackContactorT)]
-    ASSUMPTIONS = '!fail1 & !fail2'
+    ASSUMPTIONS = 'true'#'!fail1 & !fail2'
     GUARANTEES = '''G((!fail1 & !fail2) -> (!c1 & !c2)) &
                     G((fail1 | fail2) -> (c1 & c2))'''
 
@@ -214,10 +214,10 @@ class DCLoadContactor(Contract):
     Always closed if everything is fine
     '''
     INPUT_PORTS = [('fail1', RectifierT), ('fail2', RectifierT)]
-    OUTPUT_PORTS = [('p_fail1', RectifierT), (('p_fail2', RectifierT)),
+    OUTPUT_PORTS = [('p_fail1', RectifierT), ('p_fail2', RectifierT),
                     ('c', DCLoadContactorT)]
-    ASSUMPTIONS = '!fail1 & !fail2 & G(!(fail1 & fail2))'
-    GUARANTEES = '''G(c) &
+    ASSUMPTIONS = '!fail1 & !fail2'# & G(!(fail1 & fail2))'
+    GUARANTEES = '''!p_fail1 & !p_fail2 & G(c) &
                     G(fail1 <-> p_fail1) &
                     G(fail2 <-> p_fail2)'''
 
@@ -376,8 +376,8 @@ class GenIsolation1D(Contract):
                      !fail2 & G(fail2 -> Xfail2) &
                      !fail3 & G(fail3 -> Xfail3) &
                      !fail4 & G(fail4 -> Xfail4) &
-                     !fail_r1 & G(fail_r1 -> Xfail_r1) &
-                     !fail_r2 & G(fail_r2 -> Xfail_r2)'''
+                     !fail_r1 &
+                     !fail_r2'''
     GUARANTEES = 'G(fail1 -> X!c1)'
 
 class GenIsolation2D(Contract):
@@ -539,8 +539,8 @@ class DCLeftD(Contract):
                      !fail2 & G(fail2 -> Xfail2) &
                      !fail3 & G(fail3 -> Xfail3) &
                      !fail4 & G(fail4 -> Xfail4) &
-                     !fail_r1 & G(fail_r1 -> Xfail_r1) &
-                     !fail_r2 & G(fail_r2 -> Xfail_r2)'''
+                     !fail_r1 &
+                     !fail_r2'''
 
     GUARANTEES = 'G(!(fail_r1 & fail_r2) -> c9)'
 

@@ -425,6 +425,8 @@ def test_synth_6_10_dc_9spec_manual(acdc_lib):
     mapping.connect(lr.fail1, ll.fail1)
 
     mapping.add(gl.c, 'cs1')
+    mapping.add(gtie.fail2, 'gt_fail2')
+    mapping.add(gtie.fail3, 'gt_fail3')
     #mapping.add(gr.c, 'cs4')
     #mapping.add(ll.fail1, 'lfail1')
     #mapping.add(lr.fail1, 'lfail2')

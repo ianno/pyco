@@ -176,8 +176,8 @@ class AC4WayBackup(Contract):
                    ('fail3', BackupGeneratorT), ('fail4', ActiveGeneratorT)]
     OUTPUT_PORTS = [('c1', ACBackContactorT), ('c2', ACGenContactorT),
                     ('c3', ACGenContactorT), ('c4', ACBackContactorT)]
-    ASSUMPTIONS = 'true'#'!fail1 & !fail2 & !fail3 & !fail4 & G(fail1 -> Xfail1) & G(fail2 -> Xfail2) &\
-                  # G(fail3 -> Xfail3) & G(fail4 -> Xfail4)'
+    ASSUMPTIONS = '!fail1 & !fail2 & !fail3 & !fail4 & G(fail1 -> Xfail1) & G(fail2 -> Xfail2) &\
+                   G(fail3 -> Xfail3) & G(fail4 -> Xfail4)'
     GUARANTEES = '''G(fail2 -> !c2) & G(fail3 -> !c3) &
                     G(!(c2 & c3)) &
                   G((!fail1 & !fail4) -> (!c1 & !c2 & !c3 & !c4)) &
@@ -205,7 +205,7 @@ class DCTwoSideTie(Contract):
     '''
     INPUT_PORTS = [('fail1', RectifierT), ('fail2', RectifierT)]
     OUTPUT_PORTS = [('c1', DCBackContactorT), ('c2', DCBackContactorT)]
-    ASSUMPTIONS = 'true'#'!fail1 & !fail2'
+    ASSUMPTIONS = '!fail1 & !fail2'
     GUARANTEES = '''G((!fail1 & !fail2) -> (!c1 & !c2)) &
                     G((fail1 | fail2) -> (c1 & c2))'''
 

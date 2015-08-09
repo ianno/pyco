@@ -214,12 +214,9 @@ class DCLoadContactor(Contract):
     Always closed if everything is fine
     '''
     INPUT_PORTS = [('fail1', RectifierT), ('fail2', RectifierT)]
-    OUTPUT_PORTS = [('p_fail1', RectifierT), ('p_fail2', RectifierT),
-                    ('c', DCLoadContactorT)]
+    OUTPUT_PORTS = [('c', DCLoadContactorT)]
     ASSUMPTIONS = '!fail1 & !fail2'# & G(!(fail1 & fail2))'
-    GUARANTEES = '''!p_fail1 & !p_fail2 & G(c) &
-                    G(fail1 <-> p_fail1) &
-                    G(fail2 <-> p_fail2)'''
+    GUARANTEES = '''G(c)'''
 
 
 #now add specs

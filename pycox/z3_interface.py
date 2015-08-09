@@ -123,7 +123,27 @@ class Z3Library(object):
 
 
 
-        #LOG.debug({i:self.models[i] for i in range(0,self.max_index)})
+        LOG.debug({i:self.models[i] for i in range(0,self.max_index)})
+
+
+    def include_spec_inputs(self, spec_contract):
+        '''
+        assign an id also to spec_ids
+        '''
+
+        self.spec_contract = spec_contract
+        self.spec_map = {}
+        self.spec_by_index_map = {}
+        m_index = len(self.models)
+
+        for name, port in spec_contract.input_ports_dict.items():
+            self.spec_map[name] = m_index
+            self.spec_by_index_map[m_index] = name
+
+            m_index = m_index + 1
+
+        self.specs_at = len(self.models)
+        self.positions = m_index
 
 
     @property
@@ -528,6 +548,7 @@ class Z3Interface(object):
         self.num_out = len(self.spec_outs)
 
         self.lib_model = Z3Library(self.library, spec)
+        self.lib_model.include_spec_inputs(spec)
 
         #LOG.debug(self.lib_model.models_by_contracts())
         self.spec_ports = self.preprocess_specifications(self.specification_list)
@@ -629,6 +650,44 @@ class Z3Interface(object):
 
         self.solver.add(constraints)
 
+    def lib_full_chosen_output(self):
+        '''
+        All the outputs of chosen components must be connected to spec or inputs
+        '''
+        constraints = []
+
+        for spec in self.spec_outs:
+            for model in self.lib_model.out_models:
+                index = self.lib_model.index_by_model(model)
+                if_part = (spec == index)
+
+                #get all inputs for model
+                other_outs = self.lib_model.related_out_models(model)
+
+                then_part = []
+                for mod in other_outs:
+                    i_mod = self.lib_model.index_by_model(mod)
+                    if i_mod != index:
+                        inner_part = []
+                        #either connected to a spec
+                        inner_part += [s_out == i_mod for s_out in self.spec_outs
+                                      if s_out.get_id() != spec.get_id()]
+                        #or another model
+                        inner_part += [other_m == i_mod
+                                      for other_m in self.lib_model.in_models
+                                      if other_m.get_id() != model.get_id()]
+
+                        if inner_part:
+                            then_part.append(Or(inner_part))
+
+                if then_part:
+                    constraints.append(Implies(if_part, And(then_part)))
+
+        #LOG.debug(constraints)
+        if constraints:
+            self.solver.add(constraints)
+
+
     def spec_out_to_out(self):
         '''
         a spec out can connect only to another output
@@ -655,13 +714,17 @@ class Z3Interface(object):
         '''
 
         constraints = []
-        constraints += [port > -1 for port in self.spec_ins]
-        constraints += [port < self.lib_model.max_index for port in self.spec_ins]
-        constraints += [Distinct(self.spec_ins)]
+
+        constraints += [Or([port == index
+                            for port in self.lib_model.in_models])
+                        for index in self.lib_model.spec_by_index_map.keys()]
+        #constraints += [port > -1 for port in self.spec_ins]
+        #constraints += [port < self.lib_model.max_index for port in self.spec_ins]
+        #constraints += [Distinct(self.spec_ins)]
 
         self.solver.add(constraints)
 
-    def spec_in_to_in(self):
+    def _spec_in_to_in(self):
         '''
         a spec input can connect only to another input
         '''
@@ -684,20 +747,33 @@ class Z3Interface(object):
 
         constraints = []
 
-        constraints += [Implies(And([And([spec_out != self.lib_model.index_by_model(model)
-                                          for model
-                                          in self.lib_model.contract_out_models(contract)[level]])
-                                     for spec_out in self.spec_outs]),
-                                And([And([port != self.lib_model.index_by_model(model)
-                                         for model in self.lib_model.contract_in_models(contract)[level]])
-                                     for port in self.spec_ins])
-                                )
-                        for contract in self.lib_model.contracts
-                        for level in range(0, self.lib_model.max_components)]
+        #constraints += [Implies(And([And([spec_out != self.lib_model.index_by_model(model)
+        #                                  for model
+        #                                  in self.lib_model.contract_out_models(contract)[level]])
+        #                             for spec_out in self.spec_outs]),
+        #                        And([And([model != spec_in
+        #                                 for model in self.lib_model.contract_in_models(contract)[level]])
+        #                             for port in self.spec_ins])
+        #                        )
+        #                for contract in self.lib_model.contracts
+        #                for level in range(0, self.lib_model.max_components)]
 
 
 
-        self.solver.add(constraints)
+        #constraints += [Implies(And([And([spec_out != self.lib_model.index_by_model(model)
+        #                                  for model
+        #                                  in self.lib_model.contract_out_models(contract)[level]])
+        #                             for spec_out in self.spec_outs]),
+        #                        And([And([port != self.lib_model.index_by_model(model)
+        #                                 for model in self.lib_model.contract_in_models(contract)[level]])
+        #                             for port in self.spec_ins])
+        #                        )
+        #                for contract in self.lib_model.contracts
+        #                for level in range(0, self.lib_model.max_components)]
+
+
+
+        #self.solver.add(constraints)
 
     def lib_chosen_not_zeros(self):
         '''
@@ -707,19 +783,28 @@ class Z3Interface(object):
 
         constraints = []
         constraints += [And([Implies(spec_port == index,
-                                     And([Or([spec_in == self.lib_model.index_by_model(model)
-                                              for spec_in in self.spec_ins] +
-                                            [And(model > -1,
-                                              model < self.lib_model.max_index)])
+                                     And([And(model > -1,
+                                              model < self.lib_model.positions)
                                           for model
                                             in self.lib_model.related_in_models(self.lib_model.model_by_index(index))]))
                              for index in range(0, self.lib_model.max_index)])
                         for spec_port in self.spec_outs]
 
+        #constraints = []
+        #constraints += [And([Implies(spec_port == index,
+        #                             And([Or([spec_in == self.lib_model.index_by_model(model)
+        #                                      for spec_in in self.spec_ins] +
+        #                                    [And(model > -1,
+        #                                      model < self.lib_model.positions)])
+        #                                  for model
+        #                                    in self.lib_model.related_in_models(self.lib_model.model_by_index(index))]))
+        #                     for index in range(0, self.lib_model.max_index)])
+        #                for spec_port in self.spec_outs]
+
 
         self.solver.add(constraints)
 
-    def spec_inputs_no_feedback(self):
+    def _spec_inputs_no_feedback(self):
         '''
         spec inputs cannot be connected
         '''
@@ -733,10 +818,34 @@ class Z3Interface(object):
 
         self.solver.add(constraints)
 
-
-    def lib_to_outputs(self):
+    def lib_inputs_no_feedback_if_assumption(self):
         '''
-        If a component is not chosen, then it's all zeros.
+        no feedback on a port if assumptions depend on that port
+        '''
+
+        constraints = []
+        for contract in self.lib_model.contracts:
+            assumption_pool = set([literal.unique_name
+                              for _, literal in contract.assume_formula.get_literal_items()])
+
+            #if in assumption pool, a port can be connected only to spec inputs
+            for name, port in contract.input_ports_dict.items():
+                if port.unique_name in assumption_pool:
+                    mods = self.lib_model.model_by_port(port)
+                    for level in range(0, self.lib_model.max_components):
+                        mod = mods[level]
+                        constraints.append(Or([mod == -1]+
+                                              [mod == index
+                             for index in self.lib_model.spec_by_index_map.keys()]
+                           ))
+
+
+        #LOG.debug(constraints)
+        self.solver.add(constraints)
+
+    def lib_to_outputs_or_spec_in(self):
+        '''
+        a lib element can only be connected to an output or to a port selected as spec input
 
         '''
 
@@ -754,7 +863,8 @@ class Z3Interface(object):
 
     def lib_chosen_to_chosen(self):
         '''
-        Input of a chosen contract can be connected only to the output of a chosen contract
+        Input of a chosen contract can be connected only to the output of a chosen contract,
+        or a spec input
         '''
         constraints = []
 
@@ -771,7 +881,7 @@ class Z3Interface(object):
 
 
 
-        #print constraints
+        #LOG.debug(constraints)
 
         self.solver.add(constraints)
 
@@ -840,7 +950,8 @@ class Z3Interface(object):
                     (not issubclass(p_type, s_port_type))):
 
                     for lev in range(0, self.lib_model.max_components):
-                        constraints.append(s_mod != self.lib_model.index[lev][port])
+                        constraints.append(self.lib_model.model_by_port(port)[lev] != self.lib_model.spec_map[s_name])
+
 
         #LOG.debug(constraints)
         self.solver.add(constraints)
@@ -883,7 +994,7 @@ class Z3Interface(object):
         self.solver.add(constraints)
 
 
-    def compute_distinct_port_spec_constraints(self):
+    def _compute_distinct_port_spec_constraints(self):
         '''
         computes the set of distinct ports according the info from the user
         '''
@@ -929,10 +1040,42 @@ class Z3Interface(object):
         constraints = []
 
         for name_a, name_b in self.same_block_constraints:
-            constraints += [Or([And(self.spec_dict[name_a] == port1,
-                                    self.spec_dict[name_b] == port2)
+            #detect if out or inputs
+            port_a = self.property_contract.ports_dict[name_a]
+            port_b = self.property_contract.ports_dict[name_b]
+
+            if port_a.is_output and port_b.is_output:
+                constraints += [Or([And(self.spec_dict[name_a] == self.lib_model.index_by_model(port1),
+                                    self.spec_dict[name_b] == self.lib_model.index_by_model(port2))
                                 for models in self.lib_model.models_by_contracts()
-                                for port1, port2 in itertools.permutations(models, 2) ])]
+                                for port1, port2 in itertools.permutations(models, 2)
+                                if self.lib_model.port_by_model(port1).is_output and
+                                   self.lib_model.port_by_model(port2).is_output])]
+
+            elif port_a.is_output and port_b.is_input:
+                constraints += [Or([And(self.spec_dict[name_a] == self.lib_model.index_by_model(port1),
+                                    port2 == self.lib_model.spec_map[name_b])
+                                for models in self.lib_model.models_by_contracts()
+                                for port1, port2 in itertools.permutations(models, 2)
+                                if self.lib_model.port_by_model(port1).is_output and
+                                   self.lib_model.port_by_model(port2).is_input])]
+
+            elif port_a.is_input and port_b.is_output:
+                constraints += [Or([And(port1 == self.lib_model.spec_map[name_a],
+                                    self.spec_dict[name_b] == self.lib_model.index_by_model(port2))
+                                for models in self.lib_model.models_by_contracts()
+                                for port1, port2 in itertools.permutations(models, 2)
+                                if self.lib_model.port_by_model(port1).is_input and
+                                   self.lib_model.port_by_model(port2).is_output])]
+            else:
+                constraints += [Or([And(port1 == self.lib_model.spec_map[name_a],
+                                    port2 == self.lib_model.spec_map[name_b])
+                                for models in self.lib_model.models_by_contracts()
+                                for port1, port2 in itertools.permutations(models, 2)
+                                if self.lib_model.port_by_model(port1).is_input and
+                                   self.lib_model.port_by_model(port2).is_input])]
+
+
 
         #LOG.debug(constraints)
         self.solver.add(constraints)
@@ -972,22 +1115,24 @@ class Z3Interface(object):
         self.solver.reset()
 
         self.full_spec_out()
+        self.lib_full_chosen_output()
         self.spec_out_to_out()
         self.full_spec_in()
-        self.spec_in_to_in()
-        self.spec_inputs_no_feedback()
+        #_self.spec_in_to_in()
+        #_self.spec_inputs_no_feedback()
+        #self.lib_inputs_no_feedback_if_assumption()
         self.inputs_from_selected()
         self.lib_chosen_not_zeros()
-        self.lib_to_outputs()
+        self.lib_to_outputs_or_spec_in()
         self.lib_chosen_to_chosen()
         self.lib_not_chosen_zero()
         self.spec_process_in_types()
         self.spec_process_out_types()
         self.lib_process_types()
-        self.compute_distinct_port_spec_constraints()
-        self.compute_distinct_port_lib_constraints()
-        self.compute_same_block_constraints()
-        #self.lib_distinct()
+        #self._compute_distinct_port_spec_constraints()
+	self.compute_distinct_port_lib_constraints()        
+	self.compute_same_block_constraints()
+        #self._lib_distinct()
 
         #push size constraint
         #when popping, it is ok losing the counterexamples
@@ -1037,6 +1182,7 @@ class Z3Interface(object):
                     LOG.debug(model)
                     for c in contract_list:
                         LOG.debug(c)
+                    LOG.info(self.property_contract)
                     LOG.debug(composition)
                     return model, composition, spec, contract_list
 
@@ -1064,9 +1210,9 @@ class Z3Interface(object):
             raise NotSynthesizableError()
         else:
             pass
-            #for spec in self.spec_ins:
-            #    LOG.debug('%s -> %s'
-            #        % (spec, self.lib_model.model_by_index(simplify(model[spec]).as_long())))
+            ##for spec in self.spec_ins:
+            ##    LOG.debug('%s -> %s'
+            ##        % (spec, self.lib_model.model_by_index(simplify(model[spec]).as_long())))
             #for spec in self.spec_outs:
             #    LOG.debug('%s -> %s'
             #        % (spec, self.lib_model.model_by_index(simplify(model[spec]).as_long())))
@@ -1159,7 +1305,7 @@ class Z3Interface(object):
         mapping = CompositionMapping(contracts)
 
         #start witn spec
-        for p_model in self.spec_outs + self.spec_ins:
+        for p_model in self.spec_outs:
             name = str(p_model)
 
             spec_port = spec_contract.ports_dict[name]
@@ -1188,27 +1334,33 @@ class Z3Interface(object):
             old_port = self.lib_model.port_by_model(p_model)
             current_port = current_contract.ports_dict[old_port.base_name]
             other_index = model[p_model].as_long()
-            other_mod = self.lib_model.models[other_index]
-            other_level = self.lib_model.model_levels[other_mod.get_id()]
 
-            other_port_orig = self.lib_model.port_by_index(other_index)
+            if other_index < self.lib_model.max_index:
+                other_mod = self.lib_model.models[other_index]
+                other_level = self.lib_model.model_levels[other_mod.get_id()]
 
-            other_contract = contract_map[(other_level, other_port_orig.contract)]
+                other_port_orig = self.lib_model.port_by_index(other_index)
 
-            other_port = other_contract.ports_dict[other_port_orig.base_name]
+                other_contract = contract_map[(other_level, other_port_orig.contract)]
 
+                other_port = other_contract.ports_dict[other_port_orig.base_name]
 
-            mapping.connect(current_port, other_port,
+                mapping.connect(current_port, other_port,
                                 '%s_%s' % (current_contract.unique_name,
                                            current_port.base_name))
 
-            #LOG.debug(current_contract.unique_name)
-            #LOG.debug(other_contract.unique_name)
-            #LOG.debug(current_port.unique_name)
-            #LOG.debug(other_port.unique_name)
-            processed_ports.add(current_port)
-            processed_ports.add(other_port)
+                #LOG.debug(current_contract.unique_name)
+                #LOG.debug(other_contract.unique_name)
+                #LOG.debug(current_port.unique_name)
+                #LOG.debug(other_port.unique_name)
+                processed_ports.add(current_port)
+                processed_ports.add(other_port)
 
+            else:
+                spec_port = spec_contract.ports_dict[self.lib_model.spec_by_index_map[other_index]]
+                spec_contract.connect_to_port(spec_port, current_port)
+
+        #add all the remaining names to new composition
         for (level, old_contract) in contract_map.keys():
             for old_port in old_contract.ports_dict.values():
                 current_contract = contract_map[(level, old_contract)]
@@ -1235,6 +1387,7 @@ class Z3Interface(object):
 
         #LOG.debug(composition)
         #LOG.debug(spec_contract)
+        contracts.add(root)
 
         return composition, spec_contract, contracts
 
@@ -1304,10 +1457,14 @@ class Z3Interface(object):
 
                 for i in range(0, len(mods[l])):
                     m_class = []
-                    for l2 in range(0, self.lib_model.max_components):
-                        shift = self.lib_model.max_components - level + l2
-                        m_class.append(mods[l][i] ==
-                            self.lib_model.index_shift(model[mods[level][i]].as_long(), shift))
+                    if model[mods[level][i]].as_long() < self.lib_model.max_index:
+                        for l2 in range(0, self.lib_model.max_components):
+                            shift = self.lib_model.max_components - level + l2
+                            m_class.append(mods[l][i] ==
+                                self.lib_model.index_shift(model[mods[level][i]].as_long(), shift))
+                    else:
+                        m_class.append(mods[l][i] == model[mods[level][i]].as_long())
+
                     l_class.append(m_class)
                 s_class.append(l_class)
             classes.append(s_class)

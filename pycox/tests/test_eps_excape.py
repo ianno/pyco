@@ -60,7 +60,11 @@ def ac_2_back():
     ac 2way backup
     '''
     comp = AC2WayBackup('AC2Back')
-    return LibraryComponent('AC2BackC', comp)
+    lib_c = LibraryComponent('AC2BackC', comp)
+
+    lib_c.add_distinct_port_constraints([comp.fail1, comp.fail2])
+
+    return lib_c
 
 @pytest.fixture
 def ac_4_back():
@@ -88,7 +92,10 @@ def dc_tie():
     DC tie
     '''
     comp = DCTwoSideTie('DC2Tie')
-    return LibraryComponent('DC2TieC', comp)
+    lib_c = LibraryComponent('DC2TieC', comp)
+    lib_c.add_distinct_port_constraints([comp.fail1, comp.fail2])
+
+    return lib_c
 
 @pytest.fixture
 def dc_load():
@@ -96,7 +103,10 @@ def dc_load():
     dc load
     '''
     comp = DCLoadContactor('DCLoad')
-    return LibraryComponent('DCLoadC', comp)
+    lib_c = LibraryComponent('DCLoadC', comp)
+    lib_c.add_distinct_port_constraints([comp.fail1, comp.fail2])
+
+    return lib_c
 
 
 

@@ -1130,7 +1130,7 @@ class Z3Interface(object):
         self.spec_process_out_types()
         self.lib_process_types()
         #self._compute_distinct_port_spec_constraints()
-	self.compute_distinct_port_lib_constraints()        
+	self.compute_distinct_port_lib_constraints()
 	self.compute_same_block_constraints()
         #self._lib_distinct()
 
@@ -1158,8 +1158,15 @@ class Z3Interface(object):
              spec, contract_list) = thread_manager.synthesize(size_constraints)
         except NotSynthesizableError:
             raise
+        else:
+            LOG.debug(model)
+            for c in contract_list:
+                LOG.debug(c)
+            LOG.info(self.property_contract)
+            LOG.debug(composition)
+            return model, composition, spec, contract_list
 
-        return model, composition, spec, contract_list
+        #return model, composition, spec, contract_list
 
         while True:
             try:

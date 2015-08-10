@@ -12,7 +12,7 @@ import itertools
 import types
 from pycox.contract import CompositionMapping, RefinementMapping
 from time import time
-from pycox.z3_thread_manager import ModelVerificationManager
+from pycox.z3_thread_manager import ModelVerificationManager, MAX_THREADS
 
 #LOG = logging.getLogger()
 LOG.debug('in z3_interface')
@@ -1092,7 +1092,7 @@ class Z3Interface(object):
 
         self.specification_list = property_contracts
 
-        size = 1
+        size = self.num_out
 
         #let's pick a root
         #we assume all the specs have same interface
@@ -1112,7 +1112,7 @@ class Z3Interface(object):
         #self.all_zero()
         LOG.debug(property_contract)
 
-        self.solver.reset()
+        #self.solver.reset()
 
         self.full_spec_out()
         self.lib_full_chosen_output()
@@ -1137,8 +1137,8 @@ class Z3Interface(object):
         #push size constraint
         #when popping, it is ok losing the counterexamples
         #for a given size. (it does not apply to greater sizes)
-        self.solver.push()
-        self.solver.add(size_constraints[size])
+        #self.solver.push()
+        #self.solver.add(size_constraints[size])
 
         #LOG.debug(self.lib_model.index)
         #LOG.debug(self.lib_model.models)
@@ -1151,47 +1151,48 @@ class Z3Interface(object):
         #LOG.debug(self.solver.assertions())
 
 
-        thread_manager = ModelVerificationManager(self)
+        if MAX_THREADS > 1:
+            thread_manager = ModelVerificationManager(self)
 
-        try:
-            (model, composition,
-             spec, contract_list) = thread_manager.synthesize(size_constraints)
-        except NotSynthesizableError:
-            raise
-        else:
-            LOG.debug(model)
-            for c in contract_list:
-                LOG.debug(c)
-            LOG.info(self.property_contract)
-            LOG.debug(composition)
-            return model, composition, spec, contract_list
-
-        #return model, composition, spec, contract_list
-
-        while True:
             try:
-                model = self.propose_candidate()
-            except NotSynthesizableError as err:
-                if size < self.num_out:
-                    LOG.debug('Synthesis for size %d failed. Increasing number of components...', size)
-                    size = size + 1
-                    self.solver.pop()
-                    self.solver.push()
-                    self.solver.add(size_constraints[size])
-                else:
-                    raise err
+                (model, composition,
+                 spec, contract_list) = thread_manager.synthesize(size_constraints)
+            except NotSynthesizableError:
+                raise
             else:
+                LOG.debug(model)
+                for c in contract_list:
+                    LOG.debug(c)
+                LOG.info(self.property_contract)
+                LOG.debug(composition)
+                return model, composition, spec, contract_list
+
+            #return model, composition, spec, contract_list
+        else:
+            while True:
                 try:
-                    composition, spec, contract_list = self.verify_candidate(model)
+                    model = self.propose_candidate()
                 except NotSynthesizableError as err:
-                    LOG.debug("candidate not valid")
+                    if size < self.num_out:
+                        LOG.debug('Synthesis for size %d failed. Increasing number of components...', size)
+                        size = size + 1
+                        self.solver.pop()
+                        self.solver.push()
+                        self.solver.add(size_constraints[size])
+                    else:
+                        raise err
                 else:
-                    LOG.debug(model)
-                    for c in contract_list:
-                        LOG.debug(c)
-                    LOG.info(self.property_contract)
-                    LOG.debug(composition)
-                    return model, composition, spec, contract_list
+                    try:
+                        composition, spec, contract_list = self.verify_candidate(model)
+                    except NotSynthesizableError as err:
+                        LOG.debug("candidate not valid")
+                    else:
+                        LOG.debug(model)
+                        for c in contract_list:
+                            LOG.debug(c)
+                        LOG.info(self.property_contract)
+                        LOG.debug(composition)
+                        return model, composition, spec, contract_list
 
 
     def propose_candidate(self):
@@ -1248,7 +1249,8 @@ class Z3Interface(object):
             #LOG.debug('exclude')
             #LOG.debug(z3.Not(self.connected_ports==model[self.connected_ports]))
             #self.solver.add(z3.Not(self.connected_ports==model[self.connected_ports]))
-            self.reject_candidate(model, failed_spec)
+            #self.reject_candidate(model, failed_spec)
+            self.reject_candidate(model)
 
             #then check for consistency
             #self.solver.add(self.check_for_consistency(model, contract_inst, connected_spec))

@@ -11,7 +11,7 @@ from Queue import Queue, Empty
 import pycox.z3_interface
 #import multiprocessing
 
-MAX_THREADS = 8
+MAX_THREADS = 7
 
 #NotSynthesizableError = z3_interface.NotSynthesizableError
 

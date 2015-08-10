@@ -1160,11 +1160,11 @@ class Z3Interface(object):
             except NotSynthesizableError:
                 raise
             else:
-                LOG.debug(model)
+                LOG.info(model)
                 for c in contract_list:
                     LOG.debug(c)
                 LOG.info(self.property_contract)
-                LOG.debug(composition)
+                LOG.info(composition)
                 return model, composition, spec, contract_list
 
             #return model, composition, spec, contract_list
@@ -1187,11 +1187,11 @@ class Z3Interface(object):
                     except NotSynthesizableError as err:
                         LOG.debug("candidate not valid")
                     else:
-                        LOG.debug(model)
+                        LOG.info(model)
                         for c in contract_list:
                             LOG.debug(c)
                         LOG.info(self.property_contract)
-                        LOG.debug(composition)
+                        LOG.info(composition)
                         return model, composition, spec, contract_list
 
 

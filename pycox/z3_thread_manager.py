@@ -60,13 +60,13 @@ class ModelVerificationManager(object):
 
         return
 
-    def synthesize(self, size_constraints):
+    def synthesize(self, size_constraints, initial_size):
         '''
         picks candidates and generates threads
         '''
         #testing without size constraints
         #size = 1
-        size = self.z3_interface.num_out
+        size = initial_size
 
         while True:
             try:

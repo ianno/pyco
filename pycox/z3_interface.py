@@ -1092,8 +1092,6 @@ class Z3Interface(object):
 
         self.specification_list = property_contracts
 
-        size = self.num_out
-
         #let's pick a root
         #we assume all the specs have same interface
         property_contract = self.specification_list[0]
@@ -1101,6 +1099,7 @@ class Z3Interface(object):
         self.initiliaze_solver(property_contract)
 
         max_components = len(property_contract.output_ports_dict)
+
 
         #property model has to be fully connected - always true
         #self.solver.add(self.fully_connected(self.property_model))
@@ -1137,8 +1136,11 @@ class Z3Interface(object):
         #push size constraint
         #when popping, it is ok losing the counterexamples
         #for a given size. (it does not apply to greater sizes)
+
+        #initial_size = 1
+        initial_size = self.num_out
         #self.solver.push()
-        #self.solver.add(size_constraints[size])
+        #self.solver.add(size_constraints[initial_size])
 
         #LOG.debug(self.lib_model.index)
         #LOG.debug(self.lib_model.models)
@@ -1150,13 +1152,13 @@ class Z3Interface(object):
         #LOG.debug(self.lib_model.models_in_by_contracts())
         #LOG.debug(self.solver.assertions())
 
-
+        size = initial_size
         if MAX_THREADS > 1:
             thread_manager = ModelVerificationManager(self)
 
             try:
                 (model, composition,
-                 spec, contract_list) = thread_manager.synthesize(size_constraints)
+                 spec, contract_list) = thread_manager.synthesize(size_constraints, size)
             except NotSynthesizableError:
                 raise
             else:

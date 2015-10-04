@@ -44,6 +44,9 @@ class ModelVerificationManager(object):
         self.pool_lock = multiprocessing.RLock()
         self.terminate_event = multiprocessing.Event()
         self.result_queue = multiprocessing.Queue()
+        self.fail_queue = multiprocessing.Queue()
+
+        self.model_dict = {}
 
     def set_successful_candidate(self, model, composition, connected_spec, contract_inst):
         '''
@@ -93,11 +96,17 @@ class ModelVerificationManager(object):
                     #we are done. kill all running threads and exit
                     return self.terminate()
 
+                #else remove not successful models
+                while not self.fail_queue.empty():
+                    pid = self.fail_queue.get_nowait()
+                    self.model_dict.pop(pid)
+
                 #new refinement checker
                 thread = RefinementChecker(model, self, self.found_refinement)
                 #go
                 thread.start()
                 with self.pool_lock:
+                    self.model_dict[thread.pid] = model
                     self.thread_pool.add(thread)
 
                 #now reject the model, to get a new candidate
@@ -113,7 +122,9 @@ class ModelVerificationManager(object):
         close up nicely
         '''
         LOG.debug('terminating')
-        self.model = self.result_queue.get()
+        pid = self.result_queue.get()
+
+        self.model = self.model_dict[pid]
 
         #rebuild composition
         spec = self.z3_interface.specification_list[0]
@@ -188,12 +199,10 @@ class RefinementChecker(multiprocessing.Process):
             self.check_all_specs_threadsafe(self.model, z3_lock=self.z3_lock)
 
         if state:
-            #self.manager.result_queue.put([self.model, composition,
-            #                                      connected_spec, contract_inst])
-            self.manager.result_queue.put(self.model)
+            self.manager.result_queue.put(self.pid)
             self.found_event.set()
-            #self.manager.set_successful_candidate(self.model, composition,
-            #                                      connected_spec, contract_inst)
+        else:
+            self.manager.fail_queue.put(self.pid)
         #else:
         #    #check for consistency
         #    LOG.debug('pre consistency')

@@ -6,10 +6,11 @@ Author: Antonio Iannopollo
 '''
 
 from pycox import LOG
-import threading
-from Queue import Queue, Empty
+#import threading
+#from Queue import Queue, Empty
+from Queue import Empty
 import pycox.z3_interface
-#import multiprocessing
+import multiprocessing
 
 MAX_THREADS = 7
 
@@ -27,21 +28,22 @@ class ModelVerificationManager(object):
 
         self.solver = z3_interface.solver
         self.z3_interface = z3_interface
-        self.semaphore = threading.Semaphore(MAX_THREADS)
-        self.found_refinement = threading.Event()
+        self.semaphore = multiprocessing.Semaphore(MAX_THREADS)
+        self.found_refinement = multiprocessing.Event()
 
         self.composition = None
         self.connected_spec = None
         self.contract_inst = None
         self.model = None
 
-        self.solution_lock = threading.Lock()
-        self.z3_lock = threading.Lock()
-        self.constraint_queue = Queue()
+        self.solution_lock = multiprocessing.Lock()
+        self.z3_lock = multiprocessing.Lock()
+        self.constraint_queue = multiprocessing.Queue()
 
         self.thread_pool = set()
-        self.pool_lock = threading.RLock()
-        self.terminate_event = threading.Event()
+        self.pool_lock = multiprocessing.RLock()
+        self.terminate_event = multiprocessing.Event()
+        self.result_queue = multiprocessing.Queue()
 
     def set_successful_candidate(self, model, composition, connected_spec, contract_inst):
         '''
@@ -111,6 +113,13 @@ class ModelVerificationManager(object):
         close up nicely
         '''
         LOG.debug('terminating')
+        self.model = self.result_queue.get()
+
+        #rebuild composition
+        spec = self.z3_interface.specification_list[0]
+        with self.z3_lock:
+            self.composition, self.connected_spec, self.contract_inst = \
+                    self.z3_interface.build_composition_from_model(self.model, spec, complete_model=True)
         #wait for all the threads to stop
         with self.pool_lock:
             self.terminate_event.set()
@@ -124,7 +133,7 @@ class ModelVerificationManager(object):
             raise pycox.z3_interface.NotSynthesizableError()
 
 
-class RefinementChecker(threading.Thread):
+class RefinementChecker(multiprocessing.Process):
     '''
     this thread executes a refinement checks and dies
     '''
@@ -138,7 +147,7 @@ class RefinementChecker(threading.Thread):
         self.found_event = found_event
         self.manager = manager
         self.z3_lock = manager.z3_lock
-        self.result_queue = Queue()
+        #self.result_queue = multiprocessing.Queue()
 
         super(RefinementChecker, self).__init__()
 
@@ -179,9 +188,12 @@ class RefinementChecker(threading.Thread):
             self.check_all_specs_threadsafe(self.model, z3_lock=self.z3_lock)
 
         if state:
+            #self.manager.result_queue.put([self.model, composition,
+            #                                      connected_spec, contract_inst])
+            self.manager.result_queue.put(self.model)
             self.found_event.set()
-            self.manager.set_successful_candidate(self.model, composition,
-                                                  connected_spec, contract_inst)
+            #self.manager.set_successful_candidate(self.model, composition,
+            #                                      connected_spec, contract_inst)
         #else:
         #    #check for consistency
         #    LOG.debug('pre consistency')

@@ -740,7 +740,7 @@ class Z3Interface(object):
 
         self.solver.add(constraints)
 
-    def inputs_from_selected(self):
+    def _inputs_from_selected(self):
         '''
         inputs only to non-zero ports
         '''
@@ -1120,7 +1120,7 @@ class Z3Interface(object):
         #_self.spec_in_to_in()
         #_self.spec_inputs_no_feedback()
         #self.lib_inputs_no_feedback_if_assumption()
-        self.inputs_from_selected()
+        #self._inputs_from_selected()
         self.lib_chosen_not_zeros()
         self.lib_to_outputs_or_spec_in()
         self.lib_chosen_to_chosen()
@@ -1165,7 +1165,7 @@ class Z3Interface(object):
                 LOG.info(model)
                 for c in contract_list:
                     LOG.debug(c)
-                LOG.info(self.property_contract)
+                LOG.info(spec)
                 LOG.info(composition)
                 return model, composition, spec, contract_list
 

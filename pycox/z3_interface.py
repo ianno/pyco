@@ -1153,7 +1153,7 @@ class Z3Interface(object):
         #LOG.debug(self.solver.assertions())
 
         size = initial_size
-        if MAX_THREADS > 1:
+        if MAX_THREADS >= 1:
             thread_manager = ModelVerificationManager(self)
 
             try:
@@ -1706,4 +1706,3 @@ class NotSynthesizableError(Exception):
 
 #instance a public interface
 #Z3 = Z3Interface()
-

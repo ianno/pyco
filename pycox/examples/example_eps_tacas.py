@@ -563,5 +563,3 @@ class DCLeftD(Contract):
                      !fail_r2'''
 
     GUARANTEES = 'G(!(fail_r1 & fail_r2) -> c9)'
-
-

@@ -86,7 +86,7 @@ class ModelVerificationManager(object):
                         self.solver.push()
                         self.solver.add(size_constraints[size])
                 else:
-                    raise err
+                    return self.terminate()
             else:
                 #acquire semaphore
                 self.semaphore.acquire()
@@ -132,6 +132,7 @@ class ModelVerificationManager(object):
             self.composition, self.connected_spec, self.contract_inst = \
                     self.z3_interface.build_composition_from_model(self.model, spec, complete_model=True)
         #wait for all the threads to stop
+
         with self.pool_lock:
             self.terminate_event.set()
 

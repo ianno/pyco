@@ -697,9 +697,12 @@ class Z3Interface(object):
 
         #self.solver.reset()
 
-        #the following 2 lines enable 1step unrolling of formula
-        unroll = self.lib_model.get_unrolled_equiv(self.specification_list)
-        self.solver.add(unroll)
+        # #the following 2 lines enable 1step unrolling of formula
+        # #keep it disabled. it seems faster, and more efficient, without it.
+        # #probably because of the size of the formula.
+        # #(tested with 200 components (cav 9 spec example, redundancy set to 20))
+        # unroll = self.lib_model.get_unrolled_equiv(self.specification_list)
+        # self.solver.add(unroll)
 
         self.full_spec_out()
         self.lib_full_chosen_output()

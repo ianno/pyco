@@ -13,426 +13,10 @@ import types
 from pycox.contract import CompositionMapping, RefinementMapping
 from time import time
 from pycox.z3_thread_manager import ModelVerificationManager, MAX_THREADS
+from pycox.z3_library_conversion import Z3Library
 
 #LOG = logging.getLogger()
 LOG.debug('in z3_interface')
-
-MAX_REDUNDANCY = 2
-
-class Z3Library(object):
-    '''
-    maps library to a set of integers
-    '''
-
-    def __init__(self, library, spec):
-        '''
-        associate library and create models.
-        We need the spec, too, because we need to determine
-        the number of replicate components we need.
-        TODO
-        There is a problem with the size of the library, though...
-        '''
-        self.library = library
-        self.models = []
-        self.ports = []
-        self.index = {}
-        self.model_index = {}
-        self.model_in_index = {}
-        self.model_out_index = {}
-        self.contract_index = {}
-        self.out_models = []
-        self.out_ports = []
-        self.out_index = {}
-        self.out_contract_index = {}
-        self.in_models = []
-        self.in_ports = []
-        self.in_index = {}
-        self.in_contract_index = {}
-        self.model_levels = {}
-        self.model_contracts = {}
-        self.contracts = set()
-        self.contract_used_by_models = {}
-        self.contract_use_flags = []
-        self.reverse_flag = {}
-
-        self.spec = spec
-        self.max_components = min([MAX_REDUNDANCY, len(spec.output_ports_dict)])
-
-        for level in range(0, self.max_components):
-            self.contract_index[level] = {}
-            self.in_contract_index[level] = {}
-            self.out_contract_index[level] = {}
-            self.index[level] = {}
-            self.in_index[level] = {}
-            self.out_index[level] = {}
-
-            for component in self.library.components:
-                contract = component.contract
-                self.contracts.add(contract)
-                self.contract_index[level][contract] = []
-                self.in_contract_index[level][contract] = []
-                self.out_contract_index[level][contract] = []
-
-                c_flag = Int('%s-%d' % (contract.base_name, level))
-                self.contract_use_flags.append(c_flag)
-                self.reverse_flag[c_flag.get_id()] = []
-
-                for port in contract.input_ports_dict.values():
-                    model = z3.Int('%d-%s' % (level, port.unique_name))
-                    self.models.append(model)
-                    self.in_models.append(model)
-                    self.ports.append(port)
-                    self.in_ports.append(port)
-                    self.model_levels[model.get_id()] = level
-                    self.model_contracts[model.get_id()] = contract
-
-                    #contract_indexing
-                    self.contract_used_by_models[len(self.models) - 1] = c_flag
-                    #self.reverse_flag[c_flag.get_id()].append(len(self.models) -1)
-
-                    #reverse lookup
-                    self.model_index[model.get_id()] = len(self.models) - 1
-                    self.model_in_index[model.get_id()] = len(self.models) - 1
-                    self.index[level][port] = len(self.models) - 1
-                    self.in_index[level][port] = len(self.in_models) - 1
-
-                    self.contract_index[level][contract].append(len(self.models) - 1)
-                    self.in_contract_index[level][contract].append(len(self.in_models) - 1)
-
-                for port in contract.output_ports_dict.values():
-                    model = z3.Int('%d-%s' % (level, port.unique_name))
-                    self.models.append(model)
-                    self.out_models.append(model)
-                    self.ports.append(port)
-                    self.out_ports.append(port)
-                    self.model_levels[model.get_id()] = level
-                    self.model_contracts[model.get_id()] = contract
-
-                    #contract_indexing
-                    self.contract_used_by_models[len(self.models) - 1] = c_flag
-                    self.reverse_flag[c_flag.get_id()].append(len(self.models) -1)
-
-                    #reverse lookup
-                    self.model_index[model.get_id()] = len(self.models) - 1
-                    self.model_out_index[model.get_id()] = len(self.models) - 1
-                    self.index[level][port] = len(self.models) - 1
-                    self.out_index[level][port] = len(self.out_models) - 1
-
-                    self.contract_index[level][contract].append(len(self.models) - 1)
-                    self.out_contract_index[level][contract].append(len(self.out_models) - 1)
-
-
-
-        LOG.debug({i:self.models[i] for i in range(0,self.max_index)})
-
-
-    def include_spec_inputs(self, spec_contract):
-        '''
-        assign an id also to spec_ids
-        '''
-
-        self.spec_contract = spec_contract
-        self.spec_map = {}
-        self.spec_by_index_map = {}
-        m_index = len(self.models)
-
-        for name, port in spec_contract.input_ports_dict.items():
-            self.spec_map[name] = m_index
-            self.spec_by_index_map[m_index] = name
-
-            m_index = m_index + 1
-
-        self.specs_at = len(self.models)
-        self.positions = m_index
-
-
-    @property
-    def max_index(self):
-        '''
-        get the highest index
-        '''
-        return len(self.models)
-
-    @property
-    def max_in_index(self):
-        '''
-        returns the highest input index
-        '''
-        return len(self.in_models)
-
-    @property
-    def max_out_index(self):
-        '''
-        returns the highest input index
-        '''
-        return len(self.out_models)
-
-    @property
-    def max_single_level_index(self):
-        '''
-        returns the max index not considering levels
-        '''
-        return len(self.models)/(self.max_components)
-
-    @property
-    def max_single_level_in_index(self):
-        '''
-        returns the max index not considering levels
-        '''
-
-        return len(self.in_models)/(self.max_components)
-
-    @property
-    def max_single_level_out_index(self):
-        '''
-        returns the max index not considering levels
-        '''
-
-        return len(self.out_models)/(self.max_components)
-
-    def port_by_index(self, index):
-        '''
-        returns the port associated to the index
-        '''
-        return self.ports[index]
-
-    def in_port_by_index(self, index):
-        '''
-        returns the port associated to the index
-        '''
-        return self.in_ports[index]
-
-    def out_port_by_index(self, index):
-        '''
-        returns the port associated to the index
-        '''
-        return self.out_ports[index]
-
-    def model_by_index(self, index):
-        '''
-        returns the model associated to the index
-        '''
-        return self.models[index]
-
-    def in_model_by_index(self, index):
-        '''
-        returns the model associated to the index
-        '''
-        return self.in_models[index]
-
-    def out_model_by_index(self, index):
-        '''
-        returns the model associated to the index
-        '''
-        return self.out_models[index]
-
-    def contract_indices(self, contract):
-        '''
-        return all the indices for a contract
-        '''
-        return [self.contract_index[level][contract]
-                for level in range(0, self.max_components)]
-
-    def contract_in_indices(self, contract):
-        '''
-        return all the input indices for a contract
-        '''
-        return [self.in_contract_index[level][contract]
-                for level in range(0, self.max_components)]
-
-    def contract_out_indices(self, contract):
-        '''
-        return all the output indices for a contract
-        '''
-        return [self.out_contract_index[level][contract]
-                for level in range(0, self.max_components)]
-
-    def port_by_model(self, model):
-        '''
-        returns the port given a model
-        '''
-        return self.ports[self.model_index[model.get_id()]]
-
-    def model_by_port(self, port):
-        '''
-        returns the model given a port
-        '''
-        return [self.models[self.index[level][port]]
-                for level in range(0, self.max_components)]
-
-    def in_model_by_port(self, port):
-        '''
-        returns the model given a port
-        '''
-        return [self.in_models[self.in_index[level][port]]
-                for level in range(0, self.max_components)]
-
-    def out_model_by_port(self, port):
-        '''
-        returns the model given a port
-        '''
-        return [self.out_models[self.out_index[level][port]]
-                for level in range(0, self.max_components)]
-
-    def contract_models(self, contract):
-        '''
-        returns all models related to a contract
-        '''
-        return [[self.models[index]
-                 for index in self.contract_index[level][contract]]
-                for level in range(0, self.max_components)]
-
-    def contract_in_models(self, contract):
-        '''
-        returns all models related to a contract
-        '''
-        return [[self.in_models[index]
-                 for index in self.in_contract_index[level][contract]]
-                for level in range(0, self.max_components)]
-
-    def contract_out_models(self, contract):
-        '''
-        returns all models related to a contract
-        '''
-        return [[self.out_models[index]
-                 for index in self.out_contract_index[level][contract]]
-                for level in range(0, self.max_components)]
-
-    def all_other_models(self, model):
-        '''
-        returns all the models minus the one given as param
-        '''
-
-        return [self.models[index] for index in range(0, self.max_index)
-                if index != self.model_index[model.get_id()]]
-
-    def all_other_in_models(self, model):
-        '''
-        returns all the models minus the one given as param
-        '''
-
-        return [other for other in self.in_models
-                if model.get_id() != other.get_id()]
-
-    def related_models(self, model):
-        '''
-        Given a model, finds all the models related to the same contract
-        '''
-        #infer level
-        level = self.model_levels[model.get_id()]
-        #get contract
-        contract = self.model_contracts[model.get_id()]
-
-        return [self.models[index]
-                 for index in self.contract_index[level][contract]]
-
-    def related_in_models(self, model):
-        '''
-        Given a model, finds all the models related to the same contract
-        '''
-        #infer level
-        level = self.model_levels[model.get_id()]
-        #get contract
-        contract = self.model_contracts[model.get_id()]
-
-        return [self.in_models[index]
-                 for index in self.in_contract_index[level][contract]]
-
-    def related_out_models(self, model):
-        '''
-        Given a model, finds all the models related to the same contract
-        '''
-        #infer level
-        level = self.model_levels[model.get_id()]
-        #get contract
-        contract = self.model_contracts[model.get_id()]
-
-        return [self.out_models[index]
-                 for index in self.out_contract_index[level][contract]]
-
-    def models_by_contracts(self):
-        '''
-        returns all the models grouped by contracts
-        '''
-        return [models
-                for contract in self.contracts
-                for models in self.contract_models(contract)]
-
-    def models_out_by_contracts(self):
-        '''
-        returns all the models grouped by contracts
-        '''
-        return [models
-                for contract in self.contracts
-                for models in self.contract_out_models(contract)]
-
-    def models_in_by_contracts(self):
-        '''
-        returns all the models grouped by contracts
-        '''
-        return [models
-                for contract in self.contracts
-                for models in self.contract_in_models(contract)]
-
-    def index_by_model(self, model):
-        '''
-        returns the index of the model
-        '''
-        return self.model_index[model.get_id()]
-
-
-    def contract_by_model(self, model):
-        '''
-        returns contract and level associate to a model
-        '''
-        #infer level
-        level = self.model_levels[model.get_id()]
-        #get contract
-        contract = self.model_contracts[model.get_id()]
-
-        return (level, contract)
-
-
-    def contract_copies_by_models(self, model_list):
-        '''
-        makes copies of contracts considering models
-        and levels, and put them in a dictionary
-        '''
-        levels = [{} for level in range(0, self.max_components)]
-        model_map_contract = {}
-        contract_map = {}
-
-        for model in model_list:
-            level, contract = self.contract_by_model(model)
-            if contract not in levels[level]:
-                levels[level][contract] = contract.copy()
-
-            model_map_contract[model.get_id()] = levels[level][contract]
-            contract_map[(level, contract)] = levels[level][contract]
-
-
-        return model_map_contract, contract_map
-
-    def index_shift(self, index, shift_lev):
-        '''
-        returns the index shifted by shift_lev position.
-        works as a circular buffer
-        '''
-        if index == -1:
-            return -1
-
-        return (index + self.max_single_level_index * shift_lev) % self.max_index
-
-    def index_in_shift(self, index, shift_lev):
-        '''
-        returns the index shifted by shift_lev position.
-        works as a circular buffer
-        '''
-        if index == -1:
-            return -1
-
-        return (index + self.max_single_level_in_index * shift_lev) % self.max_in_index
-
 
 class Z3Interface(object):
     '''
@@ -1113,6 +697,10 @@ class Z3Interface(object):
 
         #self.solver.reset()
 
+        #the following 2 lines enable 1step unrolling of formula
+        unroll = self.lib_model.get_unrolled_equiv(self.specification_list)
+        self.solver.add(unroll)
+
         self.full_spec_out()
         self.lib_full_chosen_output()
         self.spec_out_to_out()
@@ -1202,9 +790,9 @@ class Z3Interface(object):
         generate a model
         '''
 
-        LOG.debug('start solving')
+        #LOG.debug('start solving')
         res = self.solver.check()
-        LOG.debug(res)
+        #LOG.debug(res)
         if res == sat:
             #LOG.debug(self.solver.model())
             #LOG.debug('func eval')
@@ -1409,6 +997,16 @@ class Z3Interface(object):
         reject a model and its equivalents
         '''
 
+        # #simple rejection
+        # rej = []
+        # for mod in self.lib_model.in_models:
+        #     rej.append(mod != model[mod])
+        #
+        # for mod in self.spec_out_dict.values():
+        #     rej.append(mod != model[mod])
+        # return Or(rej)
+
+
         c_sets = {}
 
        # #retrieve failed_spec used ports
@@ -1460,16 +1058,16 @@ class Z3Interface(object):
             s_pairs = c_sets[(level, contract)].values()
             mods = self.lib_model.contract_in_models(contract)
 
-            for l in range(0, self.lib_model.max_components):
+            for l in xrange(0, self.lib_model.max_components):
                 l_class = []
                 shift = self.lib_model.max_components - level + l
                 for pair in s_pairs:
                     l_class.append([pair[0] == self.lib_model.index_shift(pair[1], shift)])
 
-                for i in range(0, len(mods[l])):
+                for i in xrange(0, len(mods[l])):
                     m_class = []
                     if model[mods[level][i]].as_long() < self.lib_model.max_index:
-                        for l2 in range(0, self.lib_model.max_components):
+                        for l2 in xrange(0, self.lib_model.max_components):
                             shift = self.lib_model.max_components - level + l2
                             m_class.append(mods[l][i] ==
                                 self.lib_model.index_shift(model[mods[level][i]].as_long(), shift))
@@ -1509,13 +1107,6 @@ class Z3Interface(object):
                          for candidate in candidate_list]
 
         return constraints
-
-
-
-
-
-
-
 
 
     def check_for_consistency(self, model, candidates, contract_instances, spec_contract, z3_lock=None):

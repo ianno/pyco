@@ -122,7 +122,18 @@ class ModelVerificationManager(object):
         close up nicely
         '''
         LOG.debug('terminating')
-        pid = self.result_queue.get()
+        #pid = self.result_queue.get()
+
+        with self.pool_lock:
+            self.terminate_event.set()
+
+        for thread in self.thread_pool:
+            thread.join()
+
+        if self.found_refinement.is_set():
+            pid = self.result_queue.get()
+        else:
+            raise pycox.z3_interface.NotSynthesizableError()
 
         self.model = self.model_dict[pid]
 
@@ -133,16 +144,11 @@ class ModelVerificationManager(object):
                     self.z3_interface.build_composition_from_model(self.model, spec, complete_model=True)
         #wait for all the threads to stop
 
-        with self.pool_lock:
-            self.terminate_event.set()
 
-        for thread in self.thread_pool:
-            thread.join()
+        #for thread in self.thread_pool:
+        #    thread.join()
 
-        if self.found_refinement.is_set():
-            return (self.model, self.composition, self.connected_spec, self.contract_inst)
-        else:
-            raise pycox.z3_interface.NotSynthesizableError()
+        return (self.model, self.composition, self.connected_spec, self.contract_inst)
 
 
 class RefinementChecker(multiprocessing.Process):

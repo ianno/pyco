@@ -131,7 +131,10 @@ class ModelVerificationManager(object):
             thread.join()
 
         if self.found_refinement.is_set():
-            pid = self.result_queue.get()
+             pids = []
+             while not self.result_queue.empty():
+                 pids.append(self.result_queue.get())
+             pid = min(pids)
         else:
             raise pycox.z3_interface.NotSynthesizableError()
 

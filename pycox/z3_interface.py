@@ -1081,6 +1081,10 @@ class Z3Interface(object):
                 s_class.append(l_class)
             classes.append(s_class)
 
+
+        #size
+        
+
         rej_formula = Not(
                           And(
                               [Or(

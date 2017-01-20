@@ -54,109 +54,109 @@ class Z3Library(object):
     '''
 
 
-    def _contract_unrolled_formula(self, contract, level):
-        '''
-        associate a boolean formula to every component
-        '''
-        contract_vars = {'%d-%s' % (level, port.unique_name) :
-                    Bool('%d-%s' % (level, port.unique_name))
-                    for port in contract.ports_dict.values()}
-
-        #LOG.debug(contract)
-        #LOG.debug(contract_vars)
-
-        unrolled_assume_formula = contract.assume_formula.unroll_1step()
-        unrolled_guarantee_formula = contract.guarantee_formula.unroll_1step()
-
-        assumptions = convert_formula_to_z3(unrolled_assume_formula,
-         contract_vars, level)
-        guarantees = convert_formula_to_z3(unrolled_guarantee_formula,
-         contract_vars, level)
-
-        #LOG.debug(unrolled_assume_formula.generate())
-        #LOG.debug(assumptions)
-        #LOG.debug(unrolled_guarantee_formula.generate())
-        #LOG.debug(guarantees)
-
-        return (contract_vars, assumptions, guarantees)
-
-
-    def get_unrolled_equiv(self, specs):
-        '''
-        return the 1step-unrolled formula to satisfy
-        '''
-
-        part_guar = []
-        part_assm = []
-        all_vars = {}
-        for contract in self.unrolled_info:
-            for level in self.unrolled_info[contract]:
-                p1 = self.unrolled_info[contract][level]['cflag'] == 0
-                p2 = self.unrolled_info[contract][level]['unroll_guarantee']
-                part_guar.append(And(p1,p2))
-
-                p3 = self.unrolled_info[contract][level]['unroll_assume']
-                part_assm.append(And(p1, p3))
-
-                all_vars.update(self.unrolled_info[contract][level]['vars'])
-
-        big_guar = And(part_guar)
-        big_assm = Or(And(part_assm), Not(big_guar))
-
-        constraints = []
-        #unroll specs
-        for spec in specs:
-            bool_vars, spec_a, spec_g = self._contract_unrolled_formula(spec, 0)
-
-            a_impl = Implies(spec_a, big_assm)
-            g_impl = Implies(big_guar, spec_g)
-
-            constraints.append(And(a_impl, g_impl))
-
-            all_vars.update(bool_vars)
-
-        #LOG.debug(constraints[0])
-
-        #constraints on ports
-        for model in self.in_models:
-            port = self.port_by_model(model)
-            level = self.model_levels[model.get_id()]
-            var_name = '%d-%s' % (level, port.unique_name)
-            for index in range(0, self.max_index):
-                other_port = self.port_by_index(index)
-                other_model = self.models[index]
-                other_level = self.model_levels[other_model.get_id()]
-                other_var_name = '%d-%s' % (other_level, other_port.unique_name)
-                p1 = (model == index)
-                p2 = (all_vars[var_name] == all_vars[other_var_name])
-
-                conn_constr = Implies(p1, p2)
-                constraints.append(conn_constr)
-
-            #model to spec
-            for index in range(self.specs_at, self.positions):
-                other_port_name = self.spec_by_index_map[index]
-                other_port = self.spec.input_ports_dict[other_port_name]
-                other_var_name = '%d-%s' % (0, other_port.unique_name)
-                p1 = (model == index)
-                p2 = (all_vars[var_name] == all_vars[other_var_name])
-
-                conn_constr = Implies(p1, p2)
-                constraints.append(conn_constr)
-
-        #spec_outputs
-        for port in self.spec.output_ports_dict.values():
-            var_name = '%d-%s' % (0, port.unique_name)
-            for index in range(0, self.max_index):
-                other_port = self.port_by_index(index)
-                other_model = self.models[index]
-                other_level = self.model_levels[other_model.get_id()]
-                other_var_name = '%d-%s' % (other_level, other_port.unique_name)
-                p1 = (model == index)
-                p2 = (all_vars[var_name] == all_vars[other_var_name])
-
-
-        return constraints
+    # def _contract_unrolled_formula(self, contract, level):
+    #     '''
+    #     associate a boolean formula to every component
+    #     '''
+    #     contract_vars = {'%d-%s' % (level, port.unique_name) :
+    #                 Bool('%d-%s' % (level, port.unique_name))
+    #                 for port in contract.ports_dict.values()}
+    #
+    #     #LOG.debug(contract)
+    #     #LOG.debug(contract_vars)
+    #
+    #     unrolled_assume_formula = contract.assume_formula.unroll_1step()
+    #     unrolled_guarantee_formula = contract.guarantee_formula.unroll_1step()
+    #
+    #     assumptions = convert_formula_to_z3(unrolled_assume_formula,
+    #      contract_vars, level)
+    #     guarantees = convert_formula_to_z3(unrolled_guarantee_formula,
+    #      contract_vars, level)
+    #
+    #     #LOG.debug(unrolled_assume_formula.generate())
+    #     #LOG.debug(assumptions)
+    #     #LOG.debug(unrolled_guarantee_formula.generate())
+    #     #LOG.debug(guarantees)
+    #
+    #     return (contract_vars, assumptions, guarantees)
+    #
+    #
+    # def get_unrolled_equiv(self, specs):
+    #     '''
+    #     return the 1step-unrolled formula to satisfy
+    #     '''
+    #
+    #     part_guar = []
+    #     part_assm = []
+    #     all_vars = {}
+    #     for contract in self.unrolled_info:
+    #         for level in self.unrolled_info[contract]:
+    #             p1 = self.unrolled_info[contract][level]['cflag'] == 0
+    #             p2 = self.unrolled_info[contract][level]['unroll_guarantee']
+    #             part_guar.append(And(p1,p2))
+    #
+    #             p3 = self.unrolled_info[contract][level]['unroll_assume']
+    #             part_assm.append(And(p1, p3))
+    #
+    #             all_vars.update(self.unrolled_info[contract][level]['vars'])
+    #
+    #     big_guar = And(part_guar)
+    #     big_assm = Or(And(part_assm), Not(big_guar))
+    #
+    #     constraints = []
+    #     #unroll specs
+    #     for spec in specs:
+    #         bool_vars, spec_a, spec_g = self._contract_unrolled_formula(spec, 0)
+    #
+    #         a_impl = Implies(spec_a, big_assm)
+    #         g_impl = Implies(big_guar, spec_g)
+    #
+    #         constraints.append(And(a_impl, g_impl))
+    #
+    #         all_vars.update(bool_vars)
+    #
+    #     #LOG.debug(constraints[0])
+    #
+    #     #constraints on ports
+    #     for model in self.in_models:
+    #         port = self.port_by_model(model)
+    #         level = self.model_levels[model.get_id()]
+    #         var_name = '%d-%s' % (level, port.unique_name)
+    #         for index in range(0, self.max_index):
+    #             other_port = self.port_by_index(index)
+    #             other_model = self.models[index]
+    #             other_level = self.model_levels[other_model.get_id()]
+    #             other_var_name = '%d-%s' % (other_level, other_port.unique_name)
+    #             p1 = (model == index)
+    #             p2 = (all_vars[var_name] == all_vars[other_var_name])
+    #
+    #             conn_constr = Implies(p1, p2)
+    #             constraints.append(conn_constr)
+    #
+    #         #model to spec
+    #         for index in range(self.specs_at, self.positions):
+    #             other_port_name = self.spec_by_index_map[index]
+    #             other_port = self.spec.input_ports_dict[other_port_name]
+    #             other_var_name = '%d-%s' % (0, other_port.unique_name)
+    #             p1 = (model == index)
+    #             p2 = (all_vars[var_name] == all_vars[other_var_name])
+    #
+    #             conn_constr = Implies(p1, p2)
+    #             constraints.append(conn_constr)
+    #
+    #     #spec_outputs
+    #     for port in self.spec.output_ports_dict.values():
+    #         var_name = '%d-%s' % (0, port.unique_name)
+    #         for index in range(0, self.max_index):
+    #             other_port = self.port_by_index(index)
+    #             other_model = self.models[index]
+    #             other_level = self.model_levels[other_model.get_id()]
+    #             other_var_name = '%d-%s' % (other_level, other_port.unique_name)
+    #             p1 = (model == index)
+    #             p2 = (all_vars[var_name] == all_vars[other_var_name])
+    #
+    #
+    #     return constraints
 
 
 
@@ -217,18 +217,19 @@ class Z3Library(object):
                 self.contract_use_flags.append(c_flag)
                 self.reverse_flag[c_flag.get_id()] = []
 
-                (bool_vars, unr_a, unr_g) = self._contract_unrolled_formula(contract, level)
+                #START UNROLL COMMENT
+                #(bool_vars, unr_a, unr_g) = self._contract_unrolled_formula(contract, level)
 
-                if contract not in self.unrolled_info:
-                    self.unrolled_info[contract] = {}
-                if level not in self.unrolled_info[contract]:
-                    self.unrolled_info[contract][level] = {}
+                #if contract not in self.unrolled_info:
+                #    self.unrolled_info[contract] = {}
+                #if level not in self.unrolled_info[contract]:
+                #    self.unrolled_info[contract][level] = {}
 
-                self.unrolled_info[contract][level]['cflag'] = c_flag
-                self.unrolled_info[contract][level]['vars'] = bool_vars
-                self.unrolled_info[contract][level]['unroll_assume'] = unr_a
-                self.unrolled_info[contract][level]['unroll_guarantee'] = unr_g
-
+                #self.unrolled_info[contract][level]['cflag'] = c_flag
+                #self.unrolled_info[contract][level]['vars'] = bool_vars
+                #self.unrolled_info[contract][level]['unroll_assume'] = unr_a
+                #self.unrolled_info[contract][level]['unroll_guarantee'] = unr_g
+                #END UNROLL COMMENT
 
 
                 for port in contract.input_ports_dict.values():

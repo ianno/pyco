@@ -145,7 +145,8 @@ class Z3Interface(object):
         self.specification_list = sorted(self.specification_list, key=lambda x: len(self.spec_ports[x][0]))
         #LOG.debug(self.specification_list)
 
-        self.solver = Solver()
+        #self.solver = Solver()
+        self.solver = Goal()#Optimize()
 
         LOG.debug('ok')
         LOG.debug(self.lib_model)
@@ -213,6 +214,38 @@ class Z3Interface(object):
                                 for flag in self.lib_model.contract_use_flags]
 
         constraints += [Sum(self.lib_model.contract_use_flags) == n]
+
+        #LOG.debug(constraints)
+        #self.solver.add(constraints)
+        return constraints
+
+    def use_max_n_components(self, n):
+        '''
+        Force the solver to use n components for a candidate solution
+        '''
+
+        constraints = []
+
+        #limit the values
+        constraints += [Or(comp == 0, comp == 1) for comp in self.lib_model.contract_use_flags]
+
+        constraints += [Implies(flag == 1,
+                                Or([Or([spec == index
+                                          for index in self.lib_model.reverse_flag[flag.get_id()]]
+                                          )
+                                     for spec in self.spec_outs]))
+                                for flag in self.lib_model.contract_use_flags]
+
+
+        #zero otherwise
+        constraints += [Implies(flag == 0,
+                                And([And([spec != index
+                                          for index in self.lib_model.reverse_flag[flag.get_id()]]
+                                          )
+                                     for spec in self.spec_outs]))
+                                for flag in self.lib_model.contract_use_flags]
+
+        constraints += [Sum(self.lib_model.contract_use_flags) <= n]
 
         #LOG.debug(constraints)
         #self.solver.add(constraints)
@@ -694,6 +727,7 @@ class Z3Interface(object):
         #configure constraints for size
         size_constraints = {n: self.use_n_components(n) for n in range(1, self.num_out + 1)}
 
+        t = Tactic('simplify')
 
         #self.all_zero()
         LOG.debug(property_contract)
@@ -706,6 +740,8 @@ class Z3Interface(object):
         # #(tested with 200 components (cav 9 spec example, redundancy set to 20))
         # unroll = self.lib_model.get_unrolled_equiv(self.specification_list)
         # self.solver.add(unroll)
+
+        self.solver.add(self.use_max_n_components(limit))
 
         self.full_spec_out()
         #self.lib_full_chosen_output()
@@ -723,16 +759,23 @@ class Z3Interface(object):
         self.spec_process_out_types()
         self.lib_process_types()
         #self._compute_distinct_port_spec_constraints()
-	self.compute_distinct_port_lib_constraints()
-	self.compute_same_block_constraints()
+        self.compute_distinct_port_lib_constraints()
+        self.compute_same_block_constraints()
         #self._lib_distinct()
+
+        r = t.apply(self.solver)
+        solv = Optimize()
+        solv.add(r.as_expr())
+        self.solver = solv
+
+        self.obj = self.solver.minimize(Sum(self.lib_model.contract_use_flags))
 
         #push size constraint
         #when popping, it is ok losing the counterexamples
         #for a given size. (it does not apply to greater sizes)
 
         #initial_size = 1
-        initial_size = self.num_out
+        initial_size = limit
         #self.solver.push()
         #self.solver.add(size_constraints[initial_size])
 
@@ -798,6 +841,7 @@ class Z3Interface(object):
 
         #LOG.debug('start solving')
         res = self.solver.check()
+        LOG.debug(self.solver.upper(self.obj))
         #LOG.debug(res)
         if res == sat:
             #LOG.debug(self.solver.model())

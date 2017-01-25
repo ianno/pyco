@@ -15,7 +15,7 @@ class SynthesisInterface(object):
     Interface for synthesis
     '''
 
-    def __init__(self, spec_contract, library):
+    def __init__(self, spec_contract, library, limit=None):
         '''
         constructor
         '''
@@ -45,11 +45,11 @@ class SynthesisInterface(object):
         for (port_1, port_2) in itertools.combinations(port_list, 2):
            self.distinct_map.add((port_1.base_name, port_2.base_name))
 
-    def synthesize(self):
+    def synthesize(self, limit=None):
         '''
         call for synthesis
         '''
 
-        self.solver_interface.synthesize(self.spec_contract,
+        self.solver_interface.synthesize(self.spec_contract, limit=limit,
                                          same_block_constraints=self.same_block_pairs,
                                          distinct_mapping_constraints=self.distinct_map)

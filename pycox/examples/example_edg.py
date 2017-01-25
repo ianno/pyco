@@ -56,6 +56,17 @@ class IOPin(BaseType):
     '''
     pass
 
+class Device(BaseType):
+    '''
+    used to describe state of simple devices like LEDs, etc.
+    '''
+    pass
+
+class LEDDevice(Device):
+    '''
+    used to describe state of simple devices like LEDs, etc.
+    '''
+    pass
 
 class GND(BaseType):
     '''
@@ -77,35 +88,72 @@ class SDA(I2C):
     '''
     pass
 
+
 class SCL(I2C):
     '''
     Serial Clock I2C line
     '''
     pass
 
+class SCLSlave(SCL):
+    '''
+    Serial Clock I2C slave line
+    '''
+    pass
+
+class SCLMaster(SCL):
+    '''
+    Serial Clock I2C master line
+    '''
+    pass
+
 #Now let's include some components
-class AbstractGenerator(Contract):
+class LED(Contract):
     '''
-    generator OK at beginning. Once broken stays broken.
-    if fails eventually close the contactor
+    Basic LED
     '''
-    INPUT_PORTS = [('fail', GeneratorT)]
-    OUTPUT_PORTS = [('c', ACGenContactorT)]
-    ASSUMPTIONS = '!fail & G(fail -> X fail)'
-    GUARANTEES = 'G(fail -> F ! c)'
+    INPUT_PORTS = [('gnd', GND), ('pwr', Voltage5V)]
+    OUTPUT_PORTS = [('led', LEDDevice)]
+    ASSUMPTIONS = 'true'
+    GUARANTEES = 'true'
+
+class DoubleLED(Contract):
+    '''
+    Basic LED
+    '''
+    INPUT_PORTS = [('gnd', GND), ('pwr_l', Voltage5V), ('pwr_r', Voltage5V)]
+    OUTPUT_PORTS = [('led_l', LEDDevice), ('led_r', LEDDevice)]
+    ASSUMPTIONS = 'true'
+    GUARANTEES = 'true'
+
+class Microcontroller(Contract):
+    '''
+    Basic micro
+    '''
+    INPUT_PORTS = [('gnd', GND), ('pwr', Voltage5V)]
+    OUTPUT_PORTS = [('io', IOPin)]
+    ASSUMPTIONS = 'true'
+    GUARANTEES = 'true'
 
 
+class PowerAdapter5V(Contract):
+    '''
+    Basic micro
+    '''
+    INPUT_PORTS = []
+    OUTPUT_PORTS = [('gnd', GND), ('pwr', Voltage5V)]
+    ASSUMPTIONS = 'true'
+    GUARANTEES = 'true'
 
 #now add specs
 
 #case 0: 1gen-2contactors -> 2 ports
-class GenIsolation0(Contract):
+class SimpleLED(Contract):
     '''
     generator 1 is eventually disconnected if faulty.
     '''
-    INPUT_PORTS = [('fail1', GeneratorT)]
-    OUTPUT_PORTS = [('c1', ACContactorT)]
-    ASSUMPTIONS = '''!fail1  &
-                     G(fail1 -> Xfail1)'''
+    INPUT_PORTS = []
+    OUTPUT_PORTS = [('led', LEDDevice), ('dummy', BaseType), ('dummy1', BaseType), ('dummy2', BaseType), ('dummy3', BaseType)]
+    ASSUMPTIONS = '''true'''
     #ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) '''
-    GUARANTEES = 'G(fail1 -> F!c1)'
+    GUARANTEES = 'true'

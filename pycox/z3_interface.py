@@ -89,7 +89,7 @@ class Z3Interface(object):
 
 
 
-    def initiliaze_solver(self, property_contract):
+    def initiliaze_solver(self, property_contract, limit):
         '''
         Create environment and models from library
         '''
@@ -110,10 +110,10 @@ class Z3Interface(object):
         #self.property_model = self.create_contract_model(property_contract, 0, is_library_elem=False)
         self.property_contract = property_contract
 
-        self.create_z3_environment(self.property_contract)
+        self.create_z3_environment(self.property_contract, limit)
 
 
-    def create_z3_environment(self, spec):
+    def create_z3_environment(self, spec, limit):
         '''
         Creates basic types for the current library instance
         '''
@@ -131,7 +131,7 @@ class Z3Interface(object):
 
         self.num_out = len(self.spec_outs)
 
-        self.lib_model = Z3Library(self.library, spec)
+        self.lib_model = Z3Library(self.library, spec, limit=limit)
         self.lib_model.include_spec_inputs(spec)
 
         #LOG.debug(self.lib_model.models_by_contracts())
@@ -230,7 +230,7 @@ class Z3Interface(object):
         constraints = []
         constraints += [port > -1 for port in self.spec_outs]
         constraints += [port < self.lib_model.max_index for port in self.spec_outs]
-        constraints += [Distinct(self.spec_outs)]
+        #constraints += [Distinct(self.spec_outs)]
 
         self.solver.add(constraints)
 
@@ -537,7 +537,7 @@ class Z3Interface(object):
                         constraints.append(self.lib_model.model_by_port(port)[lev] != self.lib_model.spec_map[s_name])
 
 
-        #LOG.debug(constraints)
+        LOG.debug(constraints)
         self.solver.add(constraints)
 
     def lib_process_types(self):
@@ -574,7 +574,7 @@ class Z3Interface(object):
                             in_mod = self.lib_model.in_models[ind]
                             constraints.append(in_mod != self.lib_model.index[lev][out_port])
 
-        #LOG.debug(constraints)
+        LOG.debug(constraints)
         self.solver.add(constraints)
 
 
@@ -664,8 +664,9 @@ class Z3Interface(object):
         #LOG.debug(constraints)
         self.solver.add(constraints)
 
-    def synthesize(self, property_contracts, same_block_constraints,
-                    distinct_mapping_constraints):
+    def synthesize(self, property_contracts, limit=None,
+                    same_block_constraints=None,
+                    distinct_mapping_constraints=None):
         '''
         perform synthesis process
         '''
@@ -680,10 +681,12 @@ class Z3Interface(object):
         #we assume all the specs have same interface
         property_contract = self.specification_list[0]
 
-        self.initiliaze_solver(property_contract)
+        if limit is None:
+            max_components = len(property_contract.output_ports_dict)
+        else:
+            max_components = limit
 
-        max_components = len(property_contract.output_ports_dict)
-
+        self.initiliaze_solver(property_contract, limit=max_components)
 
         #property model has to be fully connected - always true
         #self.solver.add(self.fully_connected(self.property_model))
@@ -705,7 +708,7 @@ class Z3Interface(object):
         # self.solver.add(unroll)
 
         self.full_spec_out()
-        self.lib_full_chosen_output()
+        #self.lib_full_chosen_output()
         self.spec_out_to_out()
         self.full_spec_in()
         #_self.spec_in_to_in()
@@ -1083,7 +1086,7 @@ class Z3Interface(object):
 
 
         #size
-        
+
 
         rej_formula = Not(
                           And(

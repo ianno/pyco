@@ -162,7 +162,7 @@ class Z3Library(object):
 
 
 
-    def __init__(self, library, spec):
+    def __init__(self, library, spec, limit=None):
         '''
         associate library and create models.
         We need the spec, too, because we need to determine
@@ -196,7 +196,11 @@ class Z3Library(object):
         self.unrolled_info = {}
 
         self.spec = spec
-        self.max_components = min([MAX_REDUNDANCY, len(spec.output_ports_dict)])
+
+        if limit is None:
+            limit = len(spec.output_ports_dict)
+        LOG.debug(limit)
+        self.max_components = min([MAX_REDUNDANCY, limit])
 
         for level in range(0, self.max_components):
             self.contract_index[level] = {}

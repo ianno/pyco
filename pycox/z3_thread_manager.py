@@ -78,7 +78,7 @@ class ModelVerificationManager(object):
                 with self.z3_lock:
                     model = self.z3_interface.propose_candidate()
             except pycox.z3_interface.NotSynthesizableError as err:
-                if size < self.z3_interface.num_out:
+                if size < self.z3_interface.max_components:
                     LOG.debug('Synthesis for size %d failed. Increasing number of components...', size)
                     size = size + 1
                     with self.z3_lock:

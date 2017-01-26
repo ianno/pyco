@@ -16,7 +16,8 @@ from abc import ABCMeta
 
 LOG.debug('In contract.py')
 
-#class Port(BasePort):
+
+# class Port(BasePort):
 #    '''
 #    This class extends the Port class from pyco.
 #    In addition to the base class, here every Port has a related SMT object.
@@ -45,7 +46,7 @@ class Contract(BaseContract):
     '''
     ASSUMPTIONS = ''
     GUARANTEES = ''
-    #pairs (name,type)
+    # pairs (name,type)
     INPUT_PORTS = []
     OUTPUT_PORTS = []
 
@@ -56,7 +57,7 @@ class Contract(BaseContract):
         '''
         Initialization
         '''
-        #pre-process
+        # pre-process
         for index, item in enumerate(self.INPUT_PORTS):
             try:
                 (port_name, port_type) = item
@@ -71,7 +72,7 @@ class Contract(BaseContract):
 
         self.port_type = {port_name: port_type for (port_name, port_type)
                           in self.INPUT_PORTS + self.OUTPUT_PORTS}
-        #LOG.debug(self.port_type)
+        # LOG.debug(self.port_type)
 
         if input_ports is None:
             input_ports = [port_name for (port_name, _) in self.INPUT_PORTS]
@@ -89,26 +90,30 @@ class Contract(BaseContract):
                                        symbol_set_cls, context,
                                        saturated, infer_ports)
 
-
     def assign_to_solver(self, smt_manager):
         '''
         Registers contract information to solver
         '''
         smt_manager.register_contract(self)
-        #self.smt_model = smt_manager.get_contract_model(self)
+        # self.smt_model = smt_manager.get_contract_model(self)
 
         for port in self.ports_dict.values():
             smt_manager.register_port(port)
-            #port.assign_to_solver(smt_manager)
+            # port.assign_to_solver(smt_manager)
 
 
-
-class BaseType:
+class DummyType(object):
     '''
     Implements base type for contract ports
     '''
+    pass
 
-    __metaclass__ = ABCMeta
+
+class BaseType(DummyType):
+    """
+    Implements base type for contract ports
+    """
+    pass
 
 
 class PortMappingError(Exception):
@@ -122,4 +127,3 @@ class NotATypeError(Exception):
     '''
     Raised if a type is not a subclass of BaseType
     '''
-

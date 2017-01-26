@@ -153,7 +153,7 @@ class SimpleLED(Contract):
     generator 1 is eventually disconnected if faulty.
     '''
     INPUT_PORTS = []
-    OUTPUT_PORTS = [('led', LEDDevice), ('dummy', BaseType), ('dummy1', BaseType), ('dummy2', BaseType), ('dummy3', BaseType)]
+    OUTPUT_PORTS = [('led', LEDDevice)]
     ASSUMPTIONS = '''true'''
     #ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) '''
     GUARANTEES = 'true'

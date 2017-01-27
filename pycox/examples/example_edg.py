@@ -9,7 +9,7 @@ Author: Antonio Iannopollo
 '''
 
 
-from pycox.contract import Contract, BaseType
+from pycox.contract import Contract, BaseType, IntRangeType
 from pycox.library import (ContractLibrary, LibraryComponent,
                             LibraryPortMapping, LibraryCompositionMapping)
 from pycox.synthesis import SynthesisInterface
@@ -22,6 +22,13 @@ class Voltage(BaseType):
     '''
     pass
 
+class VariableVoltage(IntRangeType):
+    '''
+    input or output of variable voltage 3-5V
+    '''
+
+    min = None
+    max = None
 
 class Voltage5V(Voltage):
     '''
@@ -35,19 +42,29 @@ class Voltage3V(Voltage):
     '''
     pass
 
-class VariableVoltage(Voltage):
+class VariableVoltage3to5(VariableVoltage):
     '''
-    input or output of fixed voltage @5V
+    input or output of variable voltage 3-5V
     '''
-    min = None
-    max = None
 
-    def __init__(self, min, max):
-        '''
-        init values
-        '''
-        self.min = min
-        self.max = max
+    min = 3
+    max = 5
+
+class VariableVoltage5(VariableVoltage):
+    '''
+    input or output of variable voltage 3-5V
+    '''
+
+    min = 5
+    max = 5
+
+class VariableVoltage3(VariableVoltage):
+    '''
+    input or output of variable voltage 3-5V
+    '''
+
+    min = 5
+    max = 5
 
 
 class IOPin(BaseType):
@@ -117,6 +134,15 @@ class LED(Contract):
     ASSUMPTIONS = 'true'
     GUARANTEES = 'true'
 
+class LEDVar(Contract):
+    '''
+    Basic LED
+    '''
+    INPUT_PORTS = [('gnd', GND), ('pwr', VariableVoltage3to5)]
+    OUTPUT_PORTS = [('led', LEDDevice)]
+    ASSUMPTIONS = 'true'
+    GUARANTEES = 'true'
+
 class DoubleLED(Contract):
     '''
     Basic LED
@@ -156,4 +182,13 @@ class SimpleLED(Contract):
     OUTPUT_PORTS = [('led', LEDDevice)]
     ASSUMPTIONS = '''true'''
     #ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) '''
+    GUARANTEES = 'true'
+
+class SimpleEmpty(Contract):
+    '''
+    generator 1 is eventually disconnected if faulty.
+    '''
+    INPUT_PORTS = []
+    OUTPUT_PORTS = []
+    ASSUMPTIONS = '''true'''
     GUARANTEES = 'true'

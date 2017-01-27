@@ -192,6 +192,7 @@ class Z3Library(object):
         self.contract_used_by_models = {}
         self.contract_use_flags = []
         self.reverse_flag = {}
+        self.flag_map = {}
 
         self.unrolled_info = {}
 
@@ -220,6 +221,7 @@ class Z3Library(object):
                 c_flag = Int('%s-%d' % (contract.base_name, level))
                 self.contract_use_flags.append(c_flag)
                 self.reverse_flag[c_flag.get_id()] = []
+                self.flag_map['%s-%d' % (contract.base_name, level)] = c_flag
 
                 #START UNROLL COMMENT
                 #(bool_vars, unr_a, unr_g) = self._contract_unrolled_formula(contract, level)

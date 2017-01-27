@@ -62,6 +62,10 @@ class Z3Interface(object):
         self.same_block_constraints = None
         self.distinct_mapping_constraints = None
 
+        self.fixed_components = None
+        self.fixed_connections = None
+        self.fixed_connections_spec = None
+
         self.counter = itertools.count()
         self.port_dict = {}
 
@@ -674,9 +678,96 @@ class Z3Interface(object):
         # LOG.debug(constraints)
         self.solver.add(constraints)
 
+    def compute_fixed_components(self):
+        '''
+        computes contraints for fixed components that need to be used
+        '''
+
+        constraints = []
+
+        for (comp, level) in self.fixed_components:
+            c_flag = self.lib_model.flag_map['%s-%d' % (comp.contract.base_name, level)]
+            constraints += [c_flag == 1]
+
+        # LOG.debug(constraints)
+        self.solver.add(constraints)
+
+
+    def compute_fixed_connections(self):
+        '''
+        computes contraints for fixed connections that need to be used
+        '''
+
+        constraints = []
+
+        for (comp1, p_name1, level1, comp2, p_name2, level2) in self.fixed_connections:
+            port1 = comp1.contract.ports_dict[p_name1]
+            port2 = comp1.contract.ports_dict[p_name2]
+
+            model1 = self.lib_model.model_by_port(port1)[level1]
+            index1 = self.lib_model.index[level1][port1]
+            model2 = self.lib_model.model_by_port(port2)[level2]
+            index2 = self.lib_model.index[level2][port2]
+
+            if port1.is_input and port2.is_output:
+                constraints += [model1 == index2]
+            elif port1.is_output and port2.is_input:
+                constraints += [model2 == index1]
+            elif port1.is_input and port2.is_input:
+                constraints += [model1 == model2]
+            else:
+                raise ValueError('%s, %s are both outputs' % (p_name1, p_name2))
+
+        # LOG.debug(constraints)
+        self.solver.add(constraints)
+
+    def compute_fixed_spec_connections(self):
+        '''
+        computes contraints for fixed connections that need to be used
+        '''
+
+        constraints = []
+
+        for (comp, p_name, level, spec_port_name) in self.fixed_connections_spec:
+            port = comp.contract.ports_dict[p_name]
+            spec_port = self.property_contract.contract.ports_dict[spec_port_name]
+
+            model = self.lib_model.model_by_port(port)[level]
+            index = self.lib_model.index[level][port]
+
+
+            if spec_port.is_input and port.is_input:
+                spec_index = self.spec_map[spec_port_name]
+                constraints += [model == spec_index]
+            elif spec_port.is_output and port.is_output:
+                spec_model = self.spec_out_dict[spec_port_name]
+                constraints += [spec_model == index]
+            else:
+                raise ValueError('%s, %s cannot be connected' % (p_name, spec_port_name))
+
+        # LOG.debug(constraints)
+        self.solver.add(constraints)
+
+    def compute_fixed_connections_spec(self):
+        '''
+        computes contraints for fixed connections that need to be used
+        '''
+
+        constraints = []
+
+        for (comp, level) in self.fixed_components:
+            c_flag = self.lib_model.flag_map['%s-%d' % (comp.contract.base_name, level)]
+            constraints += [c_flag == 1]
+
+        # LOG.debug(constraints)
+        self.solver.add(constraints)
+
     def synthesize(self, property_contracts, limit=None,
                    same_block_constraints=None,
-                   distinct_mapping_constraints=None):
+                   distinct_mapping_constraints=None,
+                   fixed_components=None,
+                   fixed_connections=None,
+                   fixed_connections_spec=None):
         '''
         perform synthesis process
         '''
@@ -684,6 +775,9 @@ class Z3Interface(object):
         self.time['start'] = time()
         self.same_block_constraints = same_block_constraints
         self.distinct_mapping_constraints = distinct_mapping_constraints
+        self.fixed_components = fixed_components
+        self.fixed_connections = fixed_connections
+        self.fixed_connections_spec = fixed_connections_spec
 
         self.specification_list = property_contracts
 
@@ -734,7 +828,7 @@ class Z3Interface(object):
         self.full_spec_out()
         # self.lib_full_chosen_output()
         self.spec_out_to_out()
-        self.full_spec_in()
+        #self.full_spec_in()
         # _self.spec_in_to_in()
         # _self.spec_inputs_no_feedback()
         # self.lib_inputs_no_feedback_if_assumption()
@@ -749,6 +843,9 @@ class Z3Interface(object):
         # self._compute_distinct_port_spec_constraints()
         self.compute_distinct_port_lib_constraints()
         self.compute_same_block_constraints()
+        self.compute_fixed_components()
+        self.compute_fixed_connections()
+        self.compute_fixed_spec_connections()
         # self._lib_distinct()
 
         r = t.apply(self.solver)

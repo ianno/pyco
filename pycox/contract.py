@@ -116,6 +116,14 @@ class BaseType(DummyType):
     pass
 
 
+class IntRangeType(BaseType):
+    """
+    Implements base type for contract ports
+    """
+    min = None
+    max = None
+
+
 class PortMappingError(Exception):
     '''
     Raised if a mapping constraint is add more than once
@@ -127,3 +135,12 @@ class NotATypeError(Exception):
     '''
     Raised if a type is not a subclass of BaseType
     '''
+
+class EmptyContract(Contract):
+    """
+    An empty contract
+    """
+    INPUT_PORTS = []
+    OUTPUT_PORTS = []
+    ASSUMPTIONS = '''true'''
+    GUARANTEES = 'true'

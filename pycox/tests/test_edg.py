@@ -81,7 +81,7 @@ def edg_lib(micro, LED, doubleLED, power_adapter):
     return library
 
 
-def test_base(edg_lib):
+def test_base_oldstyle(edg_lib):
     '''
     Performs simple synthesis
     '''
@@ -89,6 +89,57 @@ def test_base(edg_lib):
     spec1 = SimpleLED('LED1')
     #spec2 = GenIsolation2('G2')
 
-    interface = SynthesisInterface([spec1], edg_lib)
+    interface = SynthesisInterface(edg_lib, [spec1])
+
+    interface.synthesize(limit=5)
+
+
+def test_base_empty(edg_lib):
+    '''
+    Performs simple synthesis
+    '''
+
+    interface = SynthesisInterface(edg_lib)
+
+    interface.synthesize(limit=5)
+
+def test_base_use_dled(edg_lib):
+    '''
+    Performs simple synthesis
+    '''
+
+    interface = SynthesisInterface(edg_lib)
+
+    double_led = interface.get_component('dLED')
+    interface.use_component(double_led)
+
+    interface.synthesize(limit=5)
+
+def test_base_use_micro(edg_lib):
+    '''
+    Performs simple synthesis
+    '''
+
+    spec1 = SimpleEmpty('Void')
+
+    interface = SynthesisInterface(edg_lib)
+
+    micro = interface.get_component('Micro')
+    interface.use_component(micro)
+
+    interface.synthesize(limit=5)
+
+def test_base_use_micro_and_led(edg_lib):
+    '''
+    Performs simple synthesis
+    '''
+
+    spec1 = SimpleEmpty('Void')
+
+    interface = SynthesisInterface(edg_lib)
+
+    micro = interface.get_component('Micro')
+    led = interface.get_component('LED')
+    interface.use_connected(micro, 'io', led, 'pwr')
 
     interface.synthesize(limit=5)

@@ -22,7 +22,9 @@ def micro():
     micro
     '''
     comp = Microcontroller('Micro')
-    return LibraryComponent('Micro', comp)
+    lib_c = LibraryComponent('Micro', comp)
+    lib_c.add_distinct_port_constraints([comp.pwr, comp.io])
+    return lib_c
 
 @pytest.fixture
 def LED():
@@ -120,8 +122,6 @@ def test_base_use_micro(edg_lib):
     Performs simple synthesis
     '''
 
-    spec1 = SimpleEmpty('Void')
-
     interface = SynthesisInterface(edg_lib)
 
     micro = interface.get_component('Micro')
@@ -134,12 +134,28 @@ def test_base_use_micro_and_led(edg_lib):
     Performs simple synthesis
     '''
 
-    spec1 = SimpleEmpty('Void')
+    # spec1 = SimpleEmpty('Void')
 
     interface = SynthesisInterface(edg_lib)
 
     micro = interface.get_component('Micro')
     led = interface.get_component('LED')
     interface.use_connected(micro, 'io', led, 'pwr')
+    interface.synthesize(limit=5)
+
+def test_base_use_micro_and_2led(edg_lib):
+    '''
+    Performs simple synthesis
+    '''
+
+    # spec1 = SimpleEmpty('Void')
+
+    interface = SynthesisInterface(edg_lib)
+
+    micro = interface.get_component('Micro')
+    led = interface.get_component('LED')
+    led1 = interface.get_component('LED')
+    interface.use_connected(micro, 'io', led, 'pwr')
+    interface.use_component(led1, level=1)
 
     interface.synthesize(limit=5)

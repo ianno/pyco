@@ -593,7 +593,7 @@ class Z3Interface(object):
                             in_mod = self.lib_model.in_models[ind]
                             constraints.append(in_mod != self.lib_model.index[lev][out_port])
 
-        LOG.debug(constraints)
+        # LOG.debug(constraints)
         self.solver.add(constraints)
 
     def _compute_distinct_port_spec_constraints(self):
@@ -623,10 +623,19 @@ class Z3Interface(object):
                 models_1 = self.lib_model.model_by_port(port1)
                 models_2 = self.lib_model.model_by_port(port2)
 
-                for level in range(0, self.lib_model.max_components):
-                    constraints.append(Or(And(models_1[level] == -1,
-                                              models_2[level] == -1),
-                                          models_1[level] != models_2[level]))
+                if port1.is_input and port2.is_input:
+                    for level in range(0, self.lib_model.max_components):
+                        constraints.append(Or(And(models_1[level] == -1,
+                                                  models_2[level] == -1),
+                                              models_1[level] != models_2[level]))
+                elif port1.is_output and port2.is_input:
+                    for level in range(0, self.lib_model.max_components):
+                        constraints.append(models_2[level] != self.lib_model.index_by_model(models_1[level]))
+                elif port1.is_input and port2.is_output:
+                    for level in range(0, self.lib_model.max_components):
+                        constraints.append(models_1[level] != self.lib_model.index_by_model(models_2[level]))
+                else:
+                    raise ValueError('cannot connect %s, %s ' % (port1.unique_name, port2.unique_name))
 
         # LOG.debug(constraints)
         self.solver.add(constraints)
@@ -702,7 +711,7 @@ class Z3Interface(object):
 
         for (comp1, p_name1, level1, comp2, p_name2, level2) in self.fixed_connections:
             port1 = comp1.contract.ports_dict[p_name1]
-            port2 = comp1.contract.ports_dict[p_name2]
+            port2 = comp2.contract.ports_dict[p_name2]
 
             model1 = self.lib_model.model_by_port(port1)[level1]
             index1 = self.lib_model.index[level1][port1]
@@ -718,7 +727,7 @@ class Z3Interface(object):
             else:
                 raise ValueError('%s, %s are both outputs' % (p_name1, p_name2))
 
-        # LOG.debug(constraints)
+        LOG.debug(constraints)
         self.solver.add(constraints)
 
     def compute_fixed_spec_connections(self):

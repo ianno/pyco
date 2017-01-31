@@ -1,9 +1,9 @@
 '''
-test_edg.py
+test_eps.py
 
-In this file there is a collection of tests related to the Electronic Device Generation (EDG)
+In this file there is a collection of tests related to the Electrical Power System (EPS)
 problem.
-It uses files from pycox/examples/example_edg
+It uses files from pycox/examples/example_eps
 Add reference
 
 Author: Antonio Iannopollo

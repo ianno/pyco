@@ -1,7 +1,8 @@
 '''
-example_edg.py
+example_eps.py
 
-In this file there is a collection of tests related to the Electronic Device Generation project.
+In this file there is a collection of tests related to the Electrical Power System (EPS)
+problem.
 Add reference
 
 Author: Antonio Iannopollo

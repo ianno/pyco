@@ -44,8 +44,8 @@ class Contract(BaseContract):
     Extends pyco.contract.Contract adding support
     for graphs and libraries
     '''
-    ASSUMPTIONS = ''
-    GUARANTEES = ''
+    ASSUMPTIONS = 'true'
+    GUARANTEES = 'true'
     # pairs (name,type)
     INPUT_PORTS = []
     OUTPUT_PORTS = []

@@ -1,161 +1,167 @@
 '''
-test_eps.py
-
-In this file there is a collection of tests related to the Electrical Power System (EPS)
+In this file there is a collection of tests related to the Electronic Device Generation (EDG)
 problem.
-It uses files from pycox/examples/example_eps
+It uses files from pycox/examples/example_edg
 Add reference
-
-Author: Antonio Iannopollo
 '''
 
 
 import pytest
-from pycox.examples.example_edg import *
-from pycox.examples.example_edg import LED as LED_c
-from pycox.contract import CompositionMapping
+from pycox.examples.example_edg_motor import *
 
 
 @pytest.fixture
-def micro():
+def mcu():
     '''
     micro
     '''
-    comp = Microcontroller('Micro')
-    lib_c = LibraryComponent('Micro', comp)
-    lib_c.add_distinct_port_constraints([comp.pwr, comp.io])
+    comp = MCU('MCU')
+    lib_c = LibraryComponent('MCU', comp)
     return lib_c
 
 @pytest.fixture
-def LED():
+def dcdc3():
     '''
     LED
     '''
-    comp = LED_c('LED')
-    return LibraryComponent('LED', comp)
+    comp = DcDcConverter12_3('dcdc3')
+    return LibraryComponent('dcdc3', comp)
 
 @pytest.fixture
-def doubleLED():
+def dcdc5():
     '''
     LED
     '''
-    comp = DoubleLED('dLED')
-    return LibraryComponent('dLED', comp)
+    comp = DcDcConverter12_5('dcdc5')
+    return LibraryComponent('dcdc5', comp)
 
 @pytest.fixture
-def power_adapter():
+def power_generator12():
     '''
     std generator
     '''
-    comp = PowerAdapter5V('Power')
-    return LibraryComponent('Power', comp)
-
-
-
-
+    comp = PowerAdapter12V('Power12')
+    return LibraryComponent('Power12', comp)
 
 @pytest.fixture
-def edg_lib(micro, LED, doubleLED, power_adapter):
+def power_generator5():
+    '''
+    std generator
+    '''
+    comp = PowerAdapter5V('Power5')
+    return LibraryComponent('Power5', comp)
+
+@pytest.fixture
+def half_bridge0():
+    '''
+    std generator
+    '''
+    comp = SimpleHalfBridge('half_bridge0')
+    hbridge = LibraryComponent('half_bridge0', comp)
+    hbridge.add_distinct_port_constraints([comp.vin, comp.o1])
+    return hbridge
+
+@pytest.fixture
+def half_bridge1():
+    '''
+    std generator
+    '''
+    comp = SimpleHalfBridge('half_bridge1')
+    hbridge = LibraryComponent('half_bridge1', comp)
+    hbridge.add_distinct_port_constraints([comp.vin, comp.o1])
+    return hbridge
+
+@pytest.fixture
+def half_bridge2():
+    '''
+    std generator
+    '''
+    comp = SimpleHalfBridge('half_bridge2')
+    hbridge = LibraryComponent('half_bridge2', comp)
+    hbridge.add_distinct_port_constraints([comp.vin, comp.o1])
+    return hbridge
+
+@pytest.fixture
+def edg_mlib(mcu, dcdc3, dcdc5, power_generator12, power_generator5, half_bridge0, half_bridge1, half_bridge2):
     '''
     returns a populated library
     '''
-    library = ContractLibrary('edg_lib')
+    library = ContractLibrary('edg_motor_lib')
 
-    library.add(micro)
-    library.add(LED)
-    library.add(doubleLED)
-    library.add(power_adapter)
+    library.add(mcu)
+    library.add(dcdc3)
+    library.add(dcdc5)
+    library.add(power_generator5)
+    library.add(power_generator12)
+    library.add(half_bridge0)
+    library.add(half_bridge1)
+    library.add(half_bridge2)
 
     library.verify_library()
 
     #add type compatibilities
-    library.add_type(IOPin)
+    library.add_type(IOPin3)
+    library.add_type(IOPin12)
     library.add_type(Voltage)
     library.add_type(Voltage5V)
-    library.add_type(VariableVoltage)
-    library.add_type(Device)
-    library.add_type(LEDDevice)
+    library.add_type(Voltage3V)
+    library.add_type(Voltage12V)
     library.add_type(GND)
-    library.add_type(Voltage5V)
 
-    library.add_type_compatibility(IOPin, Voltage)
 
     return library
 
 
-def test_base_oldstyle(edg_lib):
+def test_base(edg_mlib):
     '''
     Performs simple synthesis
     '''
 
-    spec1 = SimpleLED('LED1')
-    #spec2 = GenIsolation2('G2')
+    interface = SynthesisInterface(edg_mlib)
 
-    interface = SynthesisInterface(edg_lib, [spec1])
+    hbridge = interface.get_component('half_bridge0')
+    interface.use_component(hbridge)
 
     interface.synthesize(limit=5)
 
-
-def test_base_empty(edg_lib):
+def test_base_3HB(edg_mlib):
     '''
     Performs simple synthesis
     '''
 
-    interface = SynthesisInterface(edg_lib)
+    interface = SynthesisInterface(edg_mlib)
 
-    interface.synthesize(limit=5)
+    hbridge = interface.get_component('half_bridge0')
+    interface.use_component(hbridge)
+    hbridge = interface.get_component('half_bridge1')
+    interface.use_component(hbridge)
+    hbridge = interface.get_component('half_bridge2')
+    interface.use_component(hbridge)
 
-def test_base_use_dled(edg_lib):
+    interface.synthesize(limit=8)
+
+def test_simple_spec(edg_mlib):
     '''
-    Performs simple synthesis
-    '''
-
-    interface = SynthesisInterface(edg_lib)
-
-    double_led = interface.get_component('dLED')
-    interface.use_component(double_led)
-
-    interface.synthesize(limit=5)
-
-def test_base_use_micro(edg_lib):
-    '''
-    Performs simple synthesis
+    Simple test including spec
+    :param edg_mlib:
+    :return:
     '''
 
-    interface = SynthesisInterface(edg_lib)
+    spec = SimpleReq('R1')
+    interface = SynthesisInterface(edg_mlib, [spec])
 
-    micro = interface.get_component('Micro')
-    interface.use_component(micro)
 
-    interface.synthesize(limit=5)
+    interface.synthesize(limit=8)
 
-def test_base_use_micro_and_led(edg_lib):
+def test_simple_spec_d(edg_mlib):
     '''
-    Performs simple synthesis
-    '''
-
-    # spec1 = SimpleEmpty('Void')
-
-    interface = SynthesisInterface(edg_lib)
-
-    micro = interface.get_component('Micro')
-    led = interface.get_component('LED')
-    interface.use_connected(micro, 'io', led, 'pwr')
-    interface.synthesize(limit=5)
-
-def test_base_use_micro_and_2led(edg_lib):
-    '''
-    Performs simple synthesis
+    Simple test including spec
+    :param edg_mlib:
+    :return:
     '''
 
-    # spec1 = SimpleEmpty('Void')
+    spec = SimpleReq('R1_distinct')
+    interface = SynthesisInterface(edg_mlib, [spec])
+    interface.distinct_ports_constraints([spec.o1, spec.o2, spec.o3])
 
-    interface = SynthesisInterface(edg_lib)
-
-    micro = interface.get_component('Micro')
-    led = interface.get_component('LED')
-    led1 = interface.get_component('LED')
-    interface.use_connected(micro, 'io', led, 'pwr')
-    interface.use_component(led1, level=1)
-
-    interface.synthesize(limit=5)
+    interface.synthesize(limit=8)

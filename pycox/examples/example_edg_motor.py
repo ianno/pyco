@@ -1,11 +1,10 @@
 '''
-example_eps.py
+example_edg_motor.py
 
-In this file there is a collection of tests related to the Electrical Power System (EPS)
-problem.
+In this file there is a collection of tests related to the Electronic Device Generation project.
 Add reference
 
-Author: Antonio Iannopollo
+Author: Antonio Iannopollo, Rohit Ramesh, Richard Lin
 '''
 
 
@@ -22,13 +21,6 @@ class Voltage(BaseType):
     '''
     pass
 
-class VariableVoltage(IntRangeType):
-    '''
-    input or output of variable voltage 3-5V
-    '''
-
-    min = None
-    max = None
 
 class Voltage5V(Voltage):
     '''
@@ -42,30 +34,11 @@ class Voltage3V(Voltage):
     '''
     pass
 
-class VariableVoltage3to5(VariableVoltage):
+class Voltage12V(Voltage):
     '''
-    input or output of variable voltage 3-5V
+    input or output of fixed voltage @3V
     '''
-
-    min = 3
-    max = 5
-
-class VariableVoltage5(VariableVoltage):
-    '''
-    input or output of variable voltage 3-5V
-    '''
-
-    min = 5
-    max = 5
-
-class VariableVoltage3(VariableVoltage):
-    '''
-    input or output of variable voltage 3-5V
-    '''
-
-    min = 5
-    max = 5
-
+    pass
 
 class IOPin(BaseType):
     '''
@@ -73,15 +46,15 @@ class IOPin(BaseType):
     '''
     pass
 
-class Device(BaseType):
+class IOPin3(IOPin):
     '''
-    used to describe state of simple devices like LEDs, etc.
+    input/output pin
     '''
     pass
 
-class LEDDevice(Device):
+class IOPin12(IOPin):
     '''
-    used to describe state of simple devices like LEDs, etc.
+    input/output pin
     '''
     pass
 
@@ -92,103 +65,53 @@ class GND(BaseType):
     pass
 
 
-class I2C(Voltage5V):
-    '''
-    I2C bus
-    '''
-    pass
-
-
-class SDA(I2C):
-    '''
-    Serial Data I2C line
-    '''
-    pass
-
-
-class SCL(I2C):
-    '''
-    Serial Clock I2C line
-    '''
-    pass
-
-class SCLSlave(SCL):
-    '''
-    Serial Clock I2C slave line
-    '''
-    pass
-
-class SCLMaster(SCL):
-    '''
-    Serial Clock I2C master line
-    '''
-    pass
-
 #Now let's include some components
-class LED(Contract):
+class PowerAdapter12V(Contract):
     '''
-    Basic LED
+    MCU
     '''
-    INPUT_PORTS = [('gnd', GND), ('pwr', Voltage5V)]
-    OUTPUT_PORTS = [('led', LEDDevice)]
-    ASSUMPTIONS = 'true'
-    GUARANTEES = 'true'
-
-class LEDVar(Contract):
-    '''
-    Basic LED
-    '''
-    INPUT_PORTS = [('gnd', GND), ('pwr', VariableVoltage3to5)]
-    OUTPUT_PORTS = [('led', LEDDevice)]
-    ASSUMPTIONS = 'true'
-    GUARANTEES = 'true'
-
-class DoubleLED(Contract):
-    '''
-    Basic LED
-    '''
-    INPUT_PORTS = [('gnd', GND), ('pwr_l', Voltage5V), ('pwr_r', Voltage5V)]
-    OUTPUT_PORTS = [('led_l', LEDDevice), ('led_r', LEDDevice)]
-    ASSUMPTIONS = 'true'
-    GUARANTEES = 'true'
-
-class Microcontroller(Contract):
-    '''
-    Basic micro
-    '''
-    INPUT_PORTS = [('gnd', GND), ('pwr', Voltage5V)]
-    OUTPUT_PORTS = [('io', IOPin)]
-    ASSUMPTIONS = 'true'
-    GUARANTEES = 'true'
-
+    INPUT_PORTS = []
+    OUTPUT_PORTS = [('gnd', GND), ('vout', Voltage12V)]
 
 class PowerAdapter5V(Contract):
     '''
-    Basic micro
+    MCU
     '''
     INPUT_PORTS = []
-    OUTPUT_PORTS = [('gnd', GND), ('pwr', Voltage5V)]
-    ASSUMPTIONS = 'true'
-    GUARANTEES = 'true'
+    OUTPUT_PORTS = [('gnd', GND), ('vout', Voltage5V)]
 
-#now add specs
+class DcDcConverter12_3(Contract):
+    '''
+    DCDC 12 to 3
+    '''
+    INPUT_PORTS = [('gnd', GND), ('vin', Voltage12V)]
+    OUTPUT_PORTS = [('vout', Voltage3V)]
 
-#case 0: 1gen-2contactors -> 2 ports
-class SimpleLED(Contract):
+class DcDcConverter12_5(Contract):
     '''
-    generator 1 is eventually disconnected if faulty.
+    DCDC 12 to 5
     '''
-    INPUT_PORTS = []
-    OUTPUT_PORTS = [('led', LEDDevice)]
-    ASSUMPTIONS = '''true'''
-    #ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) '''
-    GUARANTEES = 'true'
+    INPUT_PORTS = [('gnd', GND), ('vin', Voltage12V)]
+    OUTPUT_PORTS = [('vout', Voltage5V)]
 
-class SimpleEmpty(Contract):
+class MCU(Contract):
     '''
-    generator 1 is eventually disconnected if faulty.
+    MCU
     '''
-    INPUT_PORTS = []
-    OUTPUT_PORTS = []
-    ASSUMPTIONS = '''true'''
-    GUARANTEES = 'true'
+    INPUT_PORTS = [('gnd', GND), ('vin', Voltage3V), ('i1', IOPin3), ('i2', IOPin3)]
+    OUTPUT_PORTS = [('o1', IOPin3), ('o2', IOPin3), ('o3', IOPin3), ('o4', IOPin3)]
+
+class SimpleHalfBridge(Contract):
+    '''
+    MCU
+    '''
+    INPUT_PORTS = [('gnd', GND), ('vin', Voltage12V), ('i1', IOPin)]
+    OUTPUT_PORTS = [('o1', IOPin12)]
+
+
+class SimpleReq(Contract):
+    '''
+    MCU
+    '''
+    INPUT_PORTS = [('i1', IOPin)]
+    OUTPUT_PORTS = [('o1', IOPin12), ('o2', IOPin12), ('o3', IOPin12)]

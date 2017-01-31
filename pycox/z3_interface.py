@@ -849,7 +849,7 @@ class Z3Interface(object):
         self.spec_process_in_types()
         self.spec_process_out_types()
         self.lib_process_types()
-        # self._compute_distinct_port_spec_constraints()
+        self._compute_distinct_port_spec_constraints()
         self.compute_distinct_port_lib_constraints()
         self.compute_same_block_constraints()
         self.compute_fixed_components()

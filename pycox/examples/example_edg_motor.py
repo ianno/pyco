@@ -94,24 +94,73 @@ class DcDcConverter12_5(Contract):
     INPUT_PORTS = [('gnd', GND), ('vin', Voltage12V)]
     OUTPUT_PORTS = [('vout', Voltage5V)]
 
-class MCU(Contract):
+class SimpleMCU(Contract):
     '''
     MCU
     '''
     INPUT_PORTS = [('gnd', GND), ('vin', Voltage3V), ('i1', IOPin3), ('i2', IOPin3)]
     OUTPUT_PORTS = [('o1', IOPin3), ('o2', IOPin3), ('o3', IOPin3), ('o4', IOPin3)]
 
+class SmallMCU(Contract):
+    '''
+    MCU
+    '''
+    INPUT_PORTS = [('gnd', GND), ('vin', Voltage3V), ('i1', IOPin3)]
+    OUTPUT_PORTS = [('o1', IOPin3), ('o2', IOPin3), ('o3', IOPin3)]
+    ASSUMPTIONS = '!i1'
+    GUARANTEES = '''o1 & !o2 & !o3 &
+                    G( (o1 & !i1 & X i1) -> (X !o1 & X o2 & X !o3)) &
+                    G( (o2 & !i1 & X i1) -> (X !o1 & X !o2 & X o3)) &
+                    G( (o3 & !i1 & X i1) -> (X o1 & X !o2 & X !o3))
+                 '''
+
+class MCU(Contract):
+    '''
+    MCU
+    '''
+    INPUT_PORTS = [('gnd', GND), ('vin', Voltage3V), ('i1', IOPin3), ('i2', IOPin3)]
+    OUTPUT_PORTS = [('o1', IOPin3), ('o2', IOPin3), ('o3', IOPin3), ('o4', IOPin3)]
+    ASSUMPTIONS = '!i1'
+    GUARANTEES = '''o1 & !o2 & !o3 &
+                    G( (o1 & !i1 & X i1) -> (X !o1 & X o2 & X !o3)) &
+                    G( (o2 & !i1 & X i1) -> (X !o1 & X !o2 & X o3)) &
+                    G( (o3 & !i1 & X i1) -> (X o1 & X !o2 & X !o3))
+                 '''
+
 class SimpleHalfBridge(Contract):
     '''
     MCU
     '''
-    INPUT_PORTS = [('gnd', GND), ('vin', Voltage12V), ('i1', IOPin)]
+    INPUT_PORTS = [('gnd', GND), ('vin', Voltage12V), ('i1', IOPin3)]
     OUTPUT_PORTS = [('o1', IOPin12)]
 
+class HalfBridge(Contract):
+    '''
+    MCU
+    '''
+    INPUT_PORTS = [('gnd', GND), ('vin', Voltage12V), ('i1', IOPin3)]
+    OUTPUT_PORTS = [('o1', IOPin12)]
+    ASSUMPTIONS = 'true'
+    GUARANTEES = '''G(i1 = o1)
+                 '''
 
 class SimpleReq(Contract):
     '''
     MCU
     '''
-    INPUT_PORTS = [('i1', IOPin)]
+    INPUT_PORTS = [('i1', IOPin3)]
     OUTPUT_PORTS = [('o1', IOPin12), ('o2', IOPin12), ('o3', IOPin12)]
+
+
+class AlternateWaveReq(Contract):
+    '''
+    MCU
+    '''
+    INPUT_PORTS = [('i1', IOPin3)]
+    OUTPUT_PORTS = [('o1', IOPin12), ('o2', IOPin12), ('o3', IOPin12)]
+    ASSUMPTIONS = '!i1'
+    GUARANTEES = '''o1 & !o2 & !o3 &
+                    G( (o1 & !i1 & X i1) -> (X !o1 & X o2 & X !o3)) &
+                    G( (o2 & !i1 & X i1) -> (X !o1 & X !o2 & X o3)) &
+                    G( (o3 & !i1 & X i1) -> (X o1 & X !o2 & X !o3))
+                 '''

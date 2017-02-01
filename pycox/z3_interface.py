@@ -48,6 +48,8 @@ class Z3Interface(object):
         self.num_out = 0
         # self.ComponentBaseName = None
 
+        self.dummy_model_set = set()
+
         self.contracts_dict = {}
         # self.portc_types = {}
         # self.mapping_datatypes = {}
@@ -141,6 +143,13 @@ class Z3Interface(object):
         # LOG.debug(self.specification_list)
         self.specification_list = sorted(self.specification_list, key=lambda x: len(self.spec_ports[x][0]))
         # LOG.debug(self.specification_list)
+
+
+        #init dummy set
+        for p_model in self.spec_outs:
+            name = str(p_model)
+            if name not in self.specification_list[0].ports_dict:
+                self.dummy_model_set.add(p_model.get_id())
 
         # self.solver = Solver()
         self.solver = Goal()  # Optimize()
@@ -596,7 +605,7 @@ class Z3Interface(object):
         # LOG.debug(constraints)
         self.solver.add(constraints)
 
-    def _compute_distinct_port_spec_constraints(self):
+    def compute_distinct_port_spec_constraints(self):
         '''
         computes the set of distinct ports according the info from the user
         '''
@@ -739,7 +748,7 @@ class Z3Interface(object):
 
         for (comp, p_name, level, spec_port_name) in self.fixed_connections_spec:
             port = comp.contract.ports_dict[p_name]
-            spec_port = self.property_contract.contract.ports_dict[spec_port_name]
+            spec_port = self.property_contract.ports_dict[spec_port_name]
 
             model = self.lib_model.model_by_port(port)[level]
             index = self.lib_model.index[level][port]
@@ -835,13 +844,13 @@ class Z3Interface(object):
         self.solver.add(self.use_max_n_components(self.max_components))
 
         self.full_spec_out()
-        # self.lib_full_chosen_output()
+        # self.lib_full_chosen_output() #
         self.spec_out_to_out()
-        #self.full_spec_in()
-        # _self.spec_in_to_in()
-        # _self.spec_inputs_no_feedback()
-        # self.lib_inputs_no_feedback_if_assumption()
-        # self._inputs_from_selected()
+        # self.full_spec_in() #
+        ## _self.spec_in_to_in()
+        ## _self.spec_inputs_no_feedback()
+        ## self.lib_inputs_no_feedback_if_assumption()
+        ## self._inputs_from_selected()
         self.lib_chosen_not_zeros()
         self.lib_to_outputs_or_spec_in()
         self.lib_chosen_to_chosen()
@@ -849,7 +858,7 @@ class Z3Interface(object):
         self.spec_process_in_types()
         self.spec_process_out_types()
         self.lib_process_types()
-        self._compute_distinct_port_spec_constraints()
+        self.compute_distinct_port_spec_constraints()
         self.compute_distinct_port_lib_constraints()
         self.compute_same_block_constraints()
         self.compute_fixed_components()
@@ -1046,11 +1055,10 @@ class Z3Interface(object):
 
         # start with spec
         for p_model in self.spec_outs:
-            name = str(p_model)
-
-            if name in spec_contract.ports_dict:
+            if p_model.get_id() not in self.dummy_model_set:
                 #there might be dummie ports
 
+                name = str(p_model)
                 spec_port = spec_contract.ports_dict[name]
 
                 index = model[p_model].as_long()
@@ -1126,8 +1134,14 @@ class Z3Interface(object):
 
         composition = root.compose(contracts, composition_mapping=mapping)
 
+        # LOG.debug('-----------')
+        # LOG.debug(root)
+        # for contract in contracts:
+        #    LOG.debug(contract)
+        #
         # LOG.debug(composition)
         # LOG.debug(spec_contract)
+
         contracts.add(root)
 
         return composition, spec_contract, contracts
@@ -1174,6 +1188,8 @@ class Z3Interface(object):
         # #LOG.debug(self.spec_outs)
         # #LOG.debug('-------------')
         # for spec in port_models[0]:
+
+
         for spec in self.spec_outs:
             index = model[spec].as_long()
             mod = self.lib_model.models[index]
@@ -1202,8 +1218,8 @@ class Z3Interface(object):
                 l_class = []
                 shift = self.lib_model.max_components - level + l
                 for pair in s_pairs:
-                    l_class.append([pair[0] == self.lib_model.index_shift(pair[1], shift)])
-
+                    if pair[0].get_id() not in self.dummy_model_set:
+                        l_class.append([pair[0] == self.lib_model.index_shift(pair[1], shift)])
                 for i in xrange(0, len(mods[l])):
                     m_class = []
                     if model[mods[level][i]].as_long() < self.lib_model.max_index:

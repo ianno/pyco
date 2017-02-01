@@ -13,7 +13,7 @@ from z3 import *
 #LOG = logging.getLogger()
 LOG.debug('in z3_library_conversion')
 
-MAX_REDUNDANCY = 2
+MAX_REDUNDANCY = 1
 
 def convert_formula_to_z3(formula, contract_vars, level):
     '''

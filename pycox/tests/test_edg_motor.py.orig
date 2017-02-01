@@ -168,6 +168,7 @@ def edg_mlib_easy(simple_mcu, small_mcu,  mcu, dcdc3, dcdc5, power_generator12, 
 
     return library
 
+<<<<<<< HEAD
 @pytest.fixture
 def edg_mlib_med(simple_mcu, small_mcu,  mcu, dcdc3, dcdc5, power_generator12, power_generator5,
              half_bridge0, half_bridge1, half_bridge2):
@@ -235,6 +236,10 @@ def edg_mlib_single(simple_mcu, small_mcu,  mcu, dcdc3, dcdc5, power_generator12
     return library
 
 def test_base(edg_mlib_easy):
+=======
+
+def test_base(edg_mlib):
+>>>>>>> da8e489... motor example extended
     '''
     Performs simple synthesis
     '''
@@ -313,7 +318,11 @@ def test_ltl_spec_easy(edg_mlib_easy):
 
     interface.synthesize(limit=8)
 
+<<<<<<< HEAD
 def test_ltl_spec_easy2(edg_mlib_easy):
+=======
+def test_ltl_spec_easy2(edg_mlib):
+>>>>>>> da8e489... motor example extended
     '''
     Simple test including spec
     :param edg_mlib:
@@ -321,7 +330,11 @@ def test_ltl_spec_easy2(edg_mlib_easy):
     '''
 
     spec = AlternateWaveReq('R_ltl')
+<<<<<<< HEAD
     interface = SynthesisInterface(edg_mlib_easy, [spec])
+=======
+    interface = SynthesisInterface(edg_mlib, [spec])
+>>>>>>> da8e489... motor example extended
     interface.distinct_ports_constraints([spec.o1, spec.o2, spec.o3])
     mcu = interface.get_component('small_MCU')
     h0 = interface.get_component('half_bridge0')
@@ -383,6 +396,7 @@ def test_ltl_spec(edg_mlib):
     interface.distinct_ports_constraints([spec.o1, spec.o2, spec.o3])
 
 
+<<<<<<< HEAD
     interface.synthesize(limit=8)
 
 def test_ltl_spec_med(edg_mlib_med):
@@ -426,4 +440,6 @@ def test_ltl_spec_single(edg_mlib_single):
     interface.distinct_ports_constraints([spec.o1, spec.o2, spec.o3])
 
 
+=======
+>>>>>>> da8e489... motor example extended
     interface.synthesize(limit=8)

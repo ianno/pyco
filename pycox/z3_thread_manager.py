@@ -12,7 +12,8 @@ from Queue import Empty
 import pycox.z3_interface
 import multiprocessing
 
-MAX_THREADS = 7
+MAX_THREADS = 8
+WITH_COI = True
 
 #NotSynthesizableError = z3_interface.NotSynthesizableError
 
@@ -45,6 +46,7 @@ class ModelVerificationManager(object):
         self.terminate_event = multiprocessing.Event()
         self.result_queue = multiprocessing.Queue()
         self.fail_queue = multiprocessing.Queue()
+        self.rejection_queue = multiprocessing.Queue()
 
         self.model_dict = {}
 
@@ -97,12 +99,12 @@ class ModelVerificationManager(object):
                     return self.terminate()
 
                 #else remove not successful models
-                while not self.fail_queue.empty():
-                    pid = self.fail_queue.get_nowait()
-                    self.model_dict.pop(pid)
+                # while not self.fail_queue.empty():
+                #     pid = self.fail_queue.get_nowait()
+                #     self.model_dict.pop(pid)
 
                 #new refinement checker
-                thread = RefinementChecker(model, self, self.found_refinement)
+                thread = RefinementChecker(model, self, self.found_refinement, with_coi=WITH_COI)
                 #go
                 thread.start()
                 with self.pool_lock:
@@ -112,10 +114,22 @@ class ModelVerificationManager(object):
                 #now reject the model, to get a new candidate
                 #LOG.debug('pre-lock')
                 with self.z3_lock:
-                    #LOG.debug('pre-reject')
+                    LOG.debug('pre-reject')
                     self.solver.add(self.z3_interface.reject_candidate(model))
-                    #LOG.debug('done')
+                    LOG.debug('done')
 
+                    #add additional constraints found by the runners
+                    while not self.rejection_queue.empty():
+                        (coi, i, unique_names_map, m_pid) = self.rejection_queue.get_nowait()
+                        model = self.model_dict[m_pid]
+                        LOG.debug(coi)
+                        spec = self.z3_interface.specification_list[i]
+                        # composition, connected_spec, contract_inst, unique_names_map = \
+                        #     self.z3_interface.build_composition_from_model(model, spec, complete_model=True)
+                        self.solver.add(self.z3_interface.reject_candidate(model, coi=coi, unique_names_map=unique_names_map))
+
+                        #discard model
+                        self.model_dict.pop(m_pid)
 
     def terminate(self):
         '''
@@ -143,7 +157,7 @@ class ModelVerificationManager(object):
         #rebuild composition
         spec = self.z3_interface.specification_list[0]
         with self.z3_lock:
-            self.composition, self.connected_spec, self.contract_inst = \
+            self.composition, self.connected_spec, self.contract_inst, _ = \
                     self.z3_interface.build_composition_from_model(self.model, spec, complete_model=True)
         #wait for all the threads to stop
 
@@ -159,7 +173,7 @@ class RefinementChecker(multiprocessing.Process):
     this thread executes a refinement checks and dies
     '''
 
-    def __init__(self, model, manager, found_event):
+    def __init__(self, model, manager, found_event, with_coi=False):
         '''
         instantiate
         '''
@@ -168,6 +182,7 @@ class RefinementChecker(multiprocessing.Process):
         self.found_event = found_event
         self.manager = manager
         self.z3_lock = manager.z3_lock
+        self.with_coi = with_coi
         #self.result_queue = multiprocessing.Queue()
 
         super(RefinementChecker, self).__init__()
@@ -182,14 +197,23 @@ class RefinementChecker(multiprocessing.Process):
         connected_spec = None
         contract_inst = None
         failed_spec = None
-        for spec in self.z3_interface.specification_list:
+        for i in range(len(self.z3_interface.specification_list)):
+            spec = self.z3_interface.specification_list[i]
             with z3_lock:
-                composition, connected_spec, contract_inst = \
+                composition, connected_spec, contract_inst, unique_names_map = \
                     self.z3_interface.build_composition_from_model(model, spec, complete_model=True)
 
-            if not composition.is_refinement(connected_spec):
+            coi = composition.is_refinement(connected_spec, with_coi=self.with_coi)
+            if coi is not True:
                 LOG.debug('ref check done 1')
                 failed_spec = spec
+
+                #this is redundant, but it might exclude more contracts by using coi
+                if self.with_coi:
+                    # need to trim the last two characters in coi (because nuxmv checks a copy of the contracts)
+                    coi = [elem[::-1].split('_', 1)[-1][::-1] for elem in coi]
+                    self.manager.rejection_queue.put((coi, i, unique_names_map, self.pid))
+
                 return False, composition, connected_spec,contract_inst, failed_spec
 
             LOG.debug('ref check done 2')

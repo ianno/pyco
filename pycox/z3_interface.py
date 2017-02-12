@@ -12,7 +12,7 @@ import itertools
 import types
 from pycox.contract import CompositionMapping, RefinementMapping, DummyType
 from time import time
-from pycox.z3_thread_manager import ModelVerificationManager, MAX_THREADS
+from pycox.z3_thread_manager import ModelVerificationManager, MAX_THREADS, WITH_COI
 from pycox.z3_library_conversion import Z3Library
 
 # LOG = logging.getLogger()
@@ -124,6 +124,9 @@ class Z3Interface(object):
         self.spec_in_dict = {name: z3.Int('%s' % name) for name in spec.input_ports_dict}
 
         self.spec_dict = dict(self.spec_in_dict.items() + self.spec_out_dict.items())
+
+        # self.spec_port_model_to_uname = {mod.get_id(): spec.ports_dict[name].unique_name
+        #                                  for (name, mod) in self.spec_dict.items()}
 
         self.spec_outs = self.spec_out_dict.values()
         self.spec_ins = self.spec_in_dict.values()
@@ -874,7 +877,7 @@ class Z3Interface(object):
         self.obj = self.solver.minimize(Sum(self.lib_model.contract_use_flags))
 
         # push size constraint
-        # when popping, it is ok losing the counterexamples
+        # when popping, it is ok losing the counterexample
         # for a given size. (it does not apply to greater sizes)
 
         # initial_size = 1
@@ -915,7 +918,7 @@ class Z3Interface(object):
                 try:
                     model = self.propose_candidate()
                 except NotSynthesizableError as err:
-                    if size < self.num_out:
+                    if size < self.self.max_components:
                         LOG.debug('Synthesis for size %d failed. Increasing number of components...', size)
                         size = size + 1
                         self.solver.pop()
@@ -981,7 +984,7 @@ class Z3Interface(object):
         '''
 
         # self.reject_candidate(model, candidates)
-        state, composition, connected_spec, contract_inst, failed_spec = \
+        state, composition, connected_spec, contract_inst, failed_spec, unique_names_map, coi = \
             self.check_all_specs(model)
         if not state:
             # learn
@@ -991,7 +994,7 @@ class Z3Interface(object):
             # LOG.debug(z3.Not(self.connected_ports==model[self.connected_ports]))
             # self.solver.add(z3.Not(self.connected_ports==model[self.connected_ports]))
             # self.reject_candidate(model, failed_spec)
-            self.reject_candidate(model)
+            self.solver.add(self.reject_candidate(model, unique_names_map=unique_names_map, coi=coi))
 
             # then check for consistency
             # self.solver.add(self.check_for_consistency(model, contract_inst, connected_spec))
@@ -1009,13 +1012,20 @@ class Z3Interface(object):
         contract_inst = None
         failed_spec = None
         for spec in self.specification_list:
-            composition, connected_spec, contract_inst = \
+            composition, connected_spec, contract_inst, unique_names_map = \
                 self.build_composition_from_model(model, spec, complete_model=True)
 
-            if not composition.is_refinement(connected_spec):
+            coi = composition.is_refinement(connected_spec, with_coi=WITH_COI)
+            if coi is not True:
                 LOG.debug('ref check done 1')
                 failed_spec = spec
-                return False, composition, connected_spec, contract_inst, failed_spec
+
+                # this is redundant, but it might exclude more contracts by using coi
+                if WITH_COI:
+                    # need to trim the last two characters in coi (because nuxmv checks a copy of the contracts)
+                    coi = [elem[:-2] for elem in coi]
+
+                return False, composition, connected_spec, contract_inst, failed_spec, unique_names_map, coi
 
             LOG.debug('ref check done 2')
 
@@ -1025,6 +1035,8 @@ class Z3Interface(object):
         '''
         builds a contract composition out of a model
         '''
+
+        unique_names_map = {}
 
         # contracts = set()
         spec_contract = spec.copy()
@@ -1040,7 +1052,7 @@ class Z3Interface(object):
 
         # now we get all the contracts related.
         # by construction fetching only the outputs, we have the full set of contracts
-        model_map, contract_map = self.lib_model.contract_copies_by_models(models)
+        model_map, contract_map, reverse_level_map = self.lib_model.contract_copies_by_models(models)
 
         # LOG.debug(model_map)
         # LOG.debug(contract_map)
@@ -1072,6 +1084,7 @@ class Z3Interface(object):
                 port = other_contract.ports_dict[orig_port.base_name]
 
                 spec_contract.connect_to_port(spec_port, port)
+
 
         # connections among candidates
         non_zero_port_models = [p_model for p_model in self.lib_model.in_models
@@ -1134,20 +1147,28 @@ class Z3Interface(object):
 
         composition = root.compose(contracts, composition_mapping=mapping)
 
-        # LOG.debug('-----------')
-        # LOG.debug(root)
-        # for contract in contracts:
-        #    LOG.debug(contract)
-        #
-        # LOG.debug(composition)
         # LOG.debug(spec_contract)
 
         contracts.add(root)
 
-        return composition, spec_contract, contracts
+        for contract in contracts:
+            # LOG.debug(contract)
+            for port in contract.ports_dict.values():
+                if port.unique_name not in unique_names_map:
+                    unique_names_map[port.unique_name] = []
+                unique_names_map[port.unique_name].append((contract.base_name, reverse_level_map[contract]))
+
+        for port in spec_contract.ports_dict.values():
+            if port.unique_name not in unique_names_map:
+                unique_names_map[port.unique_name] = []
+            unique_names_map[port.unique_name].append((spec_contract.base_name, -1))
+
+        # LOG.debug(spec_contract)
+
+        return composition, spec_contract, contracts, unique_names_map
 
     # def reject_candidate(self, model, failed_spec):
-    def reject_candidate(self, model):
+    def reject_candidate(self, model, unique_names_map=None, coi=None):
         '''
         reject a model and its equivalents
         '''
@@ -1163,7 +1184,7 @@ class Z3Interface(object):
 
 
         c_sets = {}
-
+        used_contracts = set()
         # #retrieve failed_spec used ports
         # port_models = self.spec_ports[failed_spec]
 
@@ -1189,11 +1210,14 @@ class Z3Interface(object):
         # #LOG.debug('-------------')
         # for spec in port_models[0]:
 
-
+        #add spec
+        used_contracts.add(self.specification_list[0].base_name)
         for spec in self.spec_outs:
             index = model[spec].as_long()
             mod = self.lib_model.models[index]
             (level, contract) = self.lib_model.contract_by_model(mod)
+            used_contracts.add(self.lib_model.contract_by_model(mod)[1].base_name)
+            # if contract.base_name in used_contracts:
             if (level, contract) not in c_sets:
                 c_sets[(level, contract)] = {}
                 # find all related models
@@ -1204,6 +1228,31 @@ class Z3Interface(object):
             c_sets[(level, contract)][spec.get_id()] = (spec, index)
 
         size = len(c_sets)
+
+
+        LOG.debug(coi)
+        if unique_names_map is not None:
+            LOG.debug(unique_names_map.keys())
+
+        if isinstance(coi, (list, tuple)):
+            #assume only one level
+
+            used_contracts = set()
+            for port_uname in coi:
+                for (contract_bname, _) in unique_names_map[port_uname]:
+                    used_contracts.add(contract_bname)
+
+        LOG.debug(used_contracts)
+
+            # if len(diff_set) == 0:
+            #     #it means that no variable affects the composition
+            #     rej_formula = Not(
+            #                     And([flag == model[flag] for flag in self.lib_model.contract_use_flags])
+            #                     )
+            #     LOG.debug(rej_formula)
+            #     return rej_formula
+
+
 
         # create containers as nested lists
         # one per each c_set and n lists inside
@@ -1219,20 +1268,26 @@ class Z3Interface(object):
                 shift = self.lib_model.max_components - level + l
                 for pair in s_pairs:
                     if pair[0].get_id() not in self.dummy_model_set:
-                        l_class.append([pair[0] == self.lib_model.index_shift(pair[1], shift)])
+                        if self.specification_list[0].base_name in used_contracts:
+                            l_class.append([pair[0] == self.lib_model.index_shift(pair[1], shift)])
                 for i in xrange(0, len(mods[l])):
                     m_class = []
-                    if model[mods[level][i]].as_long() < self.lib_model.max_index:
-                        for l2 in xrange(0, self.lib_model.max_components):
-                            shift = self.lib_model.max_components - level + l2
-                            m_class.append(mods[l][i] ==
-                                           self.lib_model.index_shift(model[mods[level][i]].as_long(), shift))
-                    else:
-                        m_class.append(mods[l][i] == model[mods[level][i]].as_long())
+                    p_contract = self.lib_model.contract_by_model(mods[level][i])[1]
+                    if p_contract.base_name in used_contracts:
+                        if model[mods[level][i]].as_long() < self.lib_model.max_index:
+                            for l2 in xrange(0, self.lib_model.max_components):
+                                shift = self.lib_model.max_components - level + l2
+                                m_class.append(mods[l][i] ==
+                                               self.lib_model.index_shift(model[mods[level][i]].as_long(), shift))
+                        else:
+                            m_class.append(mods[l][i] == model[mods[level][i]].as_long())
 
-                    l_class.append(m_class)
-                s_class.append(l_class)
-            classes.append(s_class)
+                        l_class.append(m_class)
+                if len(l_class) > 0:
+                    s_class.append(l_class)
+
+            if len(s_class) > 0:
+                classes.append(s_class)
 
         # size
 
@@ -1252,7 +1307,7 @@ class Z3Interface(object):
             )
         )
 
-        # LOG.debug(rej_formula)
+        LOG.debug(rej_formula)
 
         # self.solver.add(rej_formula)
         return rej_formula

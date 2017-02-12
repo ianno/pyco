@@ -561,6 +561,7 @@ class Z3Library(object):
         levels = [{} for level in range(0, self.max_components)]
         model_map_contract = {}
         contract_map = {}
+        reverse_level_map = {}
 
         for model in model_list:
             level, contract = self.contract_by_model(model)
@@ -569,9 +570,9 @@ class Z3Library(object):
 
             model_map_contract[model.get_id()] = levels[level][contract]
             contract_map[(level, contract)] = levels[level][contract]
+            reverse_level_map[levels[level][contract]] = level
 
-
-        return model_map_contract, contract_map
+        return model_map_contract, contract_map, reverse_level_map
 
     def index_shift(self, index, shift_lev):
         '''

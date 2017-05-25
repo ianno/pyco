@@ -204,7 +204,7 @@ def test_synth_2gen_2c_1(ac_lib):
     spec1 = GenIsolation1('G1')
     #spec2 = GenIsolation2('G2')
 
-    interface = SynthesisInterface([spec1], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -220,7 +220,7 @@ def test_synth_2gen_2c_2(ac_lib):
     spec1 = GenIsolation1('G1')
     spec2 = GenIsolation2('G2')
 
-    interface = SynthesisInterface([spec1, spec2], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1, spec2])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -235,7 +235,7 @@ def test_synth_1gen_1c_2(ac_lib):
 
     spec1 = GenIsolation0('G1')
 
-    interface = SynthesisInterface([spec1], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
 
@@ -249,7 +249,7 @@ def test_synth_2gen_4c_6(ac_lib):
 
     spec1 = GenIsolation1_6('G1')
 
-    interface = SynthesisInterface([spec1], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -264,7 +264,7 @@ def test_synth_4gen_6c_ac_1spec(ac_lib):
 
     spec1 = GenIsolation1B('G1')
 
-    interface = SynthesisInterface([spec1], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -284,7 +284,7 @@ def test_synth_4gen_6c_ac_2spec(ac_lib):
     spec1 = GenIsolation1B('G1')
     spec2 = GenIsolation2B('G2')
 
-    interface = SynthesisInterface([spec1, spec2], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1, spec2])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -305,7 +305,7 @@ def test_synth_4gen_6c_ac_3spec(ac_lib):
     spec2 = GenIsolation2B('G2')
     spec3 = GenIsolation3B('G3')
 
-    interface = SynthesisInterface([spec1, spec2, spec3], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1, spec2, spec3])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -327,7 +327,7 @@ def test_synth_4gen_6c_ac_4spec(ac_lib):
     spec3 = GenIsolation3B('G3')
     spec4 = GenIsolation4B('G4')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1, spec2, spec3, spec4])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -350,8 +350,8 @@ def test_synth_4gen_6c_ac_5spec(ac_lib):
     spec4 = GenIsolation4B('G4')
     spec5 = NoShort('G5')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
-                                    spec5], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1, spec2, spec3, spec4,
+                                    spec5])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -375,8 +375,8 @@ def test_synth_4gen_6c_ac_6spec(ac_lib):
     spec5 = NoShort('G5')
     spec6 = NoParallelShort('G6')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
-                                    spec5, spec6], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1, spec2, spec3, spec4,
+                                    spec5, spec6])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -401,8 +401,8 @@ def test_synth_4gen_6c_ac_7spec(ac_lib):
     spec6 = NoParallelShort('G6')
     spec7 = IsolateEmergencyBus('G7')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
-                                    spec5, spec6, spec7], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1, spec2, spec3, spec4,
+                                    spec5, spec6, spec7])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -430,7 +430,7 @@ def test_synth_6_10_dc_1spec(acdc_lib):
     #spec8 = DCRightD('G8')
     #spec9 = DCLeftD('G9')
 
-    interface = SynthesisInterface([spec1], acdc_lib)
+    interface = SynthesisInterface(acdc_lib, [spec1])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -454,7 +454,7 @@ def test_synth_6_10_dc_2spec(acdc_lib):
     spec1 = GenIsolation1D('G1')
     spec2 = GenIsolation2D('G2')
 
-    interface = SynthesisInterface([spec1, spec2], acdc_lib)
+    interface = SynthesisInterface(acdc_lib, [spec1, spec2])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -479,7 +479,7 @@ def test_synth_6_10_dc_3spec(acdc_lib):
     spec2 = GenIsolation2D('G2')
     spec3 = GenIsolation3D('G3')
 
-    interface = SynthesisInterface([spec1, spec2, spec3], acdc_lib)
+    interface = SynthesisInterface(acdc_lib, [spec1, spec2, spec3])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -505,7 +505,7 @@ def test_synth_6_10_dc_4spec(acdc_lib):
     spec3 = GenIsolation3D('G3')
     spec4 = GenIsolation4D('G4')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4], acdc_lib)
+    interface = SynthesisInterface(acdc_lib, [spec1, spec2, spec3, spec4])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -532,8 +532,8 @@ def test_synth_6_10_dc_5spec(acdc_lib):
     spec4 = GenIsolation4D('G4')
     spec5 = NoShortD('G5')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
-                                    spec5], acdc_lib)
+    interface = SynthesisInterface(acdc_lib, [spec1, spec2, spec3, spec4,
+                                    spec5])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -561,8 +561,8 @@ def test_synth_6_10_dc_6spec(acdc_lib):
     spec5 = NoShortD('G5')
     spec6 = NoParallelShortD('G6')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
-                                    spec5, spec6], acdc_lib)
+    interface = SynthesisInterface(acdc_lib, [spec1, spec2, spec3, spec4,
+                                    spec5, spec6])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -590,8 +590,8 @@ def test_synth_6_10_dc_7spec(acdc_lib):
     spec6 = NoParallelShortD('G6')
     spec7 = IsolateEmergencyBusD('G7')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
-                                    spec5, spec6, spec7], acdc_lib)
+    interface = SynthesisInterface(acdc_lib, [spec1, spec2, spec3, spec4,
+                                    spec5, spec6, spec7])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -619,8 +619,8 @@ def test_synth_6_10_dc_8spec(acdc_lib):
     spec7 = IsolateEmergencyBusD('G7')
     spec8 = DCRightD('G8')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
-                                    spec5, spec6, spec7, spec8], acdc_lib)
+    interface = SynthesisInterface(acdc_lib, [spec1, spec2, spec3, spec4,
+                                    spec5, spec6, spec7, spec8])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -649,9 +649,9 @@ def test_synth_6_10_dc_9spec(acdc_lib):
     spec8 = DCRightD('G8')
     spec9 = DCLeftD('G9')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
+    interface = SynthesisInterface(acdc_lib, [spec1, spec2, spec3, spec4,
                                     spec5, spec6, spec7, spec8,
-                                    spec9], acdc_lib)
+                                    spec9])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])

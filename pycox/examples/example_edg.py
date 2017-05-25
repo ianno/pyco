@@ -8,7 +8,7 @@ Author: Antonio Iannopollo
 '''
 
 
-from pycox.contract import Contract, BaseType, IntRangeType
+from pycox.contract import Contract, BaseType, IntRangeType, AnyType
 from pycox.library import (ContractLibrary, LibraryComponent,
                             LibraryPortMapping, LibraryCompositionMapping)
 from pycox.synthesis import SynthesisInterface
@@ -38,6 +38,12 @@ class Voltage5V(Voltage):
 class Voltage3V(Voltage):
     '''
     input or output of fixed voltage @3V
+    '''
+    pass
+
+class Voltage12V(Voltage):
+    '''
+    input or output of fixed voltage @5V
     '''
     pass
 
@@ -123,7 +129,99 @@ class SCLMaster(SCL):
     '''
     pass
 
+class GPIODriverT(BaseType):
+    '''
+    GPIO driver type
+    '''
+    pass
+
+class LEDDriverT(BaseType):
+    '''
+    LED driver
+    '''
+    pass
+
+class AclDriverT(BaseType):
+    '''
+    Accelerometer driver
+    '''
+    pass
+
+
+
 #Now let's include some components
+class LEDDriver(Contract):
+    '''
+    Led driver
+    '''
+    INPUT_PORTS = [('io', GPIODriverT)]
+    OUTPUT_PORTS = [('led', LEDDriverT)]
+
+class AclDriver(Contract):
+    '''
+    Led driver
+    '''
+    INPUT_PORTS = [('io', GPIODriverT)]
+    OUTPUT_PORTS = [('acl', AclDriverT)]
+
+class GPIODriver(Contract):
+    '''
+    GPIO driver
+    '''
+    INPUT_PORTS = [('gpio', IOPin)]
+    OUTPUT_PORTS = [('io', GPIODriverT)]
+
+class LEDGeneral(Contract):
+    '''
+    General LED
+    '''
+
+    INPUT_PORTS = [('led_ctrl', LEDDriverT), ('gnd', GND), ('pwr', Voltage5V)]
+    OUTPUT_PORTS = [('led', Device)]
+
+class Accelerometer(Contract):
+    '''
+    General LED
+    '''
+
+    INPUT_PORTS = [('acl_ctrl', AclDriverT), ('gnd', GND), ('pwr', Voltage3V)]
+    OUTPUT_PORTS = [('acl', Device)]
+
+class PowerAdapter12V(Contract):
+    '''
+    MCU
+    '''
+    INPUT_PORTS = []
+    OUTPUT_PORTS = [('gnd', GND), ('vout', Voltage12V)]
+
+class PowerAdapter5V(Contract):
+    '''
+    MCU
+    '''
+    INPUT_PORTS = []
+    OUTPUT_PORTS = [('gnd', GND), ('vout', Voltage5V)]
+
+class DcDcConverter12_3(Contract):
+    '''
+    DCDC 12 to 3
+    '''
+    INPUT_PORTS = [('gnd', GND), ('vin', Voltage12V)]
+    OUTPUT_PORTS = [('vout', Voltage3V)]
+
+class DcDcConverter12_5(Contract):
+    '''
+    DCDC 12 to 5
+    '''
+    INPUT_PORTS = [('gnd', GND), ('vin', Voltage12V)]
+    OUTPUT_PORTS = [('vout', Voltage5V)]
+
+class SimpleMCU(Contract):
+    '''
+    MCU
+    '''
+    INPUT_PORTS = [('gnd', GND), ('vin', Voltage3V)]
+    OUTPUT_PORTS = [('o1', IOPin), ('o2', IOPin), ('o3', IOPin), ('o4', IOPin)]
+
 class LED(Contract):
     '''
     Basic LED
@@ -161,14 +259,6 @@ class Microcontroller(Contract):
     GUARANTEES = 'true'
 
 
-class PowerAdapter5V(Contract):
-    '''
-    Basic micro
-    '''
-    INPUT_PORTS = []
-    OUTPUT_PORTS = [('gnd', GND), ('pwr', Voltage5V)]
-    ASSUMPTIONS = 'true'
-    GUARANTEES = 'true'
 
 #now add specs
 

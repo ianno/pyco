@@ -51,7 +51,114 @@ def power_adapter():
     return LibraryComponent('Power', comp)
 
 
+@pytest.fixture
+def power_adapter12():
+    '''
+    std generator
+    '''
+    comp = PowerAdapter12V('Power12')
+    return LibraryComponent('Power12', comp)
 
+@pytest.fixture
+def GPIO_driver():
+    '''
+    std generator
+    '''
+    comp = GPIODriver('GPIODriver')
+    return LibraryComponent('GPIODriver', comp)
+
+@pytest.fixture
+def LED_driver():
+    '''
+    std generator
+    '''
+    comp = LEDDriver('LEDDriver')
+    return LibraryComponent('LEDDriver', comp)
+
+@pytest.fixture
+def LED_gen():
+    '''
+    std generator
+    '''
+    comp = LEDGeneral('LEDGeneral')
+    return LibraryComponent('LEDGeneral', comp)
+
+@pytest.fixture
+def ACL_driver():
+    '''
+    std generator
+    '''
+    comp = AclDriver('AclDriver')
+    return LibraryComponent('AclDriver', comp)
+
+@pytest.fixture
+def accelerometer():
+    '''
+    std generator
+    '''
+    comp = Accelerometer('Accelerometer')
+    return LibraryComponent('Accelerometer', comp)
+
+@pytest.fixture
+def dcdc3():
+    '''
+    std generator
+    '''
+    comp = DcDcConverter12_3('Dcdc3')
+    return LibraryComponent('Dcdc3', comp)
+
+@pytest.fixture
+def dcdc5():
+    '''
+    std generator
+    '''
+    comp = DcDcConverter12_5('Dcdc5')
+    return LibraryComponent('Dcdc5', comp)
+
+@pytest.fixture
+def simple_MCU():
+    '''
+    std generator
+    '''
+    comp = SimpleMCU('SimpleMCU')
+    return LibraryComponent('SimpleMCU', comp)
+
+@pytest.fixture
+def big_edg_lib(simple_MCU, LED_gen, power_adapter, power_adapter12, dcdc3,
+                dcdc5, accelerometer, ACL_driver, LED_driver, GPIO_driver):
+    '''
+    returns a populated library
+    '''
+    N = 1
+    library = ContractLibrary('big_edg_lib')
+
+    for _ in range(N):
+        library.add(simple_MCU)
+        library.add(LED_gen)
+        library.add(power_adapter)
+        library.add(power_adapter12)
+        library.add(dcdc3)
+        library.add(dcdc5)
+        library.add(accelerometer)
+        library.add(LED_driver)
+        library.add(ACL_driver)
+        library.add(GPIO_driver)
+
+    library.verify_library()
+
+    #add type compatibilities
+    library.add_type(IOPin)
+    library.add_type(Voltage5V)
+    library.add_type(VariableVoltage)
+    library.add_type(Device)
+    library.add_type(LEDDriverT)
+    library.add_type(AclDriverT)
+    library.add_type(GPIODriverT)
+    library.add_type(GND)
+    library.add_type(Voltage3V)
+    library.add_type(Voltage12V)
+
+    return library
 
 
 @pytest.fixture
@@ -159,3 +266,19 @@ def test_base_use_micro_and_2led(edg_lib):
     interface.use_component(led1, level=1)
 
     interface.synthesize(limit=5)
+
+
+def test_big_lib_led(big_edg_lib):
+    '''
+    Performs simple synthesis
+    '''
+
+    # spec1 = SimpleEmpty('Void')
+
+    interface = SynthesisInterface(big_edg_lib)
+
+    led = interface.get_component('LEDGeneral')
+    interface.use_component(led)
+
+
+    interface.synthesize(limit=10)

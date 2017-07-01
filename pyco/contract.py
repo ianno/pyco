@@ -7,9 +7,9 @@
 
 '''
 
-from pyco.contract import (Contract as BaseContract, PortMapping, CompositionMapping,
+from pycolite.contract import (Contract as BaseContract, PortMapping, CompositionMapping,
                            RefinementMapping, NotARefinementError)
-from pyco.parser.lexer import BaseSymbolSet
+from pycolite.parser.lexer import BaseSymbolSet
 
 from pyco import LOG
 
@@ -18,7 +18,7 @@ LOG.debug('In contract.py')
 
 # class Port(BasePort):
 #    '''
-#    This class extends the Port class from pyco-lite-lite-dev.
+#    This class extends the Port class from pycolite-lite-dev.
 #    In addition to the base class, here every Port has a related SMT object.
 #    '''
 #
@@ -40,7 +40,7 @@ LOG.debug('In contract.py')
 
 class Contract(BaseContract):
     '''
-    Extends pyco-lite-lite-dev.contract.Contract adding support
+    Extends pycolite-lite-dev.contract.Contract adding support
     for graphs and libraries
     '''
     ASSUMPTIONS = 'true'

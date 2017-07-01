@@ -40,7 +40,7 @@ class SMTManager(object):
         register a new port and returns a SMT based Port model
 
         :param port: Port to register
-        :type port: pyco-dev.contract.Port
+        :type port: pyco.contract.Port
         '''
         self.port_base_names[port] = port.base_name
         self.port_unique_names[port] = port.unique_name

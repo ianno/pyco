@@ -388,7 +388,7 @@ def test_ltl_spec(edg_mlib):
 
     interface.synthesize(limit=8)
 
-def test_ltl_spec_med(edg_mlib_med):
+def test_ltl_spec_med(edg_mlib_med, min_comps, min_ports, library_redundancy, filename):
     '''
     Simple test including spec with only 1 half bridge and higher redundancy
 
@@ -412,7 +412,12 @@ def test_ltl_spec_med(edg_mlib_med):
     interface.distinct_ports_constraints([spec.o1, spec.o2, spec.o3])
 
 
-    interface.synthesize(limit=8)
+    interface.synthesize(limit=8, library_max_redundancy=library_redundancy,
+                         minimize_components=min_comps,
+                         minimize_ports=min_ports,
+                         filename=filename,
+                         visualize=False
+                         )
 
 def test_ltl_spec_single(edg_mlib_single):
     '''

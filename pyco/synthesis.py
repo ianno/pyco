@@ -8,6 +8,9 @@ import itertools
 
 from pyco.contract import EmptyContract
 from pyco.z3_interface import Z3Interface
+from pyco.graphviz_converter import GraphizConverter
+import time
+from pyco import LOG
 
 
 class SynthesisInterface(object):
@@ -99,14 +102,59 @@ class SynthesisInterface(object):
         self.fixed_components.add((comp, level))
         self.fixed_connections_spec.add((comp, port_name, level, spec_port_name))
 
-    def synthesize(self, limit=None):
+    def synthesize(self, limit=None, library_max_redundancy=None,
+                   strict_out_lib_map=False,
+                   strict_in_spec_map=True,
+                   use_types=True,
+                   use_hints=True,
+                   minimize_components=False,
+                   minimize_ports=False,
+                   minimize_cost=False,
+                   filename=None,
+                   visualize=True
+                   ):
         '''
         call for synthesis
         '''
+        LOG.debug(filename)
+        if filename is None:
+            filename = 'out'
 
-        self.solver_interface.synthesize(self.spec_contract_list, limit=limit,
+        time1 = time.time()
+
+        (model, composition,
+         spec, contract_list) = self.solver_interface.synthesize(self.spec_contract_list, limit=limit,
+                                         library_max_redundancy=library_max_redundancy,
+                                         strict_out_lib_map=strict_out_lib_map,
+                                         strict_in_spec_map=strict_in_spec_map,
+                                         use_types=use_types,
+                                         use_hints=use_hints,
+                                         minimize_components=minimize_components,
+                                         minimize_ports=minimize_ports,
+                                         minimize_cost=minimize_cost,
                                          same_block_constraints=self.same_block_pairs,
                                          distinct_mapping_constraints=self.distinct_map,
                                          fixed_components=self.fixed_components,
                                          fixed_connections=self.fixed_connections,
                                          fixed_connections_spec=self.fixed_connections_spec)
+        time2 = time.time()
+        graphviz_conv = GraphizConverter(spec, composition, contract_list,
+                                         synthesis_time=time2-time1, filename=filename)
+        graphviz_conv.generate_graphviz()
+
+        if visualize:
+            graphviz_conv.view()
+        else:
+            graphviz_conv.save()
+
+        with open(filename+'.pyco', 'w') as f:
+            f.write('Synthesis time: %.2f seconds\n\n\n' % (time2-time1))
+            f.write(str(model))
+            f.write('\n\n')
+            f.write(str(spec))
+            f.write('\n\n')
+            for c in contract_list:
+                f.write(str(c))
+                f.write('\n')
+
+

@@ -96,7 +96,7 @@ class Z3Interface(object):
         for component in library.components:
             self.distinct_ports_by_component[component.contract] = component.distinct_set
 
-    def initiliaze_solver(self, property_contract, limit):
+    def initiliaze_solver(self, property_contract, limit, library_max_redundancy=None):
         '''
         Create environment and models from library
         '''
@@ -115,12 +115,12 @@ class Z3Interface(object):
         # self.property_model = self.create_contract_model(property_contract, 0, is_library_elem=False)
         self.property_contract = property_contract
 
-        self.create_z3_environment(self.property_contract, limit)
+        self.create_z3_environment(self.property_contract, limit, library_max_redundancy)
 
-    def create_z3_environment(self, spec, limit):
-        '''
+    def create_z3_environment(self, spec, limit, library_max_redundancy=None):
+        """
         Creates basic types for the current library instance
-        '''
+        """
 
         self.spec_out_dict = {name: z3.Int('%s' % name) for name in spec.output_ports_dict}
         self.spec_in_dict = {name: z3.Int('%s' % name) for name in spec.input_ports_dict}
@@ -132,7 +132,7 @@ class Z3Interface(object):
 
         self.num_out = len(self.spec_outs)
 
-        self.lib_model = Z3Library(self.library, spec, limit=limit)
+        self.lib_model = Z3Library(self.library, spec, library_max_redundancy=library_max_redundancy, limit=limit)
         self.lib_model.include_spec_inputs(spec)
 
         # LOG.debug(self.lib_model.models_by_contracts())
@@ -800,6 +800,14 @@ class Z3Interface(object):
         self.solver.add(constraints)
 
     def synthesize(self, property_contracts, limit=None,
+                   library_max_redundancy=None,
+                   strict_out_lib_map=False,
+                   strict_in_spec_map=True,
+                   use_types=True,
+                   use_hints=True,
+                   minimize_components=False,
+                   minimize_ports=False,
+                   minimize_cost=False,
                    same_block_constraints=None,
                    distinct_mapping_constraints=None,
                    fixed_components=None,
@@ -808,6 +816,11 @@ class Z3Interface(object):
         '''
         perform synthesis process
         '''
+        if sum([minimize_components, minimize_ports, minimize_cost]) > 1:
+            raise OptimizationError('Only one objective can be minimized')
+        if minimize_cost:
+            raise NotImplementedError('Custom cost not yet implemented')
+
         self.time = {}
         self.time['start'] = time()
         self.same_block_constraints = same_block_constraints
@@ -817,6 +830,8 @@ class Z3Interface(object):
         self.fixed_connections_spec = fixed_connections_spec
 
         self.specification_list = property_contracts
+
+        optimize = minimize_components | minimize_ports | minimize_cost
 
         # let's pick a root
         # we assume all the specs have same interface
@@ -838,7 +853,7 @@ class Z3Interface(object):
 
                 property_contract = SpecClsCopy('%s_c' % property_contract.base_name)
 
-        self.initiliaze_solver(property_contract, limit=self.max_components)
+        self.initiliaze_solver(property_contract, limit=self.max_components, library_max_redundancy=library_max_redundancy)
 
         # property model has to be fully connected - always true
         # self.solver.add(self.fully_connected(self.property_model))
@@ -863,9 +878,13 @@ class Z3Interface(object):
         self.solver.add(self.use_max_n_components(self.max_components))
 
         self.full_spec_out()
-        # self.lib_full_chosen_output() #
+
+        if strict_out_lib_map:
+            self.lib_full_chosen_output() #
         self.spec_out_to_out()
-        self.full_spec_in() #
+
+        if strict_in_spec_map:
+            self.full_spec_in() #
         ## _self.spec_in_to_in()
         ## _self.spec_inputs_no_feedback()
         ## self.lib_inputs_no_feedback_if_assumption()
@@ -874,33 +893,41 @@ class Z3Interface(object):
         self.lib_to_outputs_or_spec_in()
         self.lib_chosen_to_chosen()
         self.lib_not_chosen_zero()
-        # self.spec_process_in_types() ### remove for tests with no types
-        # self.spec_process_out_types() ###
-        # self.lib_process_types() ###
-        # self.compute_distinct_port_spec_constraints() ###
-        # self.compute_distinct_port_lib_constraints() ###
-        # self.compute_same_block_constraints() ###
-        self.compute_fixed_components()
-        self.compute_fixed_connections()
-        self.compute_fixed_spec_connections()
+
+        if use_types:
+            self.spec_process_in_types() ### remove for tests with no types
+            self.spec_process_out_types() ###
+            self.lib_process_types() ###
+        if use_hints:
+            self.compute_distinct_port_spec_constraints() ###
+            self.compute_distinct_port_lib_constraints() ###
+            self.compute_same_block_constraints() ###
+            self.compute_fixed_components()
+            self.compute_fixed_connections()
+            self.compute_fixed_spec_connections()
         # self._lib_distinct()
 
         r = t.apply(self.solver)
-        solv = Solver()
-        # solv = Optimize()
+
+        if optimize:
+            solv = Optimize()
+        else:
+            solv = Solver()
+
         solv.add(r.as_expr())
         self.solver = solv
 
-        # self.obj = self.solver.minimize(Sum(self.lib_model.contract_use_flags))
-        ##self.solver.add(unused_ports==z3.Sum([model for model in self.lib_model.models if model == -1]))
+        if minimize_components:
+            self.obj = self.solver.minimize(Sum(self.lib_model.contract_use_flags))
 
-        #minimize ports used
-        # used_ports = [z3.Int('used_%d'%i) for i in range(len(self.lib_model.models))]
-        # self.solver.add([Or(used == 0, used == 1) for used in used_ports])
-        # self.solver.add([Implies(used_ports[i]==1, self.lib_model.models[i]>-1) for i in range(len(self.lib_model.models))])
-        # self.solver.add([Implies(used_ports[i]==0, self.lib_model.models[i]==-1) for i in range(len(self.lib_model.models))])
-        #
-        # self.obj = self.solver.minimize(z3.Sum(used_ports))
+        if minimize_ports:
+            #minimize ports used
+            used_ports = [z3.Int('used_%d'%i) for i in range(len(self.lib_model.models))]
+            self.solver.add([Or(used == 0, used == 1) for used in used_ports])
+            self.solver.add([Implies(used_ports[i]==1, self.lib_model.models[i]>-1) for i in range(len(self.lib_model.models))])
+            self.solver.add([Implies(used_ports[i]==0, self.lib_model.models[i]==-1) for i in range(len(self.lib_model.models))])
+
+            self.obj = self.solver.minimize(z3.Sum(used_ports))
 
         # push size constraint
         # when popping, it is ok losing the counterexample
@@ -1182,42 +1209,7 @@ class Z3Interface(object):
         reject a model and its equivalents
         '''
 
-        # #simple rejection
-        # rej = []
-        # for mod in self.lib_model.in_models:
-        #     rej.append(mod != model[mod])
-        #
-        # for mod in self.spec_out_dict.values():
-        #     rej.append(mod != model[mod])
-        # return Or(rej)
-
-
         c_sets = {}
-
-        # #retrieve failed_spec used ports
-        # port_models = self.spec_ports[failed_spec]
-
-        # #get_ids
-        # port_ids = set([mod.get_id() for mod in port_models[0]])
-
-        # #include all the outputs of the contracts connected to inputs
-        # out_indices = []
-        # for in_port in port_models[1]:
-        #     out_models = self.lib_model.related_out_models(self.lib_model.models[model[in_port].as_long()])
-        #     out_indices += [self.lib_model.index_by_model(mod) for mod in out_models]
-
-        # out_indices = set(out_indices)
-        # for spec in self.spec_outs:
-        #     if spec.get_id() not in port_ids:
-        #         if model[spec].as_long() in out_indices:
-        #             port_models[0].append(spec)
-
-        # #create contract sets
-        # #LOG.debug('-------------')
-        # #LOG.debug(port_models[0])
-        # #LOG.debug(self.spec_outs)
-        # #LOG.debug('-------------')
-        # for spec in port_models[0]:
 
 
         for spec in self.spec_outs:
@@ -1405,7 +1397,7 @@ class Z3Interface(object):
     def recall_not_consistent_constraints(self):
         '''
         to be called by sizes > 1.
-        Load all the informations related to inconsistent
+        Load all the information related to inconsistent
         blocks, computed in previous steps
         '''
         constraints = [Not(self.connected_ports(c_a, self.property_model,
@@ -1470,6 +1462,11 @@ SMTModelFactory.register(Z3Interface)
 
 
 class NotSynthesizableError(Exception):
+    '''
+    raised if it is not possible to synthesize a controller
+    '''
+    pass
+class OptimizationError(Exception):
     '''
     raised if it is not possible to synthesize a controller
     '''

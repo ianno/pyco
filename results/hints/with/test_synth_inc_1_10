@@ -2,7 +2,7 @@
 platform darwin -- Python 2.7.13 -- py-1.4.30 -- pytest-2.7.2
 rootdir: /Users/antonio/workspace/pycox/pycox, inifile: 
 plugins: ipynb, nbval
-2017-06-24 01:29:03,580  - __init__.py:17 - DEBUG - PYCOX INIT
+2017-06-24 01:29:03,580  - __init__.py:17 - DEBUG - PYCO INIT
 Generating LALR tables
 2017-06-24 01:29:03,653  - contract.py:16 - DEBUG - In contract.py
 2017-06-24 01:29:03,654  - solver_interface.py:9 - DEBUG - In solver_interface

@@ -6,7 +6,7 @@ Author: Antonio Iannopollo
 '''
 import itertools
 
-from pyco.attribute import Attribute
+from pycolite.attribute import Attribute
 
 from pyco.contract import (RefinementMapping, PortMappingError, PortMapping,
                            CompositionMapping, NotARefinementError, BaseType,

@@ -173,7 +173,7 @@ def test_synth_6_10_dc_1spec():
     res = None
     #synthesis
     try:
-        res = interface.synthesize(strict_out_lib_map=True,
+        interface.synthesize(strict_out_lib_map=True,
                          library_max_redundancy=2,
                          minimize_components=False,
                          minimize_ports=False,

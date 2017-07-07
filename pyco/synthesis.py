@@ -7,7 +7,7 @@ Author: Antonio Iannopollo
 import itertools
 
 from pyco.contract import EmptyContract
-from pyco.z3_interface import Z3Interface
+from pyco.z3_interface import Z3Interface, NotSynthesizableError, OptimizationError
 from pyco.graphviz_converter import GraphizConverter
 import time
 from pyco import LOG
@@ -156,5 +156,3 @@ class SynthesisInterface(object):
             for c in contract_list:
                 f.write(str(c))
                 f.write('\n')
-
-

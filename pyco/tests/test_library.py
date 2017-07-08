@@ -5,11 +5,11 @@ Author: Antonio Iannopollo
 '''
 
 import pytest
-from pycox.contract import Contract, NotARefinementError
-from pycox.library import (LibraryComponent, ContractLibrary, LibraryPortMapping,
-                           RefinementAssertionError, EquivalentComponentError)
-from pycox.tests.test_contracts import (TrueContract, FalseContract,
-                                        FutureContract, NextContract)
+from pyco.contract import Contract, NotARefinementError
+from pyco.library import (LibraryComponent, ContractLibrary, LibraryPortMapping,
+                          RefinementAssertionError, EquivalentComponentError)
+from pyco.tests.test_contracts import (TrueContract, FalseContract,
+                                       FutureContract, NextContract)
 import logging
 
 LOG = logging.getLogger()

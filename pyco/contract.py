@@ -7,18 +7,18 @@
 
 '''
 
-from pyco.contract import (Port as BasePort, Contract as BaseContract, PortMapping,
-                           CompositionMapping, RefinementMapping as ContractMapping,
-                           NotARefinementError, RefinementMapping)
-from pyco.parser.lexer import BaseSymbolSet
-from pycox import LOG
-from abc import ABCMeta
+from pycolite.contract import (Contract as BaseContract, PortMapping, CompositionMapping,
+                           RefinementMapping, NotARefinementError)
+from pycolite.parser.lexer import BaseSymbolSet
+
+from pyco import LOG
 
 LOG.debug('In contract.py')
 
-#class Port(BasePort):
+
+# class Port(BasePort):
 #    '''
-#    This class extends the Port class from pyco.
+#    This class extends the Port class from pycolite-lite-dev.
 #    In addition to the base class, here every Port has a related SMT object.
 #    '''
 #
@@ -40,12 +40,12 @@ LOG.debug('In contract.py')
 
 class Contract(BaseContract):
     '''
-    Extends pyco.contract.Contract adding support
+    Extends pycolite-lite-dev.contract.Contract adding support
     for graphs and libraries
     '''
-    ASSUMPTIONS = ''
-    GUARANTEES = ''
-    #pairs (name,type)
+    ASSUMPTIONS = 'true'
+    GUARANTEES = 'true'
+    # pairs (name,type)
     INPUT_PORTS = []
     OUTPUT_PORTS = []
 
@@ -56,7 +56,7 @@ class Contract(BaseContract):
         '''
         Initialization
         '''
-        #pre-process
+        # pre-process
         for index, item in enumerate(self.INPUT_PORTS):
             try:
                 (port_name, port_type) = item
@@ -71,7 +71,7 @@ class Contract(BaseContract):
 
         self.port_type = {port_name: port_type for (port_name, port_type)
                           in self.INPUT_PORTS + self.OUTPUT_PORTS}
-        #LOG.debug(self.port_type)
+        # LOG.debug(self.port_type)
 
         if input_ports is None:
             input_ports = [port_name for (port_name, _) in self.INPUT_PORTS]
@@ -89,26 +89,38 @@ class Contract(BaseContract):
                                        symbol_set_cls, context,
                                        saturated, infer_ports)
 
-
     def assign_to_solver(self, smt_manager):
         '''
         Registers contract information to solver
         '''
         smt_manager.register_contract(self)
-        #self.smt_model = smt_manager.get_contract_model(self)
+        # self.smt_model = smt_manager.get_contract_model(self)
 
         for port in self.ports_dict.values():
             smt_manager.register_port(port)
-            #port.assign_to_solver(smt_manager)
+            # port.assign_to_solver(smt_manager)
 
 
-
-class BaseType:
+class DummyType(object):
     '''
     Implements base type for contract ports
     '''
+    pass
 
-    __metaclass__ = ABCMeta
+
+class BaseType(DummyType):
+    """
+    Implements base type for contract ports
+    """
+    pass
+
+
+class IntRangeType(BaseType):
+    """
+    Implements base type for contract ports
+    """
+    min = None
+    max = None
 
 
 class PortMappingError(Exception):
@@ -123,3 +135,11 @@ class NotATypeError(Exception):
     Raised if a type is not a subclass of BaseType
     '''
 
+class EmptyContract(Contract):
+    """
+    An empty contract
+    """
+    INPUT_PORTS = []
+    OUTPUT_PORTS = []
+    ASSUMPTIONS = '''true'''
+    GUARANTEES = 'true'

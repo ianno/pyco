@@ -4,8 +4,7 @@ This module contains the main interface to the SMT solver
 Author: Antonio Iannopollo
 '''
 
-from pycox.z3_interface import Z3Interface
-from pycox import LOG
+from pyco import LOG
 
 LOG.debug('In solver_interface')
 
@@ -41,7 +40,7 @@ class SMTManager(object):
         register a new port and returns a SMT based Port model
 
         :param port: Port to register
-        :type port: pycox.contract.Port
+        :type port: pyco.contract.Port
         '''
         self.port_base_names[port] = port.base_name
         self.port_unique_names[port] = port.unique_name

@@ -5,12 +5,12 @@ of threads to speed things up
 Author: Antonio Iannopollo
 '''
 
-from pycox import LOG
-#import threading
-#from Queue import Queue, Empty
-from Queue import Empty
-import pycox.z3_interface
 import multiprocessing
+
+# import threading
+# from Queue import Queue, Empty
+import pyco
+from pyco import LOG
 
 MAX_THREADS = 7
 
@@ -77,16 +77,8 @@ class ModelVerificationManager(object):
             try:
                 with self.z3_lock:
                     model = self.z3_interface.propose_candidate()
-            except pycox.z3_interface.NotSynthesizableError as err:
-                if size < self.z3_interface.num_out:
-                    LOG.debug('Synthesis for size %d failed. Increasing number of components...', size)
-                    size = size + 1
-                    with self.z3_lock:
-                        self.solver.pop()
-                        self.solver.push()
-                        self.solver.add(size_constraints[size])
-                else:
-                    return self.terminate()
+            except pyco.z3_interface.NotSynthesizableError as err:
+                return self.terminate()
             else:
                 #acquire semaphore
                 self.semaphore.acquire()
@@ -94,6 +86,7 @@ class ModelVerificationManager(object):
                 #check if event is successful
                 if self.found_refinement.is_set():
                     #we are done. kill all running threads and exit
+
                     return self.terminate()
 
                 #else remove not successful models
@@ -121,6 +114,7 @@ class ModelVerificationManager(object):
         '''
         close up nicely
         '''
+        print('')
         LOG.debug('terminating')
         #pid = self.result_queue.get()
 
@@ -136,7 +130,7 @@ class ModelVerificationManager(object):
                 pids.append(self.result_queue.get())
             pid = min(pids)
         else:
-            raise pycox.z3_interface.NotSynthesizableError()
+            raise pyco.z3_interface.NotSynthesizableError()
 
         self.model = self.model_dict[pid]
 
@@ -188,11 +182,12 @@ class RefinementChecker(multiprocessing.Process):
                     self.z3_interface.build_composition_from_model(model, spec, complete_model=True)
 
             if not composition.is_refinement(connected_spec):
-                LOG.debug('ref check done 1')
+                if self.pid % 20 == 0:
+                    print('.'),
                 failed_spec = spec
                 return False, composition, connected_spec,contract_inst, failed_spec
 
-            LOG.debug('ref check done 2')
+            print('+'),
 
         return True, composition, connected_spec,contract_inst, None
 
@@ -203,7 +198,7 @@ class RefinementChecker(multiprocessing.Process):
         '''
         #import pdb
         #pdb.set_trace()
-        print 'thread %s running' % self.ident
+        #print 'thread %s running' % self.ident
         #return
         state, composition, connected_spec, contract_inst, failed_spec= \
             self.check_all_specs_threadsafe(self.model, z3_lock=self.z3_lock)

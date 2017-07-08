@@ -4,14 +4,15 @@ to the concept of library of contracts
 
 Author: Antonio Iannopollo
 '''
-from pyco.attribute import Attribute
-from pycox.contract import (ContractMapping, PortMappingError, PortMapping,
-                            CompositionMapping, NotARefinementError, BaseType,
-                            NotATypeError)
-
-from pycox.solver_interface import SMTManager
-from pycox import LOG
 import itertools
+
+from pycolite.attribute import Attribute
+
+from pyco.contract import (RefinementMapping, PortMappingError, PortMapping,
+                           CompositionMapping, NotARefinementError, BaseType,
+                           NotATypeError)
+from pyco import LOG
+from pyco.solver_interface import SMTManager
 
 LOG.debug('in library')
 
@@ -50,6 +51,25 @@ class ContractLibrary(object):
             return 0
 
         return max(self.hierarchy.values())
+
+
+    @property
+    def component_map(self):
+        """
+
+        :return: dict containing pairs name:component
+        """
+
+        return {comp.base_name: comp for comp in self.components}
+
+
+    def component_by_name(self, name):
+        """
+
+        :param name: name of the component
+        :return: return component associated to name
+        """
+        return self.component_map[name]
 
     def _new_refinement_assertion(self, assertion):
         '''
@@ -95,6 +115,9 @@ class ContractLibrary(object):
         '''
         if library_component in self.components:
             raise ValueError()
+
+        if library_component.base_name in self.component_map:
+            raise DuplicateNameError(library_component.base_name)
 
         library_component.register_to_library(self)
         library_component.assign_to_solver(self.smt_manager)
@@ -473,7 +496,7 @@ class LibraryCompositionMapping(object):
 
 
 
-class LibraryPortMapping(ContractMapping):
+class LibraryPortMapping(RefinementMapping):
     '''
     Defines a port mapping to be used in checking refinement in library
     '''
@@ -524,6 +547,11 @@ PortMapping.register(LibraryPortMapping)
 #        returns a tuple containing the names of connected contracts
 #        '''
 #        return (self.contract_a.unique_name, self.contract_b.unique_name)
+
+class DuplicateNameError(Exception):
+    '''
+    Raised if there is already a component with the same basename in the library
+    '''
 
 class ContractAssignmentError(Exception):
     '''

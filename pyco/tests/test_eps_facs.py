@@ -11,8 +11,8 @@ Author: Antonio Iannopollo
 
 
 import pytest
-from pycox.examples.example_eps_tacas import *
-from pycox.contract import CompositionMapping
+from pyco.examples.example_eps_facs import *
+from pyco.contract import CompositionMapping
 
 REP = 1
 
@@ -81,6 +81,26 @@ def ac_4_back():
     return lib_c
 
 @pytest.fixture
+def ac_4_back_alt():
+    '''
+    ac 4 way backup
+    '''
+    comp = AC4WayBackupAlt('AC4BackAlt')
+    lib_c = LibraryComponent('AC4BackAltC', comp)
+    lib_c.add_distinct_port_constraints([comp.fail1, comp.fail2,
+                                         comp.fail3, comp.fail4])
+
+    return lib_c
+
+@pytest.fixture
+def back_gen():
+    '''
+    back generator
+    '''
+    comp = ACBackupGen('ACBackupGen')
+    return LibraryComponent('ACBackupGen', comp)
+
+@pytest.fixture
 def ac_load():
     '''
     AC load
@@ -114,7 +134,7 @@ def dc_load():
 
 @pytest.fixture
 def ac_lib(abstr_gen, dumb_gen, std_gen, slow_gen, ac_single_back, ac_2_back,
-           ac_4_back, ac_load):
+           ac_4_back, ac_4_back_alt, back_gen, ac_load):
     '''
     returns a populated library with only the AC generators
     '''
@@ -127,6 +147,8 @@ def ac_lib(abstr_gen, dumb_gen, std_gen, slow_gen, ac_single_back, ac_2_back,
     library.add(ac_single_back)
     library.add(ac_2_back)
     library.add(ac_4_back)
+    #library.add(ac_4_back_alt)
+    #library.add(back_gen)
     library.add(ac_load)
 
     #add refinement assertion
@@ -174,7 +196,21 @@ def acdc_lib(ac_lib, dc_tie, dc_load):
 
     return ac_lib
 
-def test_synth_2gen_2c_1(ac_lib):
+def test_synth_1gen_1c_2(ac_lib, library_redundancy):
+    '''
+    Performs simple synthesis
+    '''
+
+    spec1 = GenIsolation0('G1')
+
+    interface = SynthesisInterface(ac_lib, [spec1])
+
+    interface.same_block_constraint([spec1.fail1, spec1.c1])
+
+    interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy)
+
+def test_synth_2gen_2c_1(ac_lib, library_redundancy):
     '''
     Performs simple synthesis
     '''
@@ -182,15 +218,16 @@ def test_synth_2gen_2c_1(ac_lib):
     spec1 = GenIsolation1('G1')
     #spec2 = GenIsolation2('G2')
 
-    interface = SynthesisInterface([spec1], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
     interface.distinct_ports_constraints([spec1.fail1, spec1.fail2])
 
-    interface.synthesize()
+    interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy)
 
-def test_synth_2gen_2c_2(ac_lib):
+def test_synth_2gen_2c_2(ac_lib, library_redundancy):
     '''
     Performs simple synthesis
     '''
@@ -198,51 +235,57 @@ def test_synth_2gen_2c_2(ac_lib):
     spec1 = GenIsolation1('G1')
     spec2 = GenIsolation2('G2')
 
-    interface = SynthesisInterface([spec1, spec2], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1, spec2])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
     interface.distinct_ports_constraints([spec1.fail1, spec1.fail2])
 
-    interface.synthesize()
-
-def test_synth_1gen_1c_2(ac_lib):
-    '''
-    Performs simple synthesis
-    '''
-
-    spec1 = GenIsolation0('G1')
-
-    interface = SynthesisInterface([spec1], ac_lib)
-
-    interface.same_block_constraint([spec1.fail1, spec1.c1])
-
-    interface.synthesize()
+    interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy)
 
 
-def test_synth_2gen_4c_6(ac_lib):
+def test_synth_2gen_4c_6(ac_lib, library_redundancy):
     '''
     Performs simple synthesis
     '''
 
     spec1 = GenIsolation1_6('G1')
 
-    interface = SynthesisInterface([spec1], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
     interface.distinct_ports_constraints([spec1.fail1, spec1.fail2])
 
-    interface.synthesize()
+    interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy)
 
-def test_synth_4gen_6c_ac_1spec(ac_lib):
+
+def test_synth_2gen_4c_6(ac_lib, library_redundancy):
+    '''
+    Performs simple synthesis
+    '''
+
+    spec1 = GenIsolation1_6('G1')
+
+    interface = SynthesisInterface(ac_lib, [spec1])
+
+    interface.same_block_constraint([spec1.fail1, spec1.c1])
+    interface.same_block_constraint([spec1.fail2, spec1.c2])
+    interface.distinct_ports_constraints([spec1.fail1, spec1.fail2])
+
+    interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy)
+
+def test_synth_4gen_6c_ac_1spec(ac_lib, library_redundancy):
     '''
     Performs simple synthesis
     '''
 
     spec1 = GenIsolation1B('G1')
 
-    interface = SynthesisInterface([spec1], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -252,9 +295,10 @@ def test_synth_4gen_6c_ac_1spec(ac_lib):
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6])
 
-    interface.synthesize()
+    interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy)
 
-def test_synth_4gen_6c_ac_2spec(ac_lib):
+def test_synth_4gen_6c_ac_2spec(ac_lib, library_redundancy):
     '''
     Performs simple synthesis
     '''
@@ -262,7 +306,7 @@ def test_synth_4gen_6c_ac_2spec(ac_lib):
     spec1 = GenIsolation1B('G1')
     spec2 = GenIsolation2B('G2')
 
-    interface = SynthesisInterface([spec1, spec2], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1, spec2])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -272,9 +316,10 @@ def test_synth_4gen_6c_ac_2spec(ac_lib):
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6])
 
-    interface.synthesize()
+    interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy)
 
-def test_synth_4gen_6c_ac_3spec(ac_lib):
+def test_synth_4gen_6c_ac_3spec(ac_lib, library_redundancy):
     '''
     Performs simple synthesis
     '''
@@ -283,7 +328,7 @@ def test_synth_4gen_6c_ac_3spec(ac_lib):
     spec2 = GenIsolation2B('G2')
     spec3 = GenIsolation3B('G3')
 
-    interface = SynthesisInterface([spec1, spec2, spec3], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1, spec2, spec3])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -293,9 +338,10 @@ def test_synth_4gen_6c_ac_3spec(ac_lib):
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6])
 
-    interface.synthesize()
+    interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy)
 
-def test_synth_4gen_6c_ac_4spec(ac_lib):
+def test_synth_4gen_6c_ac_4spec(ac_lib, library_redundancy):
     '''
     Performs simple synthesis
     '''
@@ -305,7 +351,7 @@ def test_synth_4gen_6c_ac_4spec(ac_lib):
     spec3 = GenIsolation3B('G3')
     spec4 = GenIsolation4B('G4')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1, spec2, spec3, spec4])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -315,9 +361,10 @@ def test_synth_4gen_6c_ac_4spec(ac_lib):
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6])
 
-    interface.synthesize()
+    interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy)
 
-def test_synth_4gen_6c_ac_5spec(ac_lib):
+def test_synth_4gen_6c_ac_5spec(ac_lib, library_redundancy):
     '''
     Performs simple synthesis
     '''
@@ -328,8 +375,8 @@ def test_synth_4gen_6c_ac_5spec(ac_lib):
     spec4 = GenIsolation4B('G4')
     spec5 = NoShort('G5')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
-                                    spec5], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1, spec2, spec3, spec4,
+                                    spec5])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -339,9 +386,10 @@ def test_synth_4gen_6c_ac_5spec(ac_lib):
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6])
 
-    interface.synthesize()
+    interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy)
 
-def test_synth_4gen_6c_ac_6spec(ac_lib):
+def test_synth_4gen_6c_ac_6spec(ac_lib, library_redundancy):
     '''
     Performs simple synthesis
     '''
@@ -353,8 +401,8 @@ def test_synth_4gen_6c_ac_6spec(ac_lib):
     spec5 = NoShort('G5')
     spec6 = NoParallelShort('G6')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
-                                    spec5, spec6], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1, spec2, spec3, spec4,
+                                    spec5, spec6])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -364,9 +412,10 @@ def test_synth_4gen_6c_ac_6spec(ac_lib):
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6])
 
-    interface.synthesize()
+    interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy)
 
-def test_synth_4gen_6c_ac_7spec(ac_lib):
+def test_synth_4gen_6c_ac_7spec(ac_lib, library_redundancy):
     '''
     Performs simple synthesis
     '''
@@ -379,8 +428,8 @@ def test_synth_4gen_6c_ac_7spec(ac_lib):
     spec6 = NoParallelShort('G6')
     spec7 = IsolateEmergencyBus('G7')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
-                                    spec5, spec6, spec7], ac_lib)
+    interface = SynthesisInterface(ac_lib, [spec1, spec2, spec3, spec4,
+                                    spec5, spec6, spec7])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -390,25 +439,18 @@ def test_synth_4gen_6c_ac_7spec(ac_lib):
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6])
 
-    interface.synthesize()
+    interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy)
 
 
-def test_synth_6_10_dc_1spec(acdc_lib):
+def test_synth_6_10_dc_1spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
     '''
     Performs simple synthesis
     '''
 
     spec1 = GenIsolation1D('G1')
-    #spec2 = GenIsolation2D('G2')
-    #spec3 = GenIsolation3D('G3')
-    #spec4 = GenIsolation4D('G4')
-    #spec5 = NoShortD('G5')
-    #spec6 = NoParallelShortD('G6')
-    #spec7 = IsolateEmergencyBusD('G7')
-    #spec8 = DCRightD('G8')
-    #spec9 = DCLeftD('G9')
 
-    interface = SynthesisInterface([spec1], acdc_lib)
+    interface = SynthesisInterface(acdc_lib, [spec1])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -417,14 +459,20 @@ def test_synth_6_10_dc_1spec(acdc_lib):
     interface.distinct_ports_constraints([spec1.fail1, spec1.fail2, spec1.fail3, spec1.fail4,
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6,
+                                          # spec1.c7, spec1.c8, spec1.c9, spec1.c10,
                                           spec1.fail_r1, spec1.fail_r2])
 
 
     for _ in range(0, REP):
-        interface.synthesize()
+        interface.synthesize(strict_out_lib_map=True,
+                             library_max_redundancy=library_redundancy,
+                             minimize_components=min_comps,
+                             minimize_ports=min_ports,
+                             filename=filename,
+                             visualize=False)
 
 
-def test_synth_6_10_dc_2spec(acdc_lib):
+def test_synth_6_10_dc_2spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
     '''
     Performs simple synthesis
     '''
@@ -432,7 +480,7 @@ def test_synth_6_10_dc_2spec(acdc_lib):
     spec1 = GenIsolation1D('G1')
     spec2 = GenIsolation2D('G2')
 
-    interface = SynthesisInterface([spec1, spec2], acdc_lib)
+    interface = SynthesisInterface(acdc_lib, [spec1, spec2])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -441,14 +489,20 @@ def test_synth_6_10_dc_2spec(acdc_lib):
     interface.distinct_ports_constraints([spec1.fail1, spec1.fail2, spec1.fail3, spec1.fail4,
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6,
+                                          # spec1.c7, spec1.c8, spec1.c9, spec1.c10,
                                           spec1.fail_r1, spec1.fail_r2])
 
 
     for _ in range(0, REP):
-        interface.synthesize()
+        interface.synthesize(strict_out_lib_map=True,
+                             library_max_redundancy=library_redundancy,
+                             minimize_components=min_comps,
+                             minimize_ports=min_ports,
+                             filename=filename,
+                             visualize=False)
 
 
-def test_synth_6_10_dc_3spec(acdc_lib):
+def test_synth_6_10_dc_3spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
     '''
     Performs simple synthesis
     '''
@@ -457,7 +511,7 @@ def test_synth_6_10_dc_3spec(acdc_lib):
     spec2 = GenIsolation2D('G2')
     spec3 = GenIsolation3D('G3')
 
-    interface = SynthesisInterface([spec1, spec2, spec3], acdc_lib)
+    interface = SynthesisInterface(acdc_lib, [spec1, spec2, spec3])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -466,14 +520,20 @@ def test_synth_6_10_dc_3spec(acdc_lib):
     interface.distinct_ports_constraints([spec1.fail1, spec1.fail2, spec1.fail3, spec1.fail4,
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6,
+                                          # spec1.c7, spec1.c8, spec1.c9, spec1.c10,
                                           spec1.fail_r1, spec1.fail_r2])
 
 
     for _ in range(0, REP):
-        interface.synthesize()
+        interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy,
+                         minimize_components=min_comps,
+                         minimize_ports=min_ports,
+                             filename=filename,
+                             visualize=False)
 
 
-def test_synth_6_10_dc_4spec(acdc_lib):
+def test_synth_6_10_dc_4spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
     '''
     Performs simple synthesis
     '''
@@ -483,7 +543,7 @@ def test_synth_6_10_dc_4spec(acdc_lib):
     spec3 = GenIsolation3D('G3')
     spec4 = GenIsolation4D('G4')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4], acdc_lib)
+    interface = SynthesisInterface(acdc_lib, [spec1, spec2, spec3, spec4])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -492,14 +552,20 @@ def test_synth_6_10_dc_4spec(acdc_lib):
     interface.distinct_ports_constraints([spec1.fail1, spec1.fail2, spec1.fail3, spec1.fail4,
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6,
+                                          # spec1.c7, spec1.c8, spec1.c9, spec1.c10,
                                           spec1.fail_r1, spec1.fail_r2])
 
 
     for _ in range(0, REP):
-        interface.synthesize()
+        interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy,
+                         minimize_components=min_comps,
+                         minimize_ports=min_ports,
+                             filename=filename,
+                             visualize=False)
 
 
-def test_synth_6_10_dc_5spec(acdc_lib):
+def test_synth_6_10_dc_5spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
     '''
     Performs simple synthesis
     '''
@@ -510,8 +576,8 @@ def test_synth_6_10_dc_5spec(acdc_lib):
     spec4 = GenIsolation4D('G4')
     spec5 = NoShortD('G5')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
-                                    spec5], acdc_lib)
+    interface = SynthesisInterface(acdc_lib, [spec1, spec2, spec3, spec4,
+                                    spec5])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -520,14 +586,20 @@ def test_synth_6_10_dc_5spec(acdc_lib):
     interface.distinct_ports_constraints([spec1.fail1, spec1.fail2, spec1.fail3, spec1.fail4,
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6,
+                                          # spec1.c7, spec1.c8, spec1.c9, spec1.c10,
                                           spec1.fail_r1, spec1.fail_r2])
 
 
     for _ in range(0, REP):
-        interface.synthesize()
+        interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy,
+                         minimize_components=min_comps,
+                         minimize_ports=min_ports,
+                             filename=filename,
+                             visualize=False)
 
 
-def test_synth_6_10_dc_6spec(acdc_lib):
+def test_synth_6_10_dc_6spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
     '''
     Performs simple synthesis
     '''
@@ -539,8 +611,8 @@ def test_synth_6_10_dc_6spec(acdc_lib):
     spec5 = NoShortD('G5')
     spec6 = NoParallelShortD('G6')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
-                                    spec5, spec6], acdc_lib)
+    interface = SynthesisInterface(acdc_lib, [spec1, spec2, spec3, spec4,
+                                    spec5, spec6])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -549,13 +621,19 @@ def test_synth_6_10_dc_6spec(acdc_lib):
     interface.distinct_ports_constraints([spec1.fail1, spec1.fail2, spec1.fail3, spec1.fail4,
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6,
+                                          # spec1.c7, spec1.c8, spec1.c9, spec1.c10,
                                           spec1.fail_r1, spec1.fail_r2])
 
 
     for _ in range(0, REP):
-        interface.synthesize()
+        interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy,
+                         minimize_components=min_comps,
+                         minimize_ports=min_ports,
+                             filename=filename,
+                             visualize=False)
 
-def test_synth_6_10_dc_7spec(acdc_lib):
+def test_synth_6_10_dc_7spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
     '''
     Performs simple synthesis
     '''
@@ -568,8 +646,8 @@ def test_synth_6_10_dc_7spec(acdc_lib):
     spec6 = NoParallelShortD('G6')
     spec7 = IsolateEmergencyBusD('G7')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
-                                    spec5, spec6, spec7], acdc_lib)
+    interface = SynthesisInterface(acdc_lib, [spec1, spec2, spec3, spec4,
+                                    spec5, spec6, spec7])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -578,12 +656,18 @@ def test_synth_6_10_dc_7spec(acdc_lib):
     interface.distinct_ports_constraints([spec1.fail1, spec1.fail2, spec1.fail3, spec1.fail4,
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6,
+                                          # spec1.c7, spec1.c8, spec1.c9, spec1.c10,
                                           spec1.fail_r1, spec1.fail_r2])
 
     for _ in range(0, REP):
-        interface.synthesize()
+        interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy,
+                         minimize_components=min_comps,
+                         minimize_ports=min_ports,
+                             filename=filename,
+                             visualize=False)
 
-def test_synth_6_10_dc_8spec(acdc_lib):
+def test_synth_6_10_dc_8spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
     '''
     Performs simple synthesis
     '''
@@ -597,8 +681,8 @@ def test_synth_6_10_dc_8spec(acdc_lib):
     spec7 = IsolateEmergencyBusD('G7')
     spec8 = DCRightD('G8')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
-                                    spec5, spec6, spec7, spec8], acdc_lib)
+    interface = SynthesisInterface(acdc_lib, [spec1, spec2, spec3, spec4,
+                                    spec5, spec6, spec7, spec8])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -607,12 +691,18 @@ def test_synth_6_10_dc_8spec(acdc_lib):
     interface.distinct_ports_constraints([spec1.fail1, spec1.fail2, spec1.fail3, spec1.fail4,
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6,
+                                          # spec1.c7, spec1.c8, spec1.c9, spec1.c10,
                                           spec1.fail_r1, spec1.fail_r2])
 
     for _ in range(0, REP):
-        interface.synthesize()
+        interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy,
+                         minimize_components=min_comps,
+                         minimize_ports=min_ports,
+                             filename=filename,
+                             visualize=False)
 
-def test_synth_6_10_dc_9spec(acdc_lib):
+def test_synth_6_10_dc_9spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
     '''
     Performs simple synthesis
     '''
@@ -627,9 +717,9 @@ def test_synth_6_10_dc_9spec(acdc_lib):
     spec8 = DCRightD('G8')
     spec9 = DCLeftD('G9')
 
-    interface = SynthesisInterface([spec1, spec2, spec3, spec4,
+    interface = SynthesisInterface(acdc_lib, [spec1, spec2, spec3, spec4,
                                     spec5, spec6, spec7, spec8,
-                                    spec9], acdc_lib)
+                                    spec9])
 
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
@@ -638,13 +728,136 @@ def test_synth_6_10_dc_9spec(acdc_lib):
     interface.distinct_ports_constraints([spec1.fail1, spec1.fail2, spec1.fail3, spec1.fail4,
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6,
+                                          # spec1.c7, spec1.c8, spec1.c9, spec1.c10,
                                           spec1.fail_r1, spec1.fail_r2])
 
     for _ in range(0, REP):
-        interface.synthesize()
+        interface.synthesize(strict_out_lib_map=True,
+                         library_max_redundancy=library_redundancy,
+                         minimize_components=min_comps,
+                         minimize_ports=min_ports,
+                             filename=filename,
+                             visualize=False)
 
 
-def test_synth_6_10_dc_9spec_manual(acdc_lib):
+############# INCREMENTAL TESTS #################
+def test_synth_inc_1(acdc_lib, library_redundancy, no_types, filename):
+    '''
+    Performs simple synthesis
+    1gen 1 c
+    '''
+
+    spec1 = GenIsolation0('G1')
+
+    interface = SynthesisInterface(acdc_lib, [spec1])
+    interface.same_block_constraint([spec1.fail1, spec1.c1])
+    interface.distinct_ports_constraints([spec1.fail1,
+                                          spec1.c1])
+
+    interface.synthesize(strict_out_lib_map=True,
+                         use_types=not no_types,
+                         use_hints=not no_types,
+                         library_max_redundancy=library_redundancy,
+                             filename=filename,
+                             visualize=False)
+
+def test_synth_inc_2(acdc_lib, library_redundancy, no_types, filename):
+    '''
+    Performs simple synthesis
+    2gen 2 c
+    '''
+
+    spec1 = GenIsolation1('G1')
+
+    interface = SynthesisInterface(acdc_lib, [spec1])
+    interface.same_block_constraint([spec1.fail1, spec1.c1])
+
+
+    interface.synthesize(strict_out_lib_map=True,
+                         use_types=not no_types,
+                         use_hints=not no_types,
+                         library_max_redundancy=library_redundancy,
+                             filename=filename,
+                             visualize=False)
+
+def test_synth_inc_3(acdc_lib, library_redundancy, no_types, filename):
+    '''
+    Performs simple synthesis
+    2gen 4 c
+    '''
+
+    spec1 = GenIsolation1_6('G1')
+
+    interface = SynthesisInterface(acdc_lib, [spec1])
+    interface.same_block_constraint([spec1.fail1, spec1.c1])
+    interface.same_block_constraint([spec1.fail2, spec1.c2])
+    interface.distinct_ports_constraints([spec1.fail1, spec1.fail2,
+                                          spec1.c1, spec1.c2, spec1.c3,
+                                          spec1.c4])
+
+
+    interface.synthesize(strict_out_lib_map=True,
+                         use_types=not no_types,
+                         use_hints=not no_types,
+                         library_max_redundancy=library_redundancy,
+                             filename=filename,
+                             visualize=False)
+
+def test_synth_inc_4(acdc_lib, library_redundancy, no_types, filename):
+    '''
+    Performs simple synthesis
+    4gen 6 c
+    '''
+
+    spec1 = GenIsolation1B('G1')
+
+    interface = SynthesisInterface(acdc_lib, [spec1])
+    interface.same_block_constraint([spec1.fail1, spec1.c1])
+    interface.same_block_constraint([spec1.fail2, spec1.c2])
+    interface.same_block_constraint([spec1.fail3, spec1.c3])
+    interface.same_block_constraint([spec1.fail4, spec1.c4])
+    interface.distinct_ports_constraints([spec1.fail1, spec1.fail2, spec1.fail3, spec1.fail4,
+                                          spec1.c1, spec1.c2, spec1.c3,
+                                          spec1.c4, spec1.c5, spec1.c6])
+
+
+    interface.synthesize(strict_out_lib_map=True,
+                         use_types=not no_types,
+                         use_hints=not no_types,
+                         library_max_redundancy=library_redundancy,
+                             filename=filename,
+                             visualize=False)
+
+def test_synth_inc_5(acdc_lib, library_redundancy, no_types, filename):
+    '''
+    Performs simple synthesis
+    6gen 10 c
+    '''
+
+    spec1 = GenIsolation1D('G1')
+
+    interface = SynthesisInterface(acdc_lib, [spec1])
+
+    interface.same_block_constraint([spec1.fail1, spec1.c1])
+    interface.same_block_constraint([spec1.fail2, spec1.c2])
+    interface.same_block_constraint([spec1.fail3, spec1.c3])
+    interface.same_block_constraint([spec1.fail4, spec1.c4])
+    interface.distinct_ports_constraints([spec1.fail1, spec1.fail2, spec1.fail3, spec1.fail4,
+                                          spec1.c1, spec1.c2, spec1.c3,
+                                          spec1.c4, spec1.c5, spec1.c6,
+                                          spec1.c7, spec1.c8, spec1.c9, spec1.c10,
+                                          spec1.fail_r1, spec1.fail_r2])
+
+    interface.synthesize(strict_out_lib_map=True,
+                         use_types=not no_types,
+                         use_hints=not no_types,
+                         library_max_redundancy=library_redundancy,
+                             filename=filename,
+                             visualize=False)
+
+
+
+def test_manual_6_10_dc_9spec(acdc_lib):
     '''
     Performs simple synthesis
     '''
@@ -712,4 +925,3 @@ def test_synth_6_10_dc_9spec_manual(acdc_lib):
     comp = gl.compose([gr, gtie, ll, lr, ltie], composition_mapping=mapping)
 
     assert comp.is_refinement(spec1)
-

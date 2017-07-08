@@ -11,7 +11,7 @@ Author: Antonio Iannopollo
 
 
 import pytest
-from pycox.examples.example_eps import *
+from pyco.examples.example_eps import *
 
 @pytest.fixture
 def abstr_gen():

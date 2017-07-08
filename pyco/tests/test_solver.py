@@ -7,7 +7,7 @@ Author: Antonio Iannopollo
 import pytest
 import logging
 
-from pycox.tests.test_rcpl import (populated_library, comp_a, comp_b, comp_ab, comp_meta, library)
+from pyco.tests.test_rcpl import (populated_library, comp_a, comp_b, comp_ab, comp_meta, library)
 
 LOG = logging.getLogger()
 

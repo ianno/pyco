@@ -9,11 +9,11 @@ Author: Antonio Iannopollo
 '''
 
 
-from pycox.contract import Contract, BaseType
-from pycox.library import (ContractLibrary, LibraryComponent,
-                            LibraryPortMapping, LibraryCompositionMapping)
-from pycox.synthesis import SynthesisInterface
-from pycox import LOG
+from pyco.contract import Contract, BaseType
+from pyco.library import (ContractLibrary, LibraryComponent,
+                          LibraryPortMapping, LibraryCompositionMapping)
+from pyco.synthesis import SynthesisInterface
+from pyco import LOG
 
 #let's start with types
 class BreakableT(BaseType):
@@ -262,8 +262,8 @@ class GenIsolation1(Contract):
     '''
     generator 1 is eventually disconnected if faulty.
     '''
-    INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT)]
-    OUTPUT_PORTS = [('c1', ACContactorT), ('c2', ACContactorT)]
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', ActiveGeneratorT)]
+    OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT)]
     ASSUMPTIONS = '''!fail1 & !fail2 & G(!(fail1 & fail2)) &
                      G(fail1 -> Xfail1) & G(fail2 -> Xfail2)'''
     #ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) '''
@@ -274,8 +274,8 @@ class GenIsolation2(Contract):
     '''
     generator 1 is eventually disconnected if faulty.
     '''
-    INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT)]
-    OUTPUT_PORTS = [('c1', ACContactorT), ('c2', ACContactorT)]
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', ActiveGeneratorT)]
+    OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT)]
     ASSUMPTIONS = '''!fail1 & !fail2 & G(!(fail1 & fail2)) &
                      G(fail1 -> Xfail1) & G(fail2 -> Xfail2)'''
     #ASSUMPTIONS = '''!fail2 & G(fail2 -> Xfail2) '''
@@ -287,12 +287,12 @@ class GenIsolation1_6(Contract):
     '''
     generator 1 is eventually disconnected if faulty.
     '''
-    INPUT_PORTS = [('fail1', GeneratorT), ('fail2', GeneratorT)]
-    OUTPUT_PORTS = [('c1', ACContactorT), ('c2', ACContactorT),
-                    ('c3', ACContactorT), ('c4', ACContactorT)]
-    ASSUMPTIONS = '''!fail1 & !fail2 & G(!(fail1 & fail2)) &
-                     G(fail1 -> Xfail1) & G(fail2 -> Xfail2)'''
-    GUARANTEES = 'G(fail1 -> X!c1)'
+    INPUT_PORTS = [('fail1', ActiveGeneratorT), ('fail2', ActiveGeneratorT)]
+    OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT),
+                    ('c3', ACGenContactorT), ('c4', ACGenContactorT)]
+    ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1) &
+                     !fail2 & G(fail2 -> Xfail2)'''
+    GUARANTEES = 'c1 & G(fail1 -> X!c1)'
 
 #case B: 4 generators, 6 contactors, only AC (3 components needed)
 class GenIsolation1B(Contract):
@@ -308,7 +308,7 @@ class GenIsolation1B(Contract):
                      !fail2 & G(fail2 -> Xfail2) &
                      !fail3 & G(fail3 -> Xfail3) &
                      !fail4 & G(fail4 -> Xfail4)'''
-    GUARANTEES = 'G(fail1 -> X!c1)'
+    GUARANTEES = 'c1 & G(fail1 -> X!c1)'
 
 class GenIsolation2B(Contract):
     '''

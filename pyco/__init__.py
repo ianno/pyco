@@ -1,7 +1,7 @@
 import logging
 import pdb
 
-LOG = logging.getLogger('pycox')
+LOG = logging.getLogger('pyco')
 LOG.setLevel(logging.DEBUG)
 
 ch = logging.StreamHandler()
@@ -14,6 +14,6 @@ ch.setFormatter(formatter)
 # add the handlers to the logger
 LOG.addHandler(ch)
 
-LOG.debug('PYCOX INIT')
+LOG.debug('PYCO INIT')
 
 #pdb.set_trace()

@@ -1,6 +1,6 @@
 PyCo
 ====
-#### a Python library for Contract-based synthesis --
+#### a Python library for Contract-based synthesis
 
 
 This library provides tools to perform synthesis of

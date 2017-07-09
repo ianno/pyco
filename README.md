@@ -42,12 +42,17 @@ You can integrate PyCo in your projects as a python package.
 Check out the examples in `pyco/examples` and `pyco/tests`.
 
 A typical usage example of PyCo can be found in the `design_example.py` file.
+The library used in the example is defined in
+`pyco/examples/example_eps_facs.py`.
 
 To execute it, run from a command line:
 
 ```bash
 python design_example.py
 ```
+
+After synthesis, the tool generates a PDF file with the solution representation, and a text file with extension `.pyco`,
+containing the same information in ASCII friendly format.
 
 ### FACS 2016
 This work has been developed as a supporting tool for a work presented at [Formal Aspects of Component Software - The 13th International Conference, Besançon, France - FACS 2016](http://events.femto-st.fr/facs2016/).
@@ -59,6 +64,11 @@ For info on how to execute `pyco_facs.py`, use the command:
 ```bash
 python pyco_facs.py --help
 ```
+
+To take a look a the library used for FACS 2016,
+check `pyco/examples/example_eps_facs.py` and
+`pyco/tests/test_eps_facs.py`.
+All the tests have been written to be run as a py.test test suite.
 
 ## Citations
 Please **acknowledge** the use of PyCo by citing this Github repository and the article:

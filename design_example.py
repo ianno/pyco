@@ -158,21 +158,63 @@ def test_synth_6_10_dc_1spec():
     #define spec
     spec1 = GenIsolation1D('G1')
 
+    # Create synthesis interface by passing the library object and a list of specifications,
+    # all having the same IO interface
     interface = SynthesisInterface(library, [spec1])
 
     #define designer hints
+    # so far, you can define:
+    # same_block_constraint(list) -> specify ports of the spec that needs to be controlled by the same library block
+    # and
+    # distinct_ports_constraints(list) -> specify a list of ports that cannot be connected together or
+    # controlled by the same port from a component in the library.
+
+    # same_block_constraint(list)
     interface.same_block_constraint([spec1.fail1, spec1.c1])
     interface.same_block_constraint([spec1.fail2, spec1.c2])
     interface.same_block_constraint([spec1.fail3, spec1.c3])
     interface.same_block_constraint([spec1.fail4, spec1.c4])
+
+    # distinct_ports_constraints(list)
     interface.distinct_ports_constraints([spec1.fail1, spec1.fail2, spec1.fail3, spec1.fail4,
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6,
                                           spec1.fail_r1, spec1.fail_r2])
 
     res = None
-    #synthesis
+    #synthesis phase
     try:
+
+        # call the synthesis function.
+        # Synthesis parameters are:
+        #
+        # limit -> None or int: specifies the maximum number of components allowed in a solutions. if None,
+        #                        then the maximum number of components is the same as the number of outputs of the spec.
+        #                        Default: None
+        # library_max_redundancy -> None or int: specifies if the components in the library need to be replicated, and how
+        #                                        many times.
+        #                                        Default: None
+        # strict_out_lib_map -> Boolean: specifies if all the outputs in the synthesized composition have to be connected.
+        #                                I.e., do not allow unconnected outputs in the solution.
+        #                                Default: False
+        # strict_in_spec_map -> Boolean: specifies if all the inputs of the spec need to be connected.
+        #                                Default: True
+        # use_types -> Boolean: specifies if synthesis should prune the search space using types.
+        #                       Default: True
+        # use_hints -> Boolean: specifies if synthesis should prune the search space using designer hints.
+        #                       Default: True
+        # minimize_components -> Boolean: specifies if the synthesis process should minimize the number of components
+        #                                 of the solution.
+        #                                 Default: False
+        # minimize_ports -> Boolean: specifies if the synthesis process should minimize the number of ports used
+        #                                 in the solution.
+        #                                 Default: False
+        # minimize_cost -> Boolean: Not yet supported
+        # filename -> None or str: specify the name of the output files. If None, a generic name will be used.
+        #                          Default: None
+        # visualize -> Boolean: if True visualize the synthesized solution when found.
+        #                       Default: True
+        
         interface.synthesize(strict_out_lib_map=True,
                          library_max_redundancy=2,
                          minimize_components=False,

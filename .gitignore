@@ -3,3 +3,5 @@
 *.swp
 *.ltl
 tags
+.DS_Store
+

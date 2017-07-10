@@ -350,13 +350,13 @@ class Z3Interface(object):
         '''
 
         constraints = []
-        constraints += [And([model != (index + self.lib_model.max_single_level_index * level)
+        constraints += [And([model != (index + self.lib_model.max_single_level_index*level)
                              for level in range(0, self.lib_model.max_components)
                              for index in range(0, self.lib_model.max_index)
                              if self.lib_model.port_by_index(index).is_output])
                         for model in self.spec_ins]
 
-        # LOG.debug(constraints)
+        #LOG.debug(constraints)
 
         self.solver.add(constraints)
 
@@ -367,7 +367,7 @@ class Z3Interface(object):
 
         constraints = []
 
-        # constraints += [Implies(And([And([spec_out != self.lib_model.index_by_model(model)
+        #constraints += [Implies(And([And([spec_out != self.lib_model.index_by_model(model)
         #                                  for model
         #                                  in self.lib_model.contract_out_models(contract)[level]])
         #                             for spec_out in self.spec_outs]),
@@ -380,7 +380,7 @@ class Z3Interface(object):
 
 
 
-        # constraints += [Implies(And([And([spec_out != self.lib_model.index_by_model(model)
+        #constraints += [Implies(And([And([spec_out != self.lib_model.index_by_model(model)
         #                                  for model
         #                                  in self.lib_model.contract_out_models(contract)[level]])
         #                             for spec_out in self.spec_outs]),
@@ -393,7 +393,7 @@ class Z3Interface(object):
 
 
 
-        # self.solver.add(constraints)
+        #self.solver.add(constraints)
 
     def lib_chosen_not_zeros(self):
         '''

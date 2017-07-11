@@ -799,6 +799,106 @@ class Z3Interface(object):
         # LOG.debug(constraints)
         self.solver.add(constraints)
 
+
+    def process_bitmap_no_feedback(self):
+        '''
+        avoid feedback loops, using bitmap configuration
+        :return:
+        '''
+
+        constraints = []
+
+        # component repr for itself
+        for comp_bit_index in self.lib_model.bitmap_comp_index.values():
+            comp_bit_var = self.lib_model.bitvect_repr[comp_bit_index.get_id()]
+
+            # component repr for itself
+            # constraints += [z3.UGT(comp_bit_var & comp_bit_index, 0b1)]
+            constraints += [comp_bit_var & comp_bit_index == comp_bit_index]
+
+
+        #components bitmaps
+        for in_component in self.lib_model.library.components:
+
+            in_models_lev = self.lib_model.contract_in_models(in_component.contract)
+
+
+            for in_level in range(self.lib_model.max_components):
+                in_models = in_models_lev[in_level]
+
+                in_bit_index = self.lib_model.bitmap_comp_index['%s-%d' % (in_component.contract.base_name, in_level)]
+                in_bit_var = self.lib_model.bitvect_repr[in_bit_index.get_id()]
+
+                for out_component in self.lib_model.library.components:
+
+                    out_models_lev = self.lib_model.contract_out_models(out_component.contract)
+
+                    for out_level in range(self.lib_model.max_components):
+
+                        if not (in_component.contract.base_name == out_component.contract.base_name and
+                                in_level == out_level):
+                            out_models = out_models_lev[out_level]
+
+                            out_bit_index = self.lib_model.bitmap_comp_index['%s-%d' % (out_component.contract.base_name, out_level)]
+                            out_bit_var = self.lib_model.bitvect_repr[out_bit_index.get_id()]
+
+                            # LOG.debug(in_component.contract.base_name)
+                            # LOG.debug(out_component.contract.base_name)
+                            # LOG.debug(in_level)
+                            # LOG.debug(out_level)
+                            # print in_bit_var.sexpr()
+                            # print out_bit_var.sexpr()
+                            # print in_bit_index.sexpr()
+                            # print out_bit_index.sexpr()
+                            # print simplify(in_bit_index & out_bit_index)
+
+                            constraints += [Implies(Or([m_in == self.lib_model.model_out_index[m_out.get_id()]
+                                                        for m_in in in_models for m_out in out_models]),
+                                                     in_bit_var & out_bit_var == out_bit_var)]
+
+                            # constraints += [Implies(in_bit_var & out_bit_var == out_bit_var,
+                            #                         Or([m_in == self.lib_model.model_out_index[m_out.get_id()]
+                            #                             for m_in in in_models for m_out in out_models]))]
+
+                            #wrong
+                            # constraints += [Implies(And([m_in != self.lib_model.model_out_index[m_out.get_id()]
+                            #                             for m_in in in_models for m_out in out_models]),
+                            #                         in_bit_var & out_bit_index == 0)]
+
+        #module bitmap
+        for in_model in self.lib_model.in_models:
+            in_contract = self.lib_model.model_contracts[in_model.get_id()]
+            in_level = self.lib_model.model_levels[in_model.get_id()]
+
+            in_bitmap = self.lib_model.model_bitmap[in_model.get_id()]
+
+            in_model_comp_bit = self.lib_model.bitmap_component_index(in_contract, in_level)
+            in_comp_bit_var =  self.lib_model.bitmap_component_var(in_contract, in_level)
+
+            # no feedback, i.e., no connection on its own component
+            constraints += [in_bitmap & in_model_comp_bit == 0b0]
+
+            for out_component in self.lib_model.library.components:
+
+                out_models_lev = self.lib_model.contract_out_models(out_component.contract)
+
+                for out_level in range(self.lib_model.max_components):
+                    out_models = out_models_lev[out_level]
+
+                    out_bit_index = self.lib_model.bitmap_comp_index['%s-%d' % (out_component.contract.base_name, out_level)]
+                    out_bit_var = self.lib_model.bitvect_repr[out_bit_index.get_id()]
+
+                    constraints += [Implies(Or([in_model == self.lib_model.model_out_index[m_out.get_id()]
+                                                for m_out in out_models]), in_bitmap & out_bit_var == out_bit_var)]
+
+                    # constraints += [Implies(And([in_model != self.lib_model.model_out_index[m_out.get_id()]
+                    #                             for m_out in out_models]), in_bitmap & out_bit_var == 0b0)]
+
+
+        # LOG.debug(constraints)
+        self.solver.add(constraints)
+
+
     def synthesize(self, property_contracts, limit=None,
                    library_max_redundancy=None,
                    strict_out_lib_map=False,
@@ -893,6 +993,7 @@ class Z3Interface(object):
         self.lib_to_outputs_or_spec_in()
         self.lib_chosen_to_chosen()
         self.lib_not_chosen_zero()
+        self.process_bitmap_no_feedback()
 
         if use_types:
             self.spec_process_in_types() ### remove for tests with no types

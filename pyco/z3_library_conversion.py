@@ -87,6 +87,11 @@ class Z3Library(object):
         self.reverse_flag = {}
         self.flag_map = {}
 
+        #for bitvector map
+        self.bitmap_comp_index = {}
+        self.bitvect_repr = {}
+        self.model_bitmap = {}
+
         self.unrolled_info = {}
 
         self.spec = spec
@@ -98,6 +103,9 @@ class Z3Library(object):
             limit = len(spec.output_ports_dict)
         LOG.debug(limit)
         self.max_components = min([library_max_redundancy, limit])
+
+        comp_ind = 0b1
+        self.max_num_components = self.max_components * len(self.library.components)
 
         for level in range(0, self.max_components):
             self.contract_index[level] = {}
@@ -118,6 +126,14 @@ class Z3Library(object):
                 self.contract_use_flags.append(c_flag)
                 self.reverse_flag[c_flag.get_id()] = []
                 self.flag_map['%s-%d' % (contract.base_name, level)] = c_flag
+
+                #bitvector map
+                self.bitmap_comp_index['%s-%d' % (contract.base_name, level)] = z3.BitVecVal(comp_ind,  self.max_num_components)
+
+                self.bitvect_repr[self.bitmap_comp_index['%s-%d' % (contract.base_name, level)].get_id()] = z3.BitVec("bitvar_"+str(comp_ind), self.max_num_components)
+
+                #shift one bit
+                comp_ind = comp_ind << 1
 
                 #START UNROLL COMMENT
                 #(bool_vars, unr_a, unr_g) = self._contract_unrolled_formula(contract, level)
@@ -143,6 +159,9 @@ class Z3Library(object):
                     self.model_levels[model.get_id()] = level
                     self.model_contracts[model.get_id()] = contract
 
+                    #bitvector map
+                    self.model_bitmap[model.get_id()] = z3.BitVec('bit_%d-%s' % (level, port.unique_name), self.max_num_components)
+
                     #contract_indexing
                     self.contract_used_by_models[len(self.models) - 1] = c_flag
                     #self.reverse_flag[c_flag.get_id()].append(len(self.models) -1)
@@ -164,6 +183,10 @@ class Z3Library(object):
                     self.out_ports.append(port)
                     self.model_levels[model.get_id()] = level
                     self.model_contracts[model.get_id()] = contract
+
+                    #bitvector map
+                    #no need for outputs
+                    #self.model_bitmap[model.get_id()] = z3.BitVec('bit_%d-%s' % (level, port.unique_name))
 
                     #contract_indexing
                     self.contract_used_by_models[len(self.models) - 1] = c_flag
@@ -201,6 +224,25 @@ class Z3Library(object):
         self.specs_at = len(self.models)
         self.positions = m_index
 
+
+    def bitmap_component_index(self, contract, level):
+        '''
+        get the component index for bitmap
+        :param contract:
+        :param level:
+        :return:
+        '''
+        return self.bitmap_comp_index['%s-%d' % (contract.base_name, level)]
+
+    def bitmap_component_var(self, contract, level):
+        '''
+        get the component const for bitmap
+        :param contract:
+        :param level:
+        :return:
+        '''
+        idx  = self.bitmap_comp_index['%s-%d' % (contract.base_name, level)]
+        return self.bitvect_repr[idx.get_id()]
 
     @property
     def max_index(self):

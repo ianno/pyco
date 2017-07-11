@@ -809,12 +809,24 @@ class Z3Interface(object):
         constraints = []
 
         # component repr for itself
-        for comp_bit_index in self.lib_model.bitmap_comp_index.values():
-            comp_bit_var = self.lib_model.bitvect_repr[comp_bit_index]
+        for component in self.lib_model.library.components:
+            for level in range(self.lib_model.max_components):
 
-            # component repr for itself
-            # constraints += [z3.UGT(comp_bit_var & comp_bit_index, 0b1)]
-            constraints += [comp_bit_var & comp_bit_index == comp_bit_index]
+                contract = component.contract
+
+                comp_bit_index = self.lib_model.bitmap_component_index(contract, level)
+                comp_bit_var = self.lib_model.bitvect_repr[comp_bit_index]
+
+                # component repr for itself
+                # constraints += [z3.UGT(comp_bit_var & comp_bit_index, 0b1)]
+                constraints += [comp_bit_var & comp_bit_index == comp_bit_index]
+
+                c_flag = self.lib_model.flag_map['%s-%d' % (contract.base_name, level)]
+
+                constraints += [Implies(c_flag==0, comp_bit_var == comp_bit_index)]
+
+                # TODO: check if useful at all:
+                constraints += [Implies(comp_bit_var != comp_bit_index, c_flag==1)]
 
 
         #components bitmaps
@@ -856,7 +868,13 @@ class Z3Interface(object):
                                                         for m_in in in_models for m_out in out_models]),
                                                      in_bit_var & out_bit_var == out_bit_var)]
 
-                            # constraints += [Implies(in_bit_var & out_bit_var == out_bit_var,
+                            # # one step reverse condition
+                            # # TODO: how to prevent the solver to generate random assignments to the bitvectors?
+                            # # TODO: for one step, it's ok, how about multiple steps in depth, when there is no
+                            # # TODO: direct connection between the two components
+                            # # TODO: it seems it is not necessary the general case, though,
+                            # # TODO: as the counterexample does not consider these variables
+                            # constraints += [Implies(in_bit_var == out_bit_index | in_bit_index,
                             #                         Or([m_in == self.lib_model.model_out_index[m_out.get_id()]
                             #                             for m_in in in_models for m_out in out_models]))]
 

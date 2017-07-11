@@ -128,9 +128,9 @@ class Z3Library(object):
                 self.flag_map['%s-%d' % (contract.base_name, level)] = c_flag
 
                 #bitvector map
-                self.bitmap_comp_index['%s-%d' % (contract.base_name, level)] = z3.BitVecVal(comp_ind,  self.max_num_components)
+                self.bitmap_comp_index['%s-%d' % (contract.base_name, level)] = comp_ind #z3.BitVecVal(comp_ind,  self.max_num_components)
 
-                self.bitvect_repr[self.bitmap_comp_index['%s-%d' % (contract.base_name, level)].get_id()] = z3.BitVec("bitvar_"+str(comp_ind), self.max_num_components)
+                self.bitvect_repr[comp_ind] = z3.BitVec("bitvar_"+str(comp_ind), self.max_num_components)
 
                 #shift one bit
                 comp_ind = comp_ind << 1
@@ -160,7 +160,7 @@ class Z3Library(object):
                     self.model_contracts[model.get_id()] = contract
 
                     #bitvector map
-                    self.model_bitmap[model.get_id()] = z3.BitVec('bit_%d-%s' % (level, port.unique_name), self.max_num_components)
+                    self.model_bitmap[model.get_id()] = z3.Bool('bit_%d-%s' % (level, port.unique_name))
 
                     #contract_indexing
                     self.contract_used_by_models[len(self.models) - 1] = c_flag
@@ -242,7 +242,7 @@ class Z3Library(object):
         :return:
         '''
         idx  = self.bitmap_comp_index['%s-%d' % (contract.base_name, level)]
-        return self.bitvect_repr[idx.get_id()]
+        return self.bitvect_repr[idx]
 
     @property
     def max_index(self):

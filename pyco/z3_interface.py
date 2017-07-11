@@ -810,7 +810,7 @@ class Z3Interface(object):
 
         # component repr for itself
         for comp_bit_index in self.lib_model.bitmap_comp_index.values():
-            comp_bit_var = self.lib_model.bitvect_repr[comp_bit_index.get_id()]
+            comp_bit_var = self.lib_model.bitvect_repr[comp_bit_index]
 
             # component repr for itself
             # constraints += [z3.UGT(comp_bit_var & comp_bit_index, 0b1)]
@@ -827,7 +827,7 @@ class Z3Interface(object):
                 in_models = in_models_lev[in_level]
 
                 in_bit_index = self.lib_model.bitmap_comp_index['%s-%d' % (in_component.contract.base_name, in_level)]
-                in_bit_var = self.lib_model.bitvect_repr[in_bit_index.get_id()]
+                in_bit_var = self.lib_model.bitvect_repr[in_bit_index]
 
                 for out_component in self.lib_model.library.components:
 
@@ -840,7 +840,7 @@ class Z3Interface(object):
                             out_models = out_models_lev[out_level]
 
                             out_bit_index = self.lib_model.bitmap_comp_index['%s-%d' % (out_component.contract.base_name, out_level)]
-                            out_bit_var = self.lib_model.bitvect_repr[out_bit_index.get_id()]
+                            out_bit_var = self.lib_model.bitvect_repr[out_bit_index]
 
                             # LOG.debug(in_component.contract.base_name)
                             # LOG.debug(out_component.contract.base_name)
@@ -873,10 +873,10 @@ class Z3Interface(object):
             in_bitmap = self.lib_model.model_bitmap[in_model.get_id()]
 
             in_model_comp_bit = self.lib_model.bitmap_component_index(in_contract, in_level)
-            in_comp_bit_var =  self.lib_model.bitmap_component_var(in_contract, in_level)
+            in_comp_bit_var = self.lib_model.bitmap_component_var(in_contract, in_level)
 
             # no feedback, i.e., no connection on its own component
-            constraints += [in_bitmap & in_model_comp_bit == 0b0]
+            #constraints += [in_bitmap == False]
 
             for out_component in self.lib_model.library.components:
 
@@ -886,10 +886,10 @@ class Z3Interface(object):
                     out_models = out_models_lev[out_level]
 
                     out_bit_index = self.lib_model.bitmap_comp_index['%s-%d' % (out_component.contract.base_name, out_level)]
-                    out_bit_var = self.lib_model.bitvect_repr[out_bit_index.get_id()]
+                    out_bit_var = self.lib_model.bitvect_repr[out_bit_index]
 
                     constraints += [Implies(Or([in_model == self.lib_model.model_out_index[m_out.get_id()]
-                                                for m_out in out_models]), in_bitmap & out_bit_var == out_bit_var)]
+                                                for m_out in out_models]), out_bit_var & in_model_comp_bit == 0)]
 
                     # constraints += [Implies(And([in_model != self.lib_model.model_out_index[m_out.get_id()]
                     #                             for m_out in out_models]), in_bitmap & out_bit_var == 0b0)]

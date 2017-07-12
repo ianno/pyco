@@ -96,6 +96,10 @@ url="http://dx.doi.org/10.1007/978-3-319-57666-4_7"
 }
 ```
 
+Alternatively, you can cite this repo directly as:
+
+[![DOI](https://zenodo.org/badge/95990067.svg)](https://zenodo.org/badge/latestdoi/95990067)
+
 ## Authors
 * [Antonio Iannopollo](https://people.eecs.berkeley.edu/~antonio/)
 

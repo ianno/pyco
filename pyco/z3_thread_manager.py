@@ -21,7 +21,7 @@ class ModelVerificationManager(object):
     manages refinement threads
     '''
 
-    def __init__(self, z3_interface):
+    def __init__(self, z3_interface, output_port_name):
         '''
         set up solver and thread status
         '''
@@ -47,6 +47,7 @@ class ModelVerificationManager(object):
         self.fail_queue = multiprocessing.Queue()
 
         self.model_dict = {}
+        self.output_port_name = output_port_name
 
     def set_successful_candidate(self, model, composition, connected_spec, contract_inst):
         '''
@@ -65,29 +66,19 @@ class ModelVerificationManager(object):
 
         return
 
-    def synthesize(self, size_constraints, initial_size):
+    def synthesize(self):
         '''
         picks candidates and generates threads
         '''
         #testing without size constraints
         #size = 1
-        size = initial_size
+        # size = initial_size
 
         while True:
             try:
                 with self.z3_lock:
                     model = self.z3_interface.propose_candidate()
             except pyco.z3_interface.NotSynthesizableError as err:
-                if size < self.z3_interface.max_components:
-                    # # this should happen anymore
-                    # LOG.debug('Synthesis for size %d failed. Increasing number of components...', size)
-                    # size = size + 1
-                    # with self.z3_lock:
-                    #     self.solver.pop()
-                    #     self.solver.push()
-                    #     self.solver.add(size_constraints[size])
-                    pass
-                else:
                     return self.terminate()
             else:
                 #acquire semaphore
@@ -105,7 +96,7 @@ class ModelVerificationManager(object):
                     self.model_dict.pop(pid)
 
                 #new refinement checker
-                thread = RefinementChecker(model, self, self.found_refinement)
+                thread = RefinementChecker(model, self.output_port_name, self, self.found_refinement)
                 #go
                 thread.start()
                 with self.pool_lock:
@@ -148,7 +139,7 @@ class ModelVerificationManager(object):
         spec = self.z3_interface.specification_list[0]
         with self.z3_lock:
             self.composition, self.connected_spec, self.contract_inst = \
-                    self.z3_interface.build_composition_from_model(self.model, spec, complete_model=True)
+                self.z3_interface.build_composition_from_model(self.model, spec, self.output_port_name)
         #wait for all the threads to stop
 
 
@@ -163,7 +154,7 @@ class RefinementChecker(multiprocessing.Process):
     this thread executes a refinement checks and dies
     '''
 
-    def __init__(self, model, manager, found_event):
+    def __init__(self, model, output_port_name, manager, found_event):
         '''
         instantiate
         '''
@@ -172,6 +163,9 @@ class RefinementChecker(multiprocessing.Process):
         self.found_event = found_event
         self.manager = manager
         self.z3_lock = manager.z3_lock
+
+        self.output_port_name = output_port_name
+
         #self.result_queue = multiprocessing.Queue()
 
         super(RefinementChecker, self).__init__()
@@ -189,7 +183,7 @@ class RefinementChecker(multiprocessing.Process):
         for spec in self.z3_interface.specification_list:
             with z3_lock:
                 composition, connected_spec, contract_inst = \
-                    self.z3_interface.build_composition_from_model(model, spec, complete_model=True)
+                    self.z3_interface.build_composition_from_model(model, spec, self.output_port_name)
 
             if not composition.is_refinement(connected_spec):
                 if self.pid % 20 == 0:

@@ -160,11 +160,11 @@ class Z3Library(object):
                     self.model_contracts[model.get_id()] = contract
 
                     #bitvector map
-                    self.model_bitmap[model.get_id()] = z3.Bool('bit_%d-%s' % (level, port.unique_name))
+                    #self.model_bitmap[model.get_id()] = z3.Bool('bit_%d-%s' % (level, port.unique_name))
 
                     #contract_indexing
                     self.contract_used_by_models[len(self.models) - 1] = c_flag
-                    #self.reverse_flag[c_flag.get_id()].append(len(self.models) -1)
+                    self.reverse_flag[c_flag.get_id()].append(len(self.models) -1)
 
                     #reverse lookup
                     self.model_index[model.get_id()] = len(self.models) - 1
@@ -205,7 +205,7 @@ class Z3Library(object):
         LOG.debug({i:self.models[i] for i in range(0,self.max_index)})
 
 
-    def include_spec_inputs(self, spec_contract):
+    def include_spec_ports(self, spec_contract):
         '''
         assign an id also to spec_ids
         '''
@@ -215,7 +215,7 @@ class Z3Library(object):
         self.spec_by_index_map = {}
         m_index = len(self.models)
 
-        for name, port in spec_contract.input_ports_dict.items():
+        for name, port in spec_contract.ports_dict.items():
             self.spec_map[name] = m_index
             self.spec_by_index_map[m_index] = name
 
@@ -496,7 +496,7 @@ class Z3Library(object):
         makes copies of contracts considering models
         and levels, and put them in a dictionary
         '''
-        levels = [{} for level in range(0, self.max_components)]
+        levels = [{} for _ in range(0, self.max_components)]
         model_map_contract = {}
         contract_map = {}
 

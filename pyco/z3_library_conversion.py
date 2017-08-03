@@ -521,6 +521,15 @@ class Z3Library(object):
 
         return (index + self.max_single_level_index * shift_lev) % self.max_index
 
+    def model_shift(self, model, shift_lev):
+        '''
+        returns the index shifted by shift_lev position.
+        works as a circular buffer
+        '''
+        index = self.model_index[model.get_id()]
+
+        return self.models[(index + self.max_single_level_index * shift_lev) % self.max_index]
+
     def index_in_shift(self, index, shift_lev):
         '''
         returns the index shifted by shift_lev position.

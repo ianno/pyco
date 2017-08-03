@@ -16,6 +16,7 @@ from pyco import LOG
 from pyco.z3_thread_manager import ModelVerificationManager, MAX_THREADS
 from pyco.smt_factory import SMTModelFactory
 from pyco.z3_library_conversion import Z3Library
+import itertools
 
 # LOG = logging.getLogger()
 LOG.debug('in z3_interface')
@@ -1233,6 +1234,49 @@ class Z3Interface(object):
 
         return True, composition, connected_spec, contract_inst, None
 
+
+    def __infer_relevant_ports_from_model(self, model, output_port_name):
+        '''
+        Create a list of contracts connected to the spec, eliminating spurious results
+
+        :param model:
+        :param spec:
+        :param output_port_name:
+        :return:
+        '''
+
+        # now we need to collect all the components connected in chain to the spec output we are considering
+        # we start with the model connected to the out
+        spec_port_model = self.spec_out_dict[output_port_name]
+        models = []
+
+        to_process = [self.lib_model.model_by_index(model[spec_port_model].as_long())]
+        done = []
+        spec_models = []
+
+        while len(to_process) > 0:
+            m = to_process.pop()
+            done.append(m)
+
+            # find related input models
+            comp_models = [mod for mod in self.lib_model.related_in_models(m) if model[mod].as_long() > -1]
+            # find models these are connected to
+            connected_models = [self.lib_model.model_by_index(model[port].as_long()) for port in comp_models
+                                if (-1 < model[port].as_long() < self.lib_model.specs_at)]
+
+            spec_models += [port for port in comp_models
+                            if port not in connected_models and model[port].as_long() >= self.lib_model.specs_at]
+
+            # add to the main list
+            models += comp_models
+
+            # add for further processing
+            for mod in connected_models:
+                if mod not in done:
+                    to_process.append(mod)
+
+        return models, spec_models
+
     def build_composition_from_model(self, model, spec, output_port_name):
         '''
         builds a contract composition out of a model
@@ -1252,33 +1296,8 @@ class Z3Interface(object):
         #now we need to collect all the components connected in chain to the spec output we are considering
         # we start with the model connected to the out
         spec_port_model = self.spec_out_dict[output_port_name]
-        models = []
 
-        to_process = [self.lib_model.model_by_index(model[spec_port_model].as_long())]
-        done = []
-        old_size = -1
-        spec_models = []
-
-        while len(to_process) > 0:
-            m = to_process.pop()
-            done.append(m)
-
-            #find related input models
-            comp_models = [ mod for mod in self.lib_model.related_in_models(m) if model[mod].as_long() > -1 ]
-            #find models these are connected to
-            connected_models = [self.lib_model.model_by_index(model[port].as_long()) for port in comp_models
-                                if (-1 < model[port].as_long() < self.lib_model.specs_at)]
-
-            spec_models += [port for port in comp_models
-                                if port not in connected_models and model[port].as_long() >= self.lib_model.specs_at]
-
-            #add to the main list
-            models += comp_models
-
-            #add for further processing
-            for mod in connected_models:
-                if mod not in done:
-                    to_process.append(mod)
+        models, spec_models = self.__infer_relevant_ports_from_model(model, output_port_name)
         #
         # LOG.debug(models)
         # LOG.debug(spec_models)
@@ -1410,81 +1429,178 @@ class Z3Interface(object):
 
         return composition, spec_contract, contracts
 
+
+    # def assemble_reject_formula(self, component, connection_dict):
+    #     '''
+    #     recursively assemble the formula for the rejected model
+    #     :param component:
+    #     :param connection_dict:
+    #     :return:
+    #     '''
+    #
+    #     #base case
+    #     if connection_dict[component] == []:
+    #
+
+
     # def reject_candidate(self, model, failed_spec):
-    def reject_candidate(self, model):
+    def reject_candidate(self, model, output_port_name):
         '''
         reject a model and its equivalents
         '''
 
-        c_sets = {}
+        #get only relevant models, i.e., connected eventually to the spec
+        models, spec_models = self.__infer_relevant_ports_from_model(model, output_port_name)
+        # now we get all the contracts related to the models.
+        # by construction fetching only the outputs, we have the full set of contracts
+        model_map, contract_map = self.lib_model.contract_copies_by_models(models)
+
+        level_contracts_pairs = set(contract_map.keys())
+
+        # LOG.debug(models)
+        # LOG.debug(spec_models)
+        # LOG.debug(model_map)
+        # LOG.debug(contract_map)
 
 
-        for spec in self.spec_outs:
-            index = model[spec].as_long()
-            mod = self.lib_model.models[index]
-            (level, contract) = self.lib_model.contract_by_model(mod)
-            if (level, contract) not in c_sets:
-                c_sets[(level, contract)] = {}
-                # find all related models
-                # in_models = self.lib_model.related_in_models(mod)
-                # for mod in in_models:
-                #    c_sets[(level, contract)][mod.get_id()] = (mod, model[mod].as_long())
+        #get the spec details. Only one component connected to spec
 
-            c_sets[(level, contract)][spec.get_id()] = (spec, index)
+        spec_port_model = self.spec_out_dict[output_port_name]
+        index = model[spec_port_model].as_long()
+        mod = self.lib_model.models[index]
+        (level, contract) = self.lib_model.contract_by_model(mod)
 
-        size = len(c_sets)
+        comp_list_size = len(contract_map.values())
 
-        # create containers as nested lists
-        # one per each c_set and n lists inside
-        classes = []
+        level_map = itertools.product(range(self.lib_model.max_components), repeat=comp_list_size)
+        contract_shift_pos = {(lev, contract): contract_map.keys().index((lev, contract))
+                               for lev, contract in contract_map.keys()}
 
-        for (level, contract) in c_sets:
-            s_class = []
-            s_pairs = c_sets[(level, contract)].values()
-            mods = self.lib_model.contract_in_models(contract)
+        contract_models = {contract:self.lib_model.contract_in_models(contract)
+                           for _, contract in contract_map.keys()}
 
-            for l in xrange(0, self.lib_model.max_components):
-                l_class = []
-                shift = self.lib_model.max_components - level + l
-                for pair in s_pairs:
-                    if pair[0].get_id() not in self.dummy_model_set:
-                        l_class.append([pair[0] == self.lib_model.index_shift(pair[1], shift)])
-                for i in xrange(0, len(mods[l])):
-                    m_class = []
-                    if model[mods[level][i]].as_long() < self.lib_model.max_index:
-                        for l2 in xrange(0, self.lib_model.max_components):
-                            shift = self.lib_model.max_components - level + l2
-                            m_class.append(mods[l][i] ==
-                                           self.lib_model.index_shift(model[mods[level][i]].as_long(), shift))
-                    else:
-                        m_class.append(mods[l][i] == model[mods[level][i]].as_long())
+        contract_idx = {contract:self.lib_model.contract_indices(contract)
+                           for _, contract in contract_map.keys()}
 
-                    l_class.append(m_class)
-                s_class.append(l_class)
-            classes.append(s_class)
+        constraints = []
 
-        # size
+        for level_shift in level_map:
 
+            conj = []
 
-        rej_formula = Not(
-            And(
-                [Or(
-                    [And(
-                        [Or(
-                            [And(line) for line in m_class]
-                        )
-                         for m_class in l_class]
-                    )
-                     for l_class in s_class]
-                )
-                 for s_class in classes]
-            )
-        )
+            #and spec -- out of for loop
+            idx_shift = level_shift[contract_shift_pos[(level, contract)]]
+            spec_new_idx = self.lib_model.index_shift(index, idx_shift)
+            conj.append(spec_port_model == spec_new_idx)
 
+            for mod in models:
+                (model_level, model_contract) = self.lib_model.contract_by_model(mod)
+
+                try:
+                    connected_port = self.lib_model.model_by_index(model[mod].as_long())
+                except IndexError:
+                    connected_port = None
+                    idx_contract = None
+                else:
+                    (idx_level, idx_contract) = connected_port.contract_by_model(mod)
+
+                shift = level_shift[contract_shift_pos[(model_level, model_contract)]]
+
+                new_mod = self.lib_model.model_shift(mod, shift)
+
+                if connected_port is None:
+                    #in this case port is connected to spec port
+                    idx_shift = 0
+                else:
+                    idx_shift = level_shift[contract_shift_pos[(idx_level, idx_contract)]]
+
+                new_idx = self.lib_model.index_shift(model[mod].as_long(), idx_shift)
+
+                conj.append(new_mod == new_idx)
+
+            constraints.append(And(conj))
+
+        rej_formula = Not(Or(constraints))
         # LOG.debug(rej_formula)
-
-        # self.solver.add(rej_formula)
         return rej_formula
+
+
+
+
+
+
+
+
+
+        # c_sets = {}
+        #
+        #
+        # for spec in self.spec_outs:
+        #     index = model[spec].as_long()
+        #     mod = self.lib_model.models[index]
+        #     (level, contract) = self.lib_model.contract_by_model(mod)
+        #     if (level, contract) not in c_sets:
+        #         c_sets[(level, contract)] = {}
+        #         # find all related models
+        #         # in_models = self.lib_model.related_in_models(mod)
+        #         # for mod in in_models:
+        #         #    c_sets[(level, contract)][mod.get_id()] = (mod, model[mod].as_long())
+        #
+        #     c_sets[(level, contract)][spec.get_id()] = (spec, index)
+        #
+        # size = len(c_sets)
+        #
+        # # create containers as nested lists
+        # # one per each c_set and n lists inside
+        # classes = []
+        #
+        # for (level, contract) in c_sets:
+        #     s_class = []
+        #     s_pairs = c_sets[(level, contract)].values()
+        #     mods = self.lib_model.contract_in_models(contract)
+        #
+        #     for l in xrange(0, self.lib_model.max_components):
+        #         l_class = []
+        #         shift = self.lib_model.max_components - level + l
+        #         for pair in s_pairs:
+        #             if pair[0].get_id() not in self.dummy_model_set:
+        #                 l_class.append([pair[0] == self.lib_model.index_shift(pair[1], shift)])
+        #         for i in xrange(0, len(mods[l])):
+        #             m_class = []
+        #             if model[mods[level][i]].as_long() < self.lib_model.max_index:
+        #                 for l2 in xrange(0, self.lib_model.max_components):
+        #                     shift = self.lib_model.max_components - level + l2
+        #                     m_class.append(mods[l][i] ==
+        #                                    self.lib_model.index_shift(model[mods[level][i]].as_long(), shift))
+        #             else:
+        #                 m_class.append(mods[l][i] == model[mods[level][i]].as_long())
+        #
+        #             l_class.append(m_class)
+        #         s_class.append(l_class)
+        #     classes.append(s_class)
+        #
+        # # size
+        #
+        #
+        # rej_formula = Not(
+        #     And(
+        #         [Or(
+        #             [And(
+        #                 [Or(
+        #                     [And(line) for line in m_class]
+        #                 )
+        #                  for m_class in l_class]
+        #             )
+        #              for l_class in s_class]
+        #         )
+        #          for s_class in classes]
+        #     )
+        # )
+        #
+        # # LOG.debug(rej_formula)
+        #
+        # # self.solver.add(rej_formula)
+        # return rej_formula
 
     def allow_hierarchy(self, hierarchy, candidate_list):
         '''

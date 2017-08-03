@@ -107,7 +107,7 @@ class ModelVerificationManager(object):
                 #LOG.debug('pre-lock')
                 with self.z3_lock:
                     #LOG.debug('pre-reject')
-                    self.solver.add(self.z3_interface.reject_candidate(model))
+                    self.solver.add(self.z3_interface.reject_candidate(model, self.output_port_name))
                     #LOG.debug('done')
 
 

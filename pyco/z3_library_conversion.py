@@ -55,7 +55,7 @@ class Z3Library(object):
     '''
 
 
-    def __init__(self, library, spec, library_max_redundancy=None, limit=None):
+    def __init__(self, library, spec, library_max_redundancy=None, limit=None, context=None):
         '''
         associate library and create models.
         We need the spec, too, because we need to determine
@@ -64,6 +64,7 @@ class Z3Library(object):
         There is a problem with the size of the library, though...
         '''
         self.library = library
+        self.context = context
         self.models = []
         self.ports = []
         self.index = {}
@@ -122,7 +123,7 @@ class Z3Library(object):
                 self.in_contract_index[level][contract] = []
                 self.out_contract_index[level][contract] = []
 
-                c_flag = Int('%s-%d' % (contract.base_name, level))
+                c_flag = Int('%s-%d' % (contract.base_name, level), self.context)
                 self.contract_use_flags.append(c_flag)
                 self.reverse_flag[c_flag.get_id()] = []
                 self.flag_map['%s-%d' % (contract.base_name, level)] = c_flag
@@ -130,7 +131,7 @@ class Z3Library(object):
                 #bitvector map
                 self.bitmap_comp_index['%s-%d' % (contract.base_name, level)] = comp_ind #z3.BitVecVal(comp_ind,  self.max_num_components)
 
-                self.bitvect_repr[comp_ind] = z3.BitVec("bitvar_"+str(comp_ind), self.max_num_components)
+                self.bitvect_repr[comp_ind] = z3.BitVec("bitvar_"+str(comp_ind), self.max_num_components, self.context)
 
                 #shift one bit
                 comp_ind = comp_ind << 1
@@ -151,7 +152,7 @@ class Z3Library(object):
 
 
                 for port in contract.input_ports_dict.values():
-                    model = z3.Int('%d-%s' % (level, port.unique_name))
+                    model = z3.Int('%d-%s' % (level, port.unique_name), self.context)
                     self.models.append(model)
                     self.in_models.append(model)
                     self.ports.append(port)
@@ -176,7 +177,7 @@ class Z3Library(object):
                     self.in_contract_index[level][contract].append(len(self.in_models) - 1)
 
                 for port in contract.output_ports_dict.values():
-                    model = z3.Int('%d-%s' % (level, port.unique_name))
+                    model = z3.Int('%d-%s' % (level, port.unique_name), self.context)
                     self.models.append(model)
                     self.out_models.append(model)
                     self.ports.append(port)
@@ -204,6 +205,26 @@ class Z3Library(object):
 
         LOG.debug({i:self.models[i] for i in range(0,self.max_index)})
 
+
+    def cast_to_context(self, context):
+        '''
+        translates all the models according to the new context
+        :param context:
+        :return:
+        '''
+        model_map = {model: model.translate(context) for model in self.models}
+        index_map = {old.get_id(): new.get_id() for (old, new) in model_map.items()}
+
+        in_model_map = {model: model.translate(context) for model in self.in_models}
+        in_index_map = {old.get_id(): new.get_id() for (old, new) in in_model_map.items()}
+
+        out_model_map = {model: model.translate(context) for model in self.out_models}
+        outindex_map = {old.get_id(): new.get_id() for (old, new) in out_model_map.items()}
+
+        contract_use_flags_map = {model: model.translate(context) for model in self.contract_use_flags}
+        new_reverse_flag = {flag.get_id(): self.reverse_flag[flag] for flag in self.contract_use_flags}
+
+        new_model_index = {index_map[mid]: self.model_index[mid] for mid in self.model_index}
 
     def include_spec_ports(self, spec_contract):
         '''

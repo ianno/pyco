@@ -5,10 +5,10 @@ of threads to speed things up
 Author: Antonio Iannopollo
 '''
 
-import multiprocessing
+import threading as multiprocessing
 
 # import threading
-# from Queue import Queue, Empty
+from Queue import Queue, Empty
 import pyco
 from pyco import LOG
 
@@ -38,13 +38,13 @@ class ModelVerificationManager(object):
 
         self.solution_lock = multiprocessing.Lock()
         self.z3_lock = multiprocessing.Lock()
-        self.constraint_queue = multiprocessing.Queue()
+        self.constraint_queue = Queue()
 
         self.thread_pool = set()
         self.pool_lock = multiprocessing.RLock()
         self.terminate_event = multiprocessing.Event()
-        self.result_queue = multiprocessing.Queue()
-        self.fail_queue = multiprocessing.Queue()
+        self.result_queue = Queue()
+        self.fail_queue = Queue()
 
         self.model_dict = {}
         self.output_port_name = output_port_name
@@ -79,7 +79,7 @@ class ModelVerificationManager(object):
                 with self.z3_lock:
                     model = self.z3_interface.propose_candidate()
             except pyco.z3_interface.NotSynthesizableError as err:
-                    return self.terminate()
+                return self.terminate()
             else:
                 #acquire semaphore
                 self.semaphore.acquire()
@@ -87,7 +87,6 @@ class ModelVerificationManager(object):
                 #check if event is successful
                 if self.found_refinement.is_set():
                     #we are done. kill all running threads and exit
-
                     return self.terminate()
 
                 #else remove not successful models
@@ -100,13 +99,11 @@ class ModelVerificationManager(object):
                 #go
                 thread.start()
                 with self.pool_lock:
-                    self.model_dict[thread.pid] = model
+                    self.model_dict[thread.ident] = model
                     self.thread_pool.add(thread)
 
                 #now reject the model, to get a new candidate
-                #LOG.debug('pre-lock')
                 with self.z3_lock:
-                    #LOG.debug('pre-reject')
                     self.solver.add(self.z3_interface.reject_candidate(model, self.output_port_name))
                     #LOG.debug('done')
 
@@ -149,7 +146,7 @@ class ModelVerificationManager(object):
         return (self.model, self.composition, self.connected_spec, self.contract_inst)
 
 
-class RefinementChecker(multiprocessing.Process):
+class RefinementChecker(multiprocessing.Thread):
     '''
     this thread executes a refinement checks and dies
     '''
@@ -186,7 +183,7 @@ class RefinementChecker(multiprocessing.Process):
                     self.z3_interface.build_composition_from_model(model, spec, self.output_port_name)
 
             if not composition.is_refinement(connected_spec):
-                if self.pid % 20 == 0:
+                if self.ident % 20 == 0:
                     print('.'),
                 failed_spec = spec
                 return False, composition, connected_spec,contract_inst, failed_spec
@@ -208,10 +205,10 @@ class RefinementChecker(multiprocessing.Process):
             self.check_all_specs_threadsafe(self.model, z3_lock=self.z3_lock)
 
         if state:
-            self.manager.result_queue.put(self.pid)
+            self.manager.result_queue.put(self.ident)
             self.found_event.set()
         else:
-            self.manager.fail_queue.put(self.pid)
+            self.manager.fail_queue.put(self.ident)
         #else:
         #    #check for consistency
         #    LOG.debug('pre consistency')

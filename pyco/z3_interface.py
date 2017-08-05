@@ -16,7 +16,7 @@ from pyco import LOG
 from pyco.z3_thread_manager import ModelVerificationManager, MAX_THREADS
 from pyco.smt_factory import SMTModelFactory
 from pyco.z3_library_conversion import Z3Library
-import itertools
+from pyco.z3_single_port_solver import SinglePortSolver, NotSynthesizableError, OptimizationError
 
 # LOG = logging.getLogger()
 LOG.debug('in z3_interface')
@@ -97,69 +97,6 @@ class Z3Interface(object):
         for component in library.components:
             self.distinct_ports_by_component[component.contract] = component.distinct_set
 
-    def initiliaze_solver(self, property_contract, limit, library_max_redundancy=None):
-        '''
-        Create environment and models from library
-        '''
-
-        port_name_pairs = self.library.smt_manager.port_name_pairs
-        contract_name_pairs = self.library.smt_manager.contract_name_pairs
-        component_name_pairs = self.library.smt_manager.component_name_pairs
-
-        # extend port names with property ones
-        _ = [port_name_pairs.append((port.base_name, port.unique_name))
-             for port in property_contract.ports_dict.values()]
-
-        # extends contract names
-        contract_name_pairs.append((property_contract.base_name, property_contract.unique_name))
-
-        # self.property_model = self.create_contract_model(property_contract, 0, is_library_elem=False)
-        self.property_contract = property_contract
-
-        self.create_z3_environment(self.property_contract, limit, library_max_redundancy)
-
-    def create_z3_environment(self, spec, limit, library_max_redundancy=None):
-        """
-        Creates basic types for the current library instance
-        """
-
-        self.spec_out_dict = {name: z3.Int('%s' % name) for name in spec.output_ports_dict}
-        self.spec_in_dict = {name: z3.Int('%s' % name) for name in spec.input_ports_dict}
-
-        self.spec_dict = dict(self.spec_in_dict.items() + self.spec_out_dict.items())
-
-        self.spec_outs = self.spec_out_dict.values()
-        self.spec_ins = self.spec_in_dict.values()
-
-        self.num_out = len(self.spec_outs)
-
-        self.lib_model = Z3Library(self.library, spec, library_max_redundancy=library_max_redundancy, limit=limit)
-        self.lib_model.include_spec_ports(spec)
-
-        # LOG.debug(self.lib_model.models_by_contracts())
-        self.spec_ports = self.preprocess_specifications(self.specification_list)
-
-        # get all the distinct ports contractints from components
-        self.process_distinct_ports_by_component(self.library)
-
-        # reorder specification list
-        # LOG.debug(self.specification_list)
-        self.specification_list = sorted(self.specification_list, key=lambda x: len(self.spec_ports[x][0]))
-        # LOG.debug(self.specification_list)
-
-
-        #init dummy set
-        for p_model in self.spec_outs:
-            name = str(p_model)
-            if name not in self.specification_list[0].ports_dict:
-                self.dummy_model_set.add(p_model.get_id())
-
-        # self.solver = Solver()
-        self.solver = Goal()  # Optimize()
-
-        LOG.debug('ok')
-        LOG.debug(self.lib_model)
-
     def preprocess_specifications(self, specifications):
         '''
         Finds what ports are actually necessary to evaluate the property.
@@ -226,6 +163,69 @@ class Z3Interface(object):
     #     # self.solver.add(constraints)
     #     return constraints
 
+    def initiliaze_solver(self, property_contract, limit, library_max_redundancy=None):
+        '''
+        Create environment and models from library
+        '''
+
+        port_name_pairs = self.library.smt_manager.port_name_pairs
+        contract_name_pairs = self.library.smt_manager.contract_name_pairs
+        component_name_pairs = self.library.smt_manager.component_name_pairs
+
+        # extend port names with property ones
+        _ = [port_name_pairs.append((port.base_name, port.unique_name))
+             for port in property_contract.ports_dict.values()]
+
+        # extends contract names
+        contract_name_pairs.append((property_contract.base_name, property_contract.unique_name))
+
+        # self.property_model = self.create_contract_model(property_contract, 0, is_library_elem=False)
+        self.property_contract = property_contract
+
+        self.create_z3_environment(self.property_contract, limit, library_max_redundancy)
+
+    def create_z3_environment(self, spec, limit, library_max_redundancy=None):
+        """
+        Creates basic types for the current library instance
+        """
+
+        self.spec_out_dict = {name: z3.Int('%s' % name) for name in spec.output_ports_dict}
+        self.spec_in_dict = {name: z3.Int('%s' % name) for name in spec.input_ports_dict}
+
+        self.spec_dict = dict(self.spec_in_dict.items() + self.spec_out_dict.items())
+
+        self.spec_outs = self.spec_out_dict.values()
+        self.spec_ins = self.spec_in_dict.values()
+
+        self.num_out = len(self.spec_outs)
+
+        self.lib_model = Z3Library(self.library, spec, library_max_redundancy=library_max_redundancy, limit=limit)
+        self.lib_model.include_spec_ports(spec)
+
+        # LOG.debug(self.lib_model.models_by_contracts())
+        self.spec_ports = self.preprocess_specifications(self.specification_list)
+
+        # get all the distinct ports contractints from components
+        self.process_distinct_ports_by_component(self.library)
+
+        # reorder specification list
+        # LOG.debug(self.specification_list)
+        self.specification_list = sorted(self.specification_list, key=lambda x: len(self.spec_ports[x][0]))
+        # LOG.debug(self.specification_list)
+
+
+        # init dummy set
+        for p_model in self.spec_outs:
+            name = str(p_model)
+            if name not in self.specification_list[0].ports_dict:
+                self.dummy_model_set.add(p_model.get_id())
+
+                # self.solver = Solver()
+                # self.solver = Goal()  # Optimize()
+
+                # LOG.debug('ok')
+                # LOG.debug(self.lib_model)
+
     def use_max_n_components(self, n):
         '''
         Force the solver to use n components for a candidate solution
@@ -238,7 +238,7 @@ class Z3Interface(object):
 
         constraints += [Implies(flag == 1,
                                 Or([self.lib_model.model_by_index(index) > -1
-                                     for index in self.lib_model.reverse_flag[flag.get_id()]
+                                    for index in self.lib_model.reverse_flag[flag.get_id()]
                                     if self.lib_model.port_by_index(index).is_input]))
                         for flag in self.lib_model.contract_use_flags]
 
@@ -262,12 +262,12 @@ class Z3Interface(object):
                                      if self.lib_model.port_by_index(index).is_input]))
                         for flag in self.lib_model.contract_use_flags]
 
-
         constraints += [Sum(self.lib_model.contract_use_flags) <= n]
 
         # LOG.debug(constraints)
         # self.solver.add(constraints)
-        return constraints
+        return And(constraints)
+
 
     def full_spec_out(self):
         '''
@@ -337,7 +337,7 @@ class Z3Interface(object):
 
         # LOG.debug(constraints)
 
-        self.solver.add(constraints)
+        return And(constraints)
 
     def full_spec_in(self):
         '''
@@ -430,7 +430,7 @@ class Z3Interface(object):
                         for flag in self.lib_model.contract_use_flags]
 
         # LOG.debug(constraints)
-        self.solver.add(constraints)
+        return And(constraints)
 
     # def _spec_inputs_no_feedback(self):
     #     '''
@@ -486,7 +486,7 @@ class Z3Interface(object):
 
         # print constraints
 
-        self.solver.add(constraints)
+        return And(constraints)
 
     def no_connections_to_unused_components(self):
         '''
@@ -518,7 +518,7 @@ class Z3Interface(object):
 
         # LOG.debug(constraints)
 
-        self.solver.add(constraints)
+        return And(constraints)
 
     def lib_not_chosen_zero(self):
         '''
@@ -561,7 +561,7 @@ class Z3Interface(object):
                         constraints.append(s_mod != self.lib_model.index[lev][port])
 
         # LOG.debug(constraints)
-        self.solver.add(constraints)
+        return And(constraints)
 
     def spec_process_types(self):
         '''
@@ -588,7 +588,7 @@ class Z3Interface(object):
                         constraints.append(self.lib_model.model_by_port(port)[lev] != self.lib_model.spec_map[s_name])
 
         # LOG.debug(constraints)
-        self.solver.add(constraints)
+        return And(constraints)
 
     def lib_process_types(self):
         '''
@@ -621,7 +621,7 @@ class Z3Interface(object):
                             constraints.append(in_mod != self.lib_model.index[lev][out_port])
 
         # LOG.debug(constraints)
-        self.solver.add(constraints)
+        return And(constraints)
 
     def compute_distinct_port_spec_constraints(self):
         '''
@@ -635,7 +635,7 @@ class Z3Interface(object):
                            self.spec_dict[name1] != self.spec_dict[name2])
                         for name1, name2 in self.distinct_mapping_constraints]
 
-        self.solver.add(constraints)
+        return And(constraints)
 
     def compute_distinct_port_lib_constraints(self):
         '''
@@ -667,7 +667,7 @@ class Z3Interface(object):
                     raise ValueError('cannot connect %s, %s ' % (port1.unique_name, port2.unique_name))
 
         # LOG.debug(constraints)
-        self.solver.add(constraints)
+        return And(constraints)
 
     def compute_same_block_constraints(self):
         '''
@@ -718,7 +718,7 @@ class Z3Interface(object):
                                     self.lib_model.port_by_model(port2).is_input])]
 
         # LOG.debug(constraints)
-        self.solver.add(constraints)
+        return And(constraints)
 
     def compute_fixed_components(self):
         '''
@@ -732,7 +732,7 @@ class Z3Interface(object):
             constraints += [c_flag == 1]
 
         # LOG.debug(constraints)
-        self.solver.add(constraints)
+        return And(constraints)
 
 
     def compute_fixed_connections(self):
@@ -760,8 +760,8 @@ class Z3Interface(object):
             else:
                 raise ValueError('%s, %s are both outputs' % (p_name1, p_name2))
 
-        LOG.debug(constraints)
-        self.solver.add(constraints)
+        # LOG.debug(constraints)
+        return And(constraints)
 
     def compute_fixed_spec_connections(self):
         '''
@@ -788,7 +788,7 @@ class Z3Interface(object):
                 raise ValueError('%s, %s cannot be connected' % (p_name, spec_port_name))
 
         # LOG.debug(constraints)
-        self.solver.add(constraints)
+        return And(constraints)
     #
     # def compute_fixed_connections_spec(self):
     #     '''
@@ -919,7 +919,8 @@ class Z3Interface(object):
 
 
         # LOG.debug(constraints)
-        self.solver.add(constraints)
+        return And(constraints)
+
 
     def solve_for_output(self, output_port_name):
         '''
@@ -947,7 +948,7 @@ class Z3Interface(object):
         #but distinct.
         # constraints += [Distinct(self.spec_outs)]
 
-        self.solver.add(constraints)
+        return And(constraints)
 
     def synthesize(self, property_contracts, limit=None,
                    library_max_redundancy=None,
@@ -1003,15 +1004,15 @@ class Z3Interface(object):
 
                 property_contract = SpecClsCopy('%s_c' % property_contract.base_name)
 
-        self.initiliaze_solver(property_contract, limit=self.max_components, library_max_redundancy=library_max_redundancy)
-
-        # property model has to be fully connected - always true
-        # self.solver.add(self.fully_connected(self.property_model))
-
-        # configure constraints for size
-        #size_constraints = {n: self.use_n_components(n) for n in range(1, self.num_out + 1)}
-
-        t = Tactic('simplify')
+        # self.initiliaze_solver(property_contract, limit=self.max_components, library_max_redundancy=library_max_redundancy)
+        #
+        # # property model has to be fully connected - always true
+        # # self.solver.add(self.fully_connected(self.property_model))
+        #
+        # # configure constraints for size
+        # #size_constraints = {n: self.use_n_components(n) for n in range(1, self.num_out + 1)}
+        #
+        # t = Tactic('simplify')
 
         # self.all_zero()
         LOG.debug(property_contract)
@@ -1025,16 +1026,22 @@ class Z3Interface(object):
         # unroll = self.lib_model.get_unrolled_equiv(self.specification_list)
         # self.solver.add(unroll)
 
-        self.solver.add(self.use_max_n_components(self.max_components))
+        constraints = []
+
+        self.initiliaze_solver(property_contract, limit=self.max_components,
+                               library_max_redundancy=library_max_redundancy)
+
+        constraints.append(self.use_max_n_components(self.max_components))
 
         # self.full_spec_out()
 
         # if strict_out_lib_map:
         #     self.lib_full_chosen_output() #
 
-        self.spec_out_to_out()
 
-        # TODO: we probably won't need this. And it causing problems...
+        constraints.append(self.spec_out_to_out())
+
+        # TODO: we probably won't need this. And it is causing problems...
         # if strict_in_spec_map:
         #     self.full_spec_in() #
         # ---------
@@ -1043,564 +1050,175 @@ class Z3Interface(object):
         ## _self.spec_inputs_no_feedback()
         ## self.lib_inputs_no_feedback_if_assumption()
         ## self._inputs_from_selected()
-        self.lib_chosen_not_zeros()
-        self.lib_to_outputs_or_spec_inout()
-        self.no_connections_to_unused_components()
+        constraints.append(self.lib_chosen_not_zeros())
+        constraints.append(self.lib_to_outputs_or_spec_inout())
+        constraints.append(self.no_connections_to_unused_components())
         ### self.lib_not_chosen_zero() # TODO: verify this is ok to remove. it seems covered by use_max_n_components
-        self.process_bitmap_no_feedback()
+        constraints.append(self.process_bitmap_no_feedback())
 
         if use_types:
-            self.spec_process_types() ### remove for tests with no types
-            self.spec_process_out_types() ###
-            self.lib_process_types() ###
+            constraints.append(self.spec_process_types()) ### remove for tests with no types
+            constraints.append(self.spec_process_out_types()) ###
+            constraints.append(self.lib_process_types()) ###
         if use_hints:
-            self.compute_distinct_port_spec_constraints() ###
-            self.compute_distinct_port_lib_constraints() ###
+            constraints.append(self.compute_distinct_port_spec_constraints()) ###
+            constraints.append(self.compute_distinct_port_lib_constraints()) ###
 
             # TODO: reimplement the following
-            self.compute_same_block_constraints() ###
-            self.compute_fixed_components()
-            self.compute_fixed_connections()
-            self.compute_fixed_spec_connections()
+            constraints.append(self.compute_same_block_constraints()) ###
+            constraints.append(self.compute_fixed_components())
+            constraints.append(self.compute_fixed_connections())
+            constraints.append(self.compute_fixed_spec_connections())
         # self._lib_distinct()
 
 
-        #connect ONLY Nth port
-        output_port_name = self.property_contract.output_ports_dict.keys()[0]
-        self.solve_for_output(output_port_name)
+        goal = Goal()
+        goal.add(constraints)
+        goal = goal.simplify()
 
-        r = t.apply(self.solver)
-
+        # #split here
         if optimize:
             solv = Optimize()
         else:
             solv = Solver()
 
-        solv.add(r.as_expr())
-        self.solver = solv
+        solv.add(goal.as_expr())
+
+        self.base_solver = solv
 
         if minimize_components:
-            self.obj = self.solver.minimize(Sum(self.lib_model.contract_use_flags))
+            self.obj = self.base_solver.minimize(Sum(self.lib_model.contract_use_flags))
 
         if minimize_ports:
-            #minimize ports used
-            used_ports = [z3.Int('used_%d'%i) for i in range(len(self.lib_model.models))]
-            self.solver.add([Or(used == 0, used == 1) for used in used_ports])
-            self.solver.add([Implies(used_ports[i]==1, self.lib_model.models[i]>-1) for i in range(len(self.lib_model.models))])
-            self.solver.add([Implies(used_ports[i]==0, self.lib_model.models[i]==-1) for i in range(len(self.lib_model.models))])
+            # minimize ports used
+            used_ports = [z3.Int('used_%d' % i) for i in range(len(self.lib_model.models))]
+            self.base_solver.add([Or(used == 0, used == 1) for used in used_ports])
+            self.base_solver.add(
+                [Implies(used_ports[i] == 1, self.lib_model.models[i] > -1) for i in range(len(self.lib_model.models))])
+            self.base_solver.add([Implies(used_ports[i] == 0, self.lib_model.models[i] == -1) for i in
+                             range(len(self.lib_model.models))])
 
-            self.obj = self.solver.minimize(z3.Sum(used_ports))
-
-        # push size constraint
-        # when popping, it is ok losing the counterexample
-        # for a given size. (it does not apply to greater sizes)
-
-        # initial_size = 1
-        initial_size = self.max_components
-        # self.solver.push()
-        # self.solver.add(size_constraints[initial_size])
-
-        # LOG.debug(self.lib_model.index)
-        # LOG.debug(self.lib_model.models)
-        models = self.lib_model.models_by_contracts()
-        for model in models:
-            LOG.debug('--')
-            for elem in model:
-                LOG.debug('%d -> %s', self.lib_model.index_by_model(elem), elem)
-        # LOG.debug(self.lib_model.models_in_by_contracts())
-        # LOG.debug(self.solver.assertions())
-
-        size = initial_size
-        if MAX_THREADS >= 1:
-            thread_manager = ModelVerificationManager(self, output_port_name)
-
-            try:
-                (model, composition,
-                 spec, contract_list) = thread_manager.synthesize()
-            except NotSynthesizableError:
-                raise
-            else:
-                LOG.info(model)
-                for c in contract_list:
-                    LOG.debug(c)
-                LOG.info(spec)
-                LOG.info(composition)
-                return model, composition, spec, contract_list
-
-                # return model, composition, spec, contract_list
-        else:
-            while True:
-                try:
-                    model = self.propose_candidate()
-                except NotSynthesizableError as err:
-                        raise err
-                else:
-                    try:
-                        composition, spec, contract_list = self.verify_candidate(model, output_port_name)
-                    except NotSynthesizableError as err:
-                        LOG.debug("candidate not valid")
-                    else:
-                        LOG.info(model)
-                        for c in contract_list:
-                            LOG.debug(c)
-                        LOG.info(self.property_contract)
-                        LOG.info(composition)
-                        return model, composition, spec, contract_list
-
-    def propose_candidate(self):
-        '''
-        generate a model
-        '''
-
-        # LOG.debug('start solving')
-        res = self.solver.check()
-        # LOG.debug(self.solver.upper(self.obj))
-        #LOG.debug(self.solver.lower(self.obj))
-        # LOG.debug(res)
-        if res == sat:
-            # LOG.debug(self.solver.model())
-            # LOG.debug('func eval')
-            # LOG.debug(self.solver.model()[self.fully_connected])
-            pass
-        else:
-            # LOG.debug(self.solver.proof())
-            raise NotSynthesizableError()
-
-        try:
-            model = self.solver.model()
-        except Z3Exception:
-            raise NotSynthesizableError()
-        else:
-            pass
-            ##for spec in self.spec_ins:
-            ##    LOG.debug('%s -> %s'
-            ##        % (spec, self.lib_model.model_by_index(simplify(model[spec]).as_long())))
-            # for spec in self.spec_outs:
-            #    LOG.debug('%s -> %s'
-            #        % (spec, self.lib_model.model_by_index(simplify(model[spec]).as_long())))
-
-            # LOG.debug(model)
-
-        return model
-
-    def verify_candidate(self, model, output_port_name):
-        '''
-        check if a candidate is valid or not.
-        Here we need to:
-        1) transform the model to a contract composition
-        2) LEARN
-            2a)
-        '''
-
-        # self.reject_candidate(model, candidates)
-        state, composition, connected_spec, contract_inst, failed_spec = \
-            self.check_all_specs(model, output_port_name)
-        if not state:
-            # learn
-            # as first step, we reject the actual solution
-            # self.solver.add(self.exclude_candidate_type())
-            # LOG.debug('exclude')
-            # LOG.debug(z3.Not(self.connected_ports==model[self.connected_ports]))
-            # self.solver.add(z3.Not(self.connected_ports==model[self.connected_ports]))
-            # self.reject_candidate(model, failed_spec)
-            self.reject_candidate(model)
-
-            # then check for consistency
-            # self.solver.add(self.check_for_consistency(model, contract_inst, connected_spec))
-
-            raise NotSynthesizableError
-
-        return composition, connected_spec, contract_inst
-
-    def check_all_specs(self, model, output_port_name):
-        '''
-        check if the model satisfies a number of specs, if provided
-        :param output_port_name:
-        '''
-        composition = None
-        connected_spec = None
-        contract_inst = None
-        failed_spec = None
-        for spec in self.specification_list:
-            composition, connected_spec, contract_inst = \
-                self.build_composition_from_model(model, spec, output_port_name)
-
-            if not composition.is_refinement(connected_spec):
-                LOG.debug('ref check done 1')
-                failed_spec = spec
-                return False, composition, connected_spec, contract_inst, failed_spec
-
-            LOG.debug('ref check done 2')
-
-        return True, composition, connected_spec, contract_inst, None
+            self.obj = self.base_solver.minimize(z3.Sum(used_ports))
 
 
-    def __infer_relevant_ports_from_model(self, model, output_port_name):
-        '''
-        Create a list of contracts connected to the spec, eliminating spurious results
+        #create parallel solvers
+        solvers = []
+        for output_port_name in ['c2']:
 
-        :param model:
-        :param spec:
-        :param output_port_name:
-        :return:
-        '''
+            #solve for port
+            self.base_solver.push()
 
-        # now we need to collect all the components connected in chain to the spec output we are considering
-        # we start with the model connected to the out
-        spec_port_model = self.spec_out_dict[output_port_name]
-        models = []
+            self.base_solver.add(self.solve_for_output(output_port_name))
 
-        to_process = [self.lib_model.model_by_index(model[spec_port_model].as_long())]
-        done = []
-        spec_models = []
+            context = Context()
+            assertions = self.base_solver.assertions()
+            new_assertions = assertions.translate(context)
 
-        while len(to_process) > 0:
-            m = to_process.pop()
-            done.append(m)
+            #restore solver state
+            self.base_solver.pop()
 
-            # find related input models
-            comp_models = [mod for mod in self.lib_model.related_in_models(m) if model[mod].as_long() > -1]
-            # find models these are connected to
-            connected_models = [self.lib_model.model_by_index(model[port].as_long()) for port in comp_models
-                                if (-1 < model[port].as_long() < self.lib_model.specs_at)]
+            solver_p = SinglePortSolver(self, new_assertions, context,
+                                        output_port_name, property_contract,
+                                        library_max_redundancy, limit,
+                                        minimize_components, minimize_ports)
 
-            spec_models += [port for port in comp_models
-                            if port not in connected_models and model[port].as_long() >= self.lib_model.specs_at]
+            solvers.append(solver_p)
 
-            # add to the main list
-            models += comp_models
+            solver_p.start()
+            # solver_p.join()
 
-            # add for further processing
-            for mod in connected_models:
-                if mod not in done:
-                    to_process.append(mod)
+        #wait for completion
+        for solv in solvers:
+           solv.join()
 
-        return models, spec_models
 
-    def build_composition_from_model(self, model, spec, output_port_name):
-        '''
-        builds a contract composition out of a model
-        :param output_port_name:
-        '''
 
-        # contracts = set()
-        spec_contract = spec.copy()
-        working_spec = spec.copy()
-
-        # LOG.debug(spec_contract)
-
-        # find all contracts from model
-        # a set will help us remove duplicates
-        # contracts = set()
-
-        #now we need to collect all the components connected in chain to the spec output we are considering
-        # we start with the model connected to the out
-        spec_port_model = self.spec_out_dict[output_port_name]
-
-        models, spec_models = self.__infer_relevant_ports_from_model(model, output_port_name)
+        # self.solver.add(constraints)
         #
-        # LOG.debug(models)
-        # LOG.debug(spec_models)
-
-        # now we get all the contracts related to the models.
-        # by construction fetching only the outputs, we have the full set of contracts
-        model_map, contract_map = self.lib_model.contract_copies_by_models(models)
+        # #connect ONLY Nth port
+        # output_port_name = self.property_contract.output_ports_dict.keys()[0]
+        # self.solve_for_output(output_port_name)
         #
-        # LOG.debug(model)
-        # LOG.debug(model_map)
-        # LOG.debug(contract_map)
-
-        contracts = set(model_map.values())
-        # contracts.add(working_spec)
-        # extended_contracts = dict(list(contracts) + [spec_contract])
-
-        # start composition
-        # c_set = contracts
-        # c_set.add(contracts.values()[0])
-        mapping = CompositionMapping(contracts| set([working_spec]))
-
-        #process working spec
-        for port in working_spec.ports_dict.values():
-            name = port.base_name
-
-            if name != output_port_name:
-                spec_contract.connect_to_port(spec_contract.ports_dict[name], port)
-
-        # start with spec port
-        # TODO: maybe remove these checks
-        if model[spec_port_model].as_long() != -1:
-            if spec_port_model.get_id() not in self.dummy_model_set:
-                #there might be dummie ports
-
-                name = str(spec_port_model)
-                spec_port = spec_contract.ports_dict[name]
-
-                index = model[spec_port_model].as_long()
-                i_mod = self.lib_model.models[index]
-                level = self.lib_model.model_levels[i_mod.get_id()]
-                orig_port = self.lib_model.port_by_index(index)
-
-                other_contract_orig = orig_port.contract
-                other_contract = contract_map[(level, other_contract_orig)]
-
-                port = other_contract.ports_dict[orig_port.base_name]
-
-                spec_contract.connect_to_port(spec_port, port)
-
-        # connections among candidates
-        processed_ports = set()
-        for p_model in models + spec_models:
-            level, old_contract = self.lib_model.contract_by_model(p_model)
-            current_contract = contract_map[(level, old_contract)]
-            old_port = self.lib_model.port_by_model(p_model)
-            current_port = current_contract.ports_dict[old_port.base_name]
-            other_index = model[p_model].as_long()
-
-            if other_index < self.lib_model.specs_at:
-
-                other_mod = self.lib_model.models[other_index]
-                other_level = self.lib_model.model_levels[other_mod.get_id()]
-
-                other_port_orig = self.lib_model.port_by_index(other_index)
-
-                other_contract = contract_map[(other_level, other_port_orig.contract)]
-
-                other_port = other_contract.ports_dict[other_port_orig.base_name]
-
-                mapping.connect(current_port, other_port,
-                                '%s_%s' % (current_contract.unique_name,
-                                           current_port.base_name))
-
-                # LOG.debug(current_contract.unique_name)
-                # LOG.debug(other_contract.unique_name)
-                # LOG.debug(current_port.unique_name)
-                # LOG.debug(other_port.unique_name)
-                processed_ports.add(current_port)
-                processed_ports.add(other_port)
-
-            else:
-                spec_port = spec_contract.ports_dict[self.lib_model.spec_by_index_map[other_index]]
-
-                if spec_port.is_input:
-                    spec_contract.connect_to_port(spec_port, current_port)
-                else:
-                    working_spec.connect_to_port(working_spec.ports_dict[spec_port.base_name], current_port)
-
-
-        # add all the remaining names to new composition
-        for (level, old_contract) in contract_map.keys():
-            for old_port in old_contract.ports_dict.values():
-                current_contract = contract_map[(level, old_contract)]
-                current_port = current_contract.ports_dict[old_port.base_name]
-                if current_port not in processed_ports:
-                    mapping.add(current_port, '%s_%s' % (current_contract.unique_name,
-                                                         current_port.base_name))
-                    processed_ports.add(current_port)
-
-        # for contract in contracts:
-        #    LOG.debug(contract)
-        # LOG.debug(spec_contract)
-
-        # if not complete_model:
-        #    c_set = self.filter_candidate_contracts_for_composition(contracts, spec_contract)
-
-        # compose
-        #root = contracts.pop()
-
-        # c_set.add(root.copy())
-
-        composition = working_spec.compose(contracts, composition_mapping=mapping)
-
-        # LOG.debug('-----------')
-        # LOG.debug(model)
-        # LOG.debug(working_spec)
-        # for contract in contracts:
-        #    LOG.debug(contract)
+        # r = t.apply(self.solver)
         #
-        # LOG.debug(composition)
-        # LOG.debug(spec_contract)
+        # if optimize:
+        #     solv = Optimize()
+        # else:
+        #     solv = Solver()
         #
+        # solv.add(r.as_expr())
+        # self.solver = solv
         #
+        # if minimize_components:
+        #     self.obj = self.solver.minimize(Sum(self.lib_model.contract_use_flags))
         #
-        # from graphviz_converter import GraphizConverter
-        # graphviz_conv = GraphizConverter(spec_contract, composition, contracts | set([working_spec]))
-        # graphviz_conv.generate_graphviz()
-        # graphviz_conv.view()
-
-        return composition, spec_contract, contracts
-
-
-    # def assemble_reject_formula(self, component, connection_dict):
-    #     '''
-    #     recursively assemble the formula for the rejected model
-    #     :param component:
-    #     :param connection_dict:
-    #     :return:
-    #     '''
-    #
-    #     #base case
-    #     if connection_dict[component] == []:
-    #
-
-
-    # def reject_candidate(self, model, failed_spec):
-    def reject_candidate(self, model, output_port_name):
-        '''
-        reject a model and its equivalents
-        '''
-
-        #get only relevant models, i.e., connected eventually to the spec
-        models, spec_models = self.__infer_relevant_ports_from_model(model, output_port_name)
-        # now we get all the contracts related to the models.
-        # by construction fetching only the outputs, we have the full set of contracts
-        model_map, contract_map = self.lib_model.contract_copies_by_models(models)
-
-        level_contracts_pairs = set(contract_map.keys())
-
-        # LOG.debug(models)
-        # LOG.debug(spec_models)
-        # LOG.debug(model_map)
-        # LOG.debug(contract_map)
-
-
-        #get the spec details. Only one component connected to spec
-
-        spec_port_model = self.spec_out_dict[output_port_name]
-        index = model[spec_port_model].as_long()
-        mod = self.lib_model.models[index]
-        (level, contract) = self.lib_model.contract_by_model(mod)
-
-        comp_list_size = len(contract_map.values())
-
-        level_map = itertools.product(range(self.lib_model.max_components), repeat=comp_list_size)
-        contract_shift_pos = {(lev, contract): contract_map.keys().index((lev, contract))
-                               for lev, contract in contract_map.keys()}
-
-        contract_models = {contract:self.lib_model.contract_in_models(contract)
-                           for _, contract in contract_map.keys()}
-
-        contract_idx = {contract:self.lib_model.contract_indices(contract)
-                           for _, contract in contract_map.keys()}
-
-        constraints = []
-
-        for level_shift in level_map:
-
-            conj = []
-
-            #and spec -- out of for loop
-            idx_shift = level_shift[contract_shift_pos[(level, contract)]]
-            spec_new_idx = self.lib_model.index_shift(index, idx_shift)
-            conj.append(spec_port_model == spec_new_idx)
-
-            for mod in models:
-                (model_level, model_contract) = self.lib_model.contract_by_model(mod)
-
-                try:
-                    connected_port = self.lib_model.model_by_index(model[mod].as_long())
-                except IndexError:
-                    connected_port = None
-                    idx_contract = None
-                else:
-                    (idx_level, idx_contract) = connected_port.contract_by_model(mod)
-
-                shift = level_shift[contract_shift_pos[(model_level, model_contract)]]
-
-                new_mod = self.lib_model.model_shift(mod, shift)
-
-                if connected_port is None:
-                    #in this case port is connected to spec port
-                    idx_shift = 0
-                else:
-                    idx_shift = level_shift[contract_shift_pos[(idx_level, idx_contract)]]
-
-                new_idx = self.lib_model.index_shift(model[mod].as_long(), idx_shift)
-
-                conj.append(new_mod == new_idx)
-
-            constraints.append(And(conj))
-
-        rej_formula = Not(Or(constraints))
-        # LOG.debug(rej_formula)
-        return rej_formula
-
-
-
-
-
-
-
-
-
-        # c_sets = {}
+        # if minimize_ports:
+        #     #minimize ports used
+        #     used_ports = [z3.Int('used_%d'%i) for i in range(len(self.lib_model.models))]
+        #     self.solver.add([Or(used == 0, used == 1) for used in used_ports])
+        #     self.solver.add([Implies(used_ports[i]==1, self.lib_model.models[i]>-1) for i in range(len(self.lib_model.models))])
+        #     self.solver.add([Implies(used_ports[i]==0, self.lib_model.models[i]==-1) for i in range(len(self.lib_model.models))])
         #
+        #     self.obj = self.solver.minimize(z3.Sum(used_ports))
         #
-        # for spec in self.spec_outs:
-        #     index = model[spec].as_long()
-        #     mod = self.lib_model.models[index]
-        #     (level, contract) = self.lib_model.contract_by_model(mod)
-        #     if (level, contract) not in c_sets:
-        #         c_sets[(level, contract)] = {}
-        #         # find all related models
-        #         # in_models = self.lib_model.related_in_models(mod)
-        #         # for mod in in_models:
-        #         #    c_sets[(level, contract)][mod.get_id()] = (mod, model[mod].as_long())
+        # # push size constraint
+        # # when popping, it is ok losing the counterexample
+        # # for a given size. (it does not apply to greater sizes)
         #
-        #     c_sets[(level, contract)][spec.get_id()] = (spec, index)
+        # # initial_size = 1
+        # initial_size = self.max_components
+        # # self.solver.push()
+        # # self.solver.add(size_constraints[initial_size])
         #
-        # size = len(c_sets)
+        # # LOG.debug(self.lib_model.index)
+        # # LOG.debug(self.lib_model.models)
+        # models = self.lib_model.models_by_contracts()
+        # for model in models:
+        #     LOG.debug('--')
+        #     for elem in model:
+        #         LOG.debug('%d -> %s', self.lib_model.index_by_model(elem), elem)
+        # # LOG.debug(self.lib_model.models_in_by_contracts())
+        # # LOG.debug(self.solver.assertions())
         #
-        # # create containers as nested lists
-        # # one per each c_set and n lists inside
-        # classes = []
+        # size = initial_size
+        # if MAX_THREADS >= 1:
+        #     thread_manager = ModelVerificationManager(self, output_port_name)
         #
-        # for (level, contract) in c_sets:
-        #     s_class = []
-        #     s_pairs = c_sets[(level, contract)].values()
-        #     mods = self.lib_model.contract_in_models(contract)
+        #     try:
+        #         (model, composition,
+        #          spec, contract_list) = thread_manager.synthesize()
+        #     except NotSynthesizableError:
+        #         raise
+        #     else:
+        #         LOG.info(model)
+        #         for c in contract_list:
+        #             LOG.debug(c)
+        #         LOG.info(spec)
+        #         LOG.info(composition)
+        #         return model, composition, spec, contract_list
         #
-        #     for l in xrange(0, self.lib_model.max_components):
-        #         l_class = []
-        #         shift = self.lib_model.max_components - level + l
-        #         for pair in s_pairs:
-        #             if pair[0].get_id() not in self.dummy_model_set:
-        #                 l_class.append([pair[0] == self.lib_model.index_shift(pair[1], shift)])
-        #         for i in xrange(0, len(mods[l])):
-        #             m_class = []
-        #             if model[mods[level][i]].as_long() < self.lib_model.max_index:
-        #                 for l2 in xrange(0, self.lib_model.max_components):
-        #                     shift = self.lib_model.max_components - level + l2
-        #                     m_class.append(mods[l][i] ==
-        #                                    self.lib_model.index_shift(model[mods[level][i]].as_long(), shift))
+        #         # return model, composition, spec, contract_list
+        # else:
+        #     while True:
+        #         try:
+        #             model = self.propose_candidate()
+        #         except NotSynthesizableError as err:
+        #                 raise err
+        #         else:
+        #             try:
+        #                 composition, spec, contract_list = self.verify_candidate(model, output_port_name)
+        #             except NotSynthesizableError as err:
+        #                 LOG.debug("candidate not valid")
         #             else:
-        #                 m_class.append(mods[l][i] == model[mods[level][i]].as_long())
-        #
-        #             l_class.append(m_class)
-        #         s_class.append(l_class)
-        #     classes.append(s_class)
-        #
-        # # size
-        #
-        #
-        # rej_formula = Not(
-        #     And(
-        #         [Or(
-        #             [And(
-        #                 [Or(
-        #                     [And(line) for line in m_class]
-        #                 )
-        #                  for m_class in l_class]
-        #             )
-        #              for l_class in s_class]
-        #         )
-        #          for s_class in classes]
-        #     )
-        # )
-        #
-        # # LOG.debug(rej_formula)
-        #
-        # # self.solver.add(rej_formula)
-        # return rej_formula
+        #                 LOG.info(model)
+        #                 for c in contract_list:
+        #                     LOG.debug(c)
+        #                 LOG.info(self.property_contract)
+        #                 LOG.info(composition)
+        #                 return model, composition, spec, contract_list
+
+
+
 
     def allow_hierarchy(self, hierarchy, candidate_list):
         '''
@@ -1611,6 +1229,7 @@ class Z3Interface(object):
 
         return constraints
 
+    #TODO check if this is still useful
     def check_for_consistency(self, model, candidates, contract_instances, spec_contract, z3_lock=None):
         '''
         Checks for consistency of contracts in the proposed model.
@@ -1784,16 +1403,7 @@ class Z3Interface(object):
 SMTModelFactory.register(Z3Interface)
 
 
-class NotSynthesizableError(Exception):
-    '''
-    raised if it is not possible to synthesize a controller
-    '''
-    pass
-class OptimizationError(Exception):
-    '''
-    raised if it is not possible to synthesize a controller
-    '''
-    pass
+
 
 # instance a public interface
 # Z3 = Z3Interface()

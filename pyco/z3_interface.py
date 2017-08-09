@@ -435,7 +435,7 @@ class Z3Interface(object):
                         cluster.append(name_to_check)
                         done.add(name_to_check)
 
-
+                assert len(cluster) > 1
                 clusters.append(cluster)
 
 
@@ -607,7 +607,7 @@ class Z3Interface(object):
                                           if self.lib_model.port_by_index(index).is_input]))
                         for flag in self.lib_model.contract_use_flags]
 
-        LOG.debug(constraints)
+        # LOG.debug(constraints)
         return And(constraints)
 
     # def _spec_inputs_no_feedback(self):
@@ -679,7 +679,7 @@ class Z3Interface(object):
         constraints += [Implies(flag == 0,
                                 And([And([port != index
                                           for index in self.lib_model.reverse_flag[flag.get_id()]])
-                                     for port in [self.lib_model.in_models] + self.spec_outs])
+                                     for port in self.lib_model.in_models + self.spec_outs])
                                 )
                         for flag in self.lib_model.contract_use_flags]
 
@@ -1308,12 +1308,13 @@ class Z3Interface(object):
 
 
         print('Decomposing Specification...')
-        #clusters = self.decompose_spec(self.specification_list)
-
+        clusters = self.decompose_spec(self.specification_list)
+        print clusters
+        assert False
         print('Instantiate Solvers...')
         #create parallel solvers
         solvers = []
-        for cluster in [['c5', 'c6']]:
+        for cluster in clusters:
 
             #solve for port
             self.base_solver.push()

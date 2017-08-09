@@ -74,7 +74,7 @@ class ModelVerificationManager(object):
         #size = 1
         # size = initial_size
 
-        if True:
+        while True:
             try:
                 with self.z3_lock:
                     model = self.z3_interface.propose_candidate()
@@ -186,7 +186,7 @@ class RefinementChecker(multiprocessing.Thread):
                 if self.ident % 20 == 0:
                     print('.'),
                 failed_spec = spec
-                LOG.debug(failed_spec.guarantee_formula.generate())
+                # LOG.debug(failed_spec.guarantee_formula.generate())
                 return False, composition, connected_spec,contract_inst, failed_spec
 
             print('+'),

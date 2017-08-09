@@ -381,6 +381,7 @@ class SinglePortSolver(multiprocessing.Process):
 
         # for contract in contracts:
         #    LOG.debug(contract)
+        # LOG.debug(working_spec)
         # LOG.debug(spec_contract)
 
         # if not complete_model:
@@ -404,10 +405,10 @@ class SinglePortSolver(multiprocessing.Process):
         #
         #
         #
-        from graphviz_converter import GraphizConverter
-        graphviz_conv = GraphizConverter(spec_contract, composition, contracts | set([working_spec]))
-        graphviz_conv.generate_graphviz()
-        graphviz_conv.view()
+        # from graphviz_converter import GraphizConverter
+        # graphviz_conv = GraphizConverter(spec_contract, composition, contracts | set([working_spec]))
+        # graphviz_conv.generate_graphviz()
+        # graphviz_conv.view()
 
         # LOG.debug('done')
         return composition, spec_contract, contracts
@@ -440,11 +441,11 @@ class SinglePortSolver(multiprocessing.Process):
 
         level_contracts_pairs = set(contract_map.keys())
 
-        LOG.debug(model)
-        LOG.debug(models)
-        LOG.debug(spec_models)
-        LOG.debug(model_map)
-        LOG.debug(contract_map)
+        # LOG.debug(model)
+        # LOG.debug(models)
+        # LOG.debug(spec_models)
+        # LOG.debug(model_map)
+        # LOG.debug(contract_map)
 
 
         #get the spec details. Only one component connected to spec
@@ -516,7 +517,7 @@ class SinglePortSolver(multiprocessing.Process):
             constraints.append(And(conj, self.context))
 
         rej_formula = Not(Or(constraints, self.context), self.context)
-        LOG.debug(rej_formula)
+        # LOG.debug(rej_formula)
         return rej_formula
 
 

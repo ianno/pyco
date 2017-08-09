@@ -269,6 +269,184 @@ class Z3Interface(object):
         return And(constraints)
 
 
+    def decompose_spec(self, spec_list):
+
+        # TODO: separate in two functions, as the check is pretty much all the same
+        spec_root = spec_list[0]
+
+        spec_outs_dict = spec_root.output_ports_dict
+
+        clusters = []
+
+        unclustered = set()
+        done= set()
+
+        #first FAST pass, try to take out as many single ports as possible
+        for pivot_name in spec_outs_dict:
+
+            passed = True
+            for spec in spec_list:
+
+                #build composition
+                w_spec = spec.copy()
+                w_spec1 = spec.copy()
+                w_spec2 = spec.copy()
+
+                mapping = CompositionMapping([w_spec1, w_spec2])
+
+                #connect pivot output port
+                w_spec.connect_to_port(w_spec.output_ports_dict[pivot_name],
+                                       w_spec1.output_ports_dict[pivot_name])
+
+
+                #connect inputs
+                for name, in_port in w_spec.input_ports_dict.items():
+                    w_spec.connect_to_port(in_port, w_spec1.input_ports_dict[name])
+                    w_spec.connect_to_port(in_port, w_spec2.input_ports_dict[name])
+
+                    # # add explicit naming
+                    # mapping.add(w_spec1.input_ports_dict[name],
+                    #             '1_' + name)
+                    # mapping.add(w_spec2.input_ports_dict[name],
+                    #             '2_' + name)
+
+                #connect remaining outputs
+                for name, out_port in w_spec.output_ports_dict.items():
+                    # add explicit naming
+                    mapping.add(w_spec1.output_ports_dict[name],
+                                '1_' + name)
+                    mapping.add(w_spec2.output_ports_dict[name],
+                                '2_' + name)
+
+                    if name != pivot_name:
+                        w_spec.connect_to_port(out_port, w_spec2.output_ports_dict[name])
+
+
+                #compose
+                composition = w_spec1.compose([w_spec2], composition_mapping=mapping)
+
+                passed &= composition.is_refinement(w_spec)
+
+                if not passed:
+                    break
+
+            if passed:
+                clusters.append([pivot_name])
+            else:
+                unclustered.add(pivot_name)
+
+
+        #now process remaining unclustered elements, a bit slower
+        for pivot_name in unclustered:
+
+            if pivot_name not in done:
+                cluster = [pivot_name]
+
+                for name_to_check in unclustered.difference(done):
+
+                    if name_to_check != pivot_name and name_to_check not in done:
+
+                        passed = True
+                        for spec in spec_list:
+
+                            #build composition
+                            w_spec = spec.copy()
+                            w_spec1 = spec.copy()
+                            w_spec2 = spec.copy()
+
+                            mapping = CompositionMapping([w_spec1, w_spec2])
+
+                            #connect pivot output port
+                            w_spec.connect_to_port(w_spec.output_ports_dict[pivot_name],
+                                                   w_spec1.output_ports_dict[pivot_name])
+
+                            #connect other port to be checked to different component
+                            w_spec.connect_to_port(w_spec.output_ports_dict[name_to_check],
+                                                   w_spec2.output_ports_dict[name_to_check])
+                            # connect inputs
+                            for name, in_port in w_spec.input_ports_dict.items():
+                                w_spec.connect_to_port(in_port, w_spec1.input_ports_dict[name])
+                                w_spec.connect_to_port(in_port, w_spec2.input_ports_dict[name])
+
+                            # connect remaining outputs
+                            for name, out_port in w_spec.output_ports_dict.items():
+                                # add explicit naming
+                                mapping.add(w_spec1.output_ports_dict[name],
+                                            '1_' + name)
+                                mapping.add(w_spec2.output_ports_dict[name],
+                                            '2_' + name)
+
+                                if name != name_to_check:
+                                    w_spec.connect_to_port(out_port, w_spec1.output_ports_dict[name])
+
+                            # compose
+                            composition = w_spec1.compose([w_spec2], composition_mapping=mapping)
+
+                            passed &= composition.is_refinement(w_spec)
+
+                            if not passed:
+
+                                #make sure it failed because of the pivot
+
+                                # build composition
+                                w_spec = spec.copy()
+                                w_spec1 = spec.copy()
+                                w_spec2 = spec.copy()
+
+                                mapping = CompositionMapping([w_spec1, w_spec2])
+
+                                # connect pivot output port
+                                w_spec.connect_to_port(w_spec.output_ports_dict[pivot_name],
+                                                       w_spec2.output_ports_dict[pivot_name])
+
+                                # connect other port to be checked to different component
+                                w_spec.connect_to_port(w_spec.output_ports_dict[name_to_check],
+                                                       w_spec2.output_ports_dict[name_to_check])
+                                # connect inputs
+                                for name, in_port in w_spec.input_ports_dict.items():
+                                    w_spec.connect_to_port(in_port, w_spec1.input_ports_dict[name])
+                                    w_spec.connect_to_port(in_port, w_spec2.input_ports_dict[name])
+
+                                # connect remaining outputs
+                                for name, out_port in w_spec.output_ports_dict.items():
+                                    # add explicit naming
+                                    mapping.add(w_spec1.output_ports_dict[name],
+                                                '1_' + name)
+                                    mapping.add(w_spec2.output_ports_dict[name],
+                                                '2_' + name)
+
+                                    if name != name_to_check:
+                                        w_spec.connect_to_port(out_port, w_spec1.output_ports_dict[name])
+
+                                # compose
+                                composition = w_spec1.compose([w_spec2], composition_mapping=mapping)
+
+                                test_pivot = composition.is_refinement(w_spec)
+
+                                if not test_pivot:
+                                    #spec failed because of other port problems, not pivot
+                                    #fixed value of passed
+                                    passed = True
+                                else:
+                                    #spec failed because of pivot
+                                    break
+
+                    if not passed:
+                        cluster.append(name_to_check)
+                        done.add(name_to_check)
+
+
+                clusters.append(cluster)
+
+
+        assert set([x for cluster in clusters for x in cluster]).issuperset(unclustered)
+
+        # LOG.debug(clusters)
+        # LOG.debug(unclustered)
+
+        return clusters
+
+
     def full_spec_out(self):
         '''
         all the outputs must be connected (-1 < spec < max)
@@ -423,13 +601,13 @@ class Z3Interface(object):
                         for index in range(0, self.lib_model.max_index)]
 
         #inputs >-1 if connected
-        constraints += [And([Implies(flag == 1,
+        constraints += [Implies(flag == 1,
                                      And([self.lib_model.model_by_index(index) > -1
                                           for index in self.lib_model.reverse_flag[flag.get_id()]
-                                          if self.lib_model.port_by_index(index).is_input]))])
+                                          if self.lib_model.port_by_index(index).is_input]))
                         for flag in self.lib_model.contract_use_flags]
 
-        # LOG.debug(constraints)
+        LOG.debug(constraints)
         return And(constraints)
 
     # def _spec_inputs_no_feedback(self):
@@ -504,6 +682,13 @@ class Z3Interface(object):
                                      for port in [self.lib_model.in_models] + self.spec_outs])
                                 )
                         for flag in self.lib_model.contract_use_flags]
+
+        #if an input is -1, then use flag is 0
+        constraints += [Implies(self.lib_model.model_by_index(index) == -1,
+                                flag == 0)
+                        for flag in self.lib_model.contract_use_flags
+                        for index in self.lib_model.reverse_flag[flag.get_id()]
+                        if self.lib_model.port_by_index(index).is_input]
 
         # constraints += [Implies(And([And([spec_out != self.lib_model.index_by_model(model)
         #                                   for model
@@ -922,7 +1107,7 @@ class Z3Interface(object):
         return And(constraints)
 
 
-    def solve_for_output(self, output_port_name):
+    def solve_for_outputs(self, output_name_list):
         '''
         all the outputs must be connected (-1 < spec < max)
 
@@ -931,7 +1116,7 @@ class Z3Interface(object):
         constraints = []
 
         for name, model in self.spec_out_dict.items():
-            if name != output_port_name:
+            if name not in output_name_list:
                 constraints += [model == -1]
             else:
                 # TODO: check if this is actually useful
@@ -941,9 +1126,11 @@ class Z3Interface(object):
             constraints += [model >= -1]
             constraints += [model < self.lib_model.max_index]
 
+        # TODO check this
         # ports cannot be connected to current output
         for model in self.lib_model.in_models:
-            constraints += [model != self.lib_model.spec_map[output_port_name]]
+            for name in output_name_list:
+                constraints += [model != self.lib_model.spec_map[name]]
 
         #but distinct.
         # constraints += [Distinct(self.spec_outs)]
@@ -1031,6 +1218,24 @@ class Z3Interface(object):
         self.initiliaze_solver(property_contract, limit=self.max_components,
                                library_max_redundancy=library_max_redundancy)
 
+
+        # print lib structure
+        for contract in self.lib_model.contracts:
+            for level in range(self.lib_model.max_components):
+                flag = self.lib_model.flag_map['%s-%d' % (contract.base_name, level)]
+
+                idxs = self.lib_model.reverse_flag[flag.get_id()]
+
+                LOG.debug('++++')
+                LOG.debug('%s-%d' % (contract.base_name, level))
+
+                for idx in idxs:
+                    model = self.lib_model.model_by_index(idx)
+                    LOG.debug('\t%s:%d' % (model, idx))
+
+
+
+
         constraints.append(self.use_max_n_components(self.max_components))
 
         # self.full_spec_out()
@@ -1101,14 +1306,19 @@ class Z3Interface(object):
             self.obj = self.base_solver.minimize(z3.Sum(used_ports))
 
 
+
+        print('Decomposing Specification...')
+        #clusters = self.decompose_spec(self.specification_list)
+
+        print('Instantiate Solvers...')
         #create parallel solvers
         solvers = []
-        for output_port_name in ['c2']:
+        for cluster in [['c5', 'c6']]:
 
             #solve for port
             self.base_solver.push()
 
-            self.base_solver.add(self.solve_for_output(output_port_name))
+            self.base_solver.add(self.solve_for_outputs(cluster))
 
             context = Context()
             assertions = self.base_solver.assertions()
@@ -1118,7 +1328,7 @@ class Z3Interface(object):
             self.base_solver.pop()
 
             solver_p = SinglePortSolver(self, new_assertions, context,
-                                        output_port_name, property_contract,
+                                        cluster, property_contract,
                                         library_max_redundancy, limit,
                                         minimize_components, minimize_ports)
 
@@ -1137,7 +1347,7 @@ class Z3Interface(object):
         #
         # #connect ONLY Nth port
         # output_port_name = self.property_contract.output_ports_dict.keys()[0]
-        # self.solve_for_output(output_port_name)
+        # self.solve_for_outputs(output_port_name)
         #
         # r = t.apply(self.solver)
         #

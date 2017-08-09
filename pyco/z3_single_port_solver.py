@@ -27,7 +27,7 @@ class SinglePortSolver(multiprocessing.Process):
 
     def __init__(self, z3_interface, assertions,
                  context,
-                 spec_port_name, spec_contract, library_max_redundancy, limit,
+                 spec_port_names, spec_contract, library_max_redundancy, limit,
                  minimize_components=False, minimize_ports=False):
 
         self.z3_interface = z3_interface
@@ -35,7 +35,7 @@ class SinglePortSolver(multiprocessing.Process):
         self.spec_contract = spec_contract
         self.context = context
         self.assertions = assertions
-        self.spec_port_name = spec_port_name
+        self.spec_port_names = spec_port_names
         # self.lib_model = self.z3_interface.lib_model
         # self.spec_out_dict = {name: mod.translate(self.context) for (name, mod) in
         #                       self.z3_interface.spec_out_dict.items()}
@@ -84,7 +84,7 @@ class SinglePortSolver(multiprocessing.Process):
 
         size = initial_size
         if MAX_THREADS >= 1:
-            thread_manager = ModelVerificationManager(self, self.spec_port_name)
+            thread_manager = ModelVerificationManager(self, self.spec_port_names)
 
             try:
                 (model, composition,
@@ -98,7 +98,7 @@ class SinglePortSolver(multiprocessing.Process):
                 LOG.info(spec)
                 LOG.info(composition)
                 from graphviz_converter import GraphizConverter
-                graphviz_conv = GraphizConverter(spec, composition, contract_list, filename=self.spec_port_name)
+                graphviz_conv = GraphizConverter(spec, composition, contract_list, filename='_'.join(self.spec_port_names))
                 graphviz_conv.generate_graphviz()
                 graphviz_conv.view()
                 return model, composition, spec, contract_list
@@ -112,7 +112,7 @@ class SinglePortSolver(multiprocessing.Process):
                     raise err
                 else:
                     try:
-                        composition, spec, contract_list = self.verify_candidate(model, self.spec_port_name)
+                        composition, spec, contract_list = self.verify_candidate(model, self.spec_port_names)
                     except NotSynthesizableError as err:
                         LOG.debug("candidate not valid")
                     else:
@@ -210,7 +210,7 @@ class SinglePortSolver(multiprocessing.Process):
         return True, composition, connected_spec, contract_inst, None
 
 
-    def __infer_relevant_ports_from_model(self, model, output_port_name):
+    def __infer_relevant_ports_from_model(self, model, output_port_names):
         '''
         Create a list of contracts connected to the spec, eliminating spurious results
 
@@ -222,10 +222,10 @@ class SinglePortSolver(multiprocessing.Process):
 
         # now we need to collect all the components connected in chain to the spec output we are considering
         # we start with the model connected to the out
-        spec_port_model = self.spec_out_dict[output_port_name]
+        spec_port_models = [self.spec_out_dict[name] for name in output_port_names]
         models = []
 
-        to_process = [self.lib_model.model_by_index(model[spec_port_model].as_long())]
+        to_process = [self.lib_model.model_by_index(model[mod].as_long()) for mod in spec_port_models]
         done = []
         spec_models = []
 
@@ -235,6 +235,7 @@ class SinglePortSolver(multiprocessing.Process):
 
             # find related input models
             comp_models = [mod for mod in self.lib_model.related_models(m) if model[mod] is not None and model[mod].as_long() > -1]
+
             # find models these are connected to
             connected_models = [self.lib_model.model_by_index(model[port].as_long()) for port in comp_models
                                 if (-1 < model[port].as_long() < self.lib_model.specs_at)]
@@ -244,15 +245,16 @@ class SinglePortSolver(multiprocessing.Process):
 
             # add to the main list
             models += comp_models
+            models += connected_models
 
             # add for further processing
             for mod in connected_models:
                 if mod not in done:
                     to_process.append(mod)
 
-        return models, spec_models
+        return set(models), set(spec_models)
 
-    def build_composition_from_model(self, model, spec, output_port_name):
+    def build_composition_from_model(self, model, spec, output_port_names):
         '''
         builds a contract composition out of a model
         :param output_port_name:
@@ -270,12 +272,12 @@ class SinglePortSolver(multiprocessing.Process):
 
         #now we need to collect all the components connected in chain to the spec output we are considering
         # we start with the model connected to the out
-        spec_port_model = self.spec_out_dict[output_port_name]
+        spec_port_models = [self.spec_out_dict[name] for name in output_port_names]
 
         # LOG.debug(model)
         # LOG.debug(output_port_name)
 
-        models, spec_models = self.__infer_relevant_ports_from_model(model, output_port_name)
+        models, spec_models = self.__infer_relevant_ports_from_model(model, output_port_names)
         #
         # LOG.debug(models)
         # LOG.debug(spec_models)
@@ -301,68 +303,70 @@ class SinglePortSolver(multiprocessing.Process):
         for port in working_spec.ports_dict.values():
             name = port.base_name
 
-            if name != output_port_name:
+            if name not in output_port_names:
                 spec_contract.connect_to_port(spec_contract.ports_dict[name], port)
 
         # start with spec port
         # TODO: maybe remove these checks
-        if model[spec_port_model].as_long() != -1:
-            if spec_port_model.get_id() not in self.dummy_model_set:
-                #there might be dummie ports
+        for mod in spec_port_models:
+            if model[mod].as_long() != -1:
+                if mod.get_id() not in self.dummy_model_set:
+                    #there might be dummie ports
 
-                name = str(spec_port_model)
-                spec_port = spec_contract.ports_dict[name]
+                    name = str(mod)
+                    spec_port = spec_contract.ports_dict[name]
 
-                index = model[spec_port_model].as_long()
-                i_mod = self.lib_model.models[index]
-                level = self.lib_model.model_levels[i_mod.get_id()]
-                orig_port = self.lib_model.port_by_index(index)
+                    index = model[mod].as_long()
+                    i_mod = self.lib_model.models[index]
+                    level = self.lib_model.model_levels[i_mod.get_id()]
+                    orig_port = self.lib_model.port_by_index(index)
 
-                other_contract_orig = orig_port.contract
-                other_contract = contract_map[(level, other_contract_orig)]
+                    other_contract_orig = orig_port.contract
+                    other_contract = contract_map[(level, other_contract_orig)]
 
-                port = other_contract.ports_dict[orig_port.base_name]
+                    port = other_contract.ports_dict[orig_port.base_name]
 
-                spec_contract.connect_to_port(spec_port, port)
+                    spec_contract.connect_to_port(spec_port, port)
 
         # connections among candidates
         processed_ports = set()
-        for p_model in models + spec_models:
-            level, old_contract = self.lib_model.contract_by_model(p_model)
-            current_contract = contract_map[(level, old_contract)]
-            old_port = self.lib_model.port_by_model(p_model)
-            current_port = current_contract.ports_dict[old_port.base_name]
-            other_index = model[p_model].as_long()
+        for p_model in models | spec_models:
+            if model[p_model] is not None:
+                level, old_contract = self.lib_model.contract_by_model(p_model)
+                current_contract = contract_map[(level, old_contract)]
+                old_port = self.lib_model.port_by_model(p_model)
+                current_port = current_contract.ports_dict[old_port.base_name]
+                other_index = model[p_model].as_long()
 
-            if other_index < self.lib_model.specs_at:
+                if other_index < self.lib_model.specs_at:
 
-                other_mod = self.lib_model.models[other_index]
-                other_level = self.lib_model.model_levels[other_mod.get_id()]
+                    other_mod = self.lib_model.models[other_index]
+                    other_level = self.lib_model.model_levels[other_mod.get_id()]
 
-                other_port_orig = self.lib_model.port_by_index(other_index)
+                    other_port_orig = self.lib_model.port_by_index(other_index)
 
-                other_contract = contract_map[(other_level, other_port_orig.contract)]
+                    other_contract = contract_map[(other_level, other_port_orig.contract)]
 
-                other_port = other_contract.ports_dict[other_port_orig.base_name]
+                    other_port = other_contract.ports_dict[other_port_orig.base_name]
 
-                mapping.connect(current_port, other_port,
-                                '%s_%s' % (current_contract.unique_name,
-                                           current_port.base_name))
+                    mapping.connect(current_port, other_port,
+                                    '%s_%s' % (current_contract.unique_name,
+                                               current_port.base_name))
 
-                # LOG.debug(current_contract.unique_name)
-                # LOG.debug(other_contract.unique_name)
-                # LOG.debug(current_port.unique_name)
-                # LOG.debug(other_port.unique_name)
-                processed_ports.add(current_port)
-                processed_ports.add(other_port)
+                    # LOG.debug(current_contract.unique_name)
+                    # LOG.debug(other_contract.unique_name)
+                    # LOG.debug(current_port.unique_name)
+                    # LOG.debug(other_port.unique_name)
+                    processed_ports.add(current_port)
+                    processed_ports.add(other_port)
 
-            else:
-                spec_port = spec_contract.ports_dict[self.lib_model.spec_by_index_map[other_index]]
-
-                if spec_port.is_input:
-                    spec_contract.connect_to_port(spec_port, current_port)
                 else:
-                    working_spec.connect_to_port(working_spec.ports_dict[spec_port.base_name], current_port)
+                    spec_port = spec_contract.ports_dict[self.lib_model.spec_by_index_map[other_index]]
+
+                    if spec_port.is_input:
+                        spec_contract.connect_to_port(spec_port, current_port)
+                    else:
+                        working_spec.connect_to_port(working_spec.ports_dict[spec_port.base_name], current_port)
 
 
         # add all the remaining names to new composition
@@ -400,10 +404,10 @@ class SinglePortSolver(multiprocessing.Process):
         #
         #
         #
-        # from graphviz_converter import GraphizConverter
-        # graphviz_conv = GraphizConverter(spec_contract, composition, contracts | set([working_spec]))
-        # graphviz_conv.generate_graphviz()
-        # graphviz_conv.view()
+        from graphviz_converter import GraphizConverter
+        graphviz_conv = GraphizConverter(spec_contract, composition, contracts | set([working_spec]))
+        graphviz_conv.generate_graphviz()
+        graphviz_conv.view()
 
         # LOG.debug('done')
         return composition, spec_contract, contracts
@@ -423,31 +427,37 @@ class SinglePortSolver(multiprocessing.Process):
 
 
     # def reject_candidate(self, model, failed_spec):
-    def reject_candidate(self, model, output_port_name):
+    def reject_candidate(self, model, output_port_names):
         '''
         reject a model and its equivalents
         '''
 
         #get only relevant models, i.e., connected eventually to the spec
-        models, spec_models = self.__infer_relevant_ports_from_model(model, output_port_name)
+        models, spec_models = self.__infer_relevant_ports_from_model(model, output_port_names)
         # now we get all the contracts related to the models.
         # by construction fetching only the outputs, we have the full set of contracts
         model_map, contract_map = self.lib_model.contract_copies_by_models(models)
 
         level_contracts_pairs = set(contract_map.keys())
 
-        # LOG.debug(models)
-        # LOG.debug(spec_models)
-        # LOG.debug(model_map)
-        # LOG.debug(contract_map)
+        LOG.debug(model)
+        LOG.debug(models)
+        LOG.debug(spec_models)
+        LOG.debug(model_map)
+        LOG.debug(contract_map)
 
 
         #get the spec details. Only one component connected to spec
 
-        spec_port_model = self.spec_out_dict[output_port_name]
-        index = model[spec_port_model].as_long()
-        mod = self.lib_model.models[index]
-        (level, contract) = self.lib_model.contract_by_model(mod)
+        spec_port_models = [self.spec_out_dict[name] for name in output_port_names]
+        spec_idx = {mod.get_id(): model[mod].as_long() for mod in spec_port_models}
+        mods = {mod.get_id(): self.lib_model.models[spec_idx[mod.get_id()]]
+                for mod in spec_port_models}
+
+        spec_connections = {}
+        for sid, mod in mods.items():
+            (level, contract) = self.lib_model.contract_by_model(mod)
+            spec_connections[sid] = (level, contract)
 
         comp_list_size = len(contract_map.values())
 
@@ -467,41 +477,46 @@ class SinglePortSolver(multiprocessing.Process):
 
             conj = []
 
-            #and spec -- out of for loop
-            idx_shift = level_shift[contract_shift_pos[(level, contract)]]
-            spec_new_idx = self.lib_model.index_shift(index, idx_shift)
-            conj.append(spec_port_model == spec_new_idx)
+            #spec port --
+            for spec_mod in spec_port_models:
+                level, contract = spec_connections[spec_mod.get_id()]
+
+                idx_shift = level_shift[contract_shift_pos[(level, contract)]]
+                spec_new_idx = self.lib_model.index_shift(spec_idx[spec_mod.get_id()], idx_shift)
+
+                conj.append(spec_mod == spec_new_idx)
 
             for mod in models:
-                (model_level, model_contract) = self.lib_model.contract_by_model(mod)
+                if model[mod] is not None:
+                    (model_level, model_contract) = self.lib_model.contract_by_model(mod)
 
-                try:
-                    connected_model = self.lib_model.model_by_index(model[mod].as_long())
-                except IndexError:
-                    connected_model = None
-                    idx_contract = None
-                else:
-                    (idx_level, idx_contract) = self.lib_model.contract_by_model(connected_model)
+                    try:
+                        connected_model = self.lib_model.model_by_index(model[mod].as_long())
+                    except IndexError:
+                        connected_model = None
+                        idx_contract = None
+                    else:
+                        (idx_level, idx_contract) = self.lib_model.contract_by_model(connected_model)
 
-                shift = level_shift[contract_shift_pos[(model_level, model_contract)]]
+                    shift = level_shift[contract_shift_pos[(model_level, model_contract)]]
 
-                new_mod = self.lib_model.model_shift(mod, shift)
+                    new_mod = self.lib_model.model_shift(mod, shift)
 
-                if connected_model is None:
-                    #in this case port is connected to spec port
-                    idx_shift = 0
-                else:
-                    print contract_shift_pos
-                    idx_shift = level_shift[contract_shift_pos[(idx_level, idx_contract)]]
+                    if connected_model is None:
+                        #in this case port is connected to spec port
+                        #idx_shift = 0
+                        new_idx = model[mod].as_long()
+                    else:
 
-                new_idx = self.lib_model.index_shift(model[mod].as_long(), idx_shift)
+                        idx_shift = level_shift[contract_shift_pos[(idx_level, idx_contract)]]
+                        new_idx = self.lib_model.index_shift(model[mod].as_long(), idx_shift)
 
-                conj.append(new_mod == new_idx)
+                    conj.append(new_mod == new_idx)
 
             constraints.append(And(conj, self.context))
 
         rej_formula = Not(Or(constraints, self.context), self.context)
-        # LOG.debug(rej_formula)
+        LOG.debug(rej_formula)
         return rej_formula
 
 

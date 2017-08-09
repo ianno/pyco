@@ -21,7 +21,7 @@ class ModelVerificationManager(object):
     manages refinement threads
     '''
 
-    def __init__(self, z3_interface, output_port_name):
+    def __init__(self, z3_interface, output_port_names):
         '''
         set up solver and thread status
         '''
@@ -47,7 +47,7 @@ class ModelVerificationManager(object):
         self.fail_queue = Queue()
 
         self.model_dict = {}
-        self.output_port_name = output_port_name
+        self.output_port_names = output_port_names
 
     def set_successful_candidate(self, model, composition, connected_spec, contract_inst):
         '''
@@ -74,7 +74,7 @@ class ModelVerificationManager(object):
         #size = 1
         # size = initial_size
 
-        while True:
+        if True:
             try:
                 with self.z3_lock:
                     model = self.z3_interface.propose_candidate()
@@ -95,7 +95,7 @@ class ModelVerificationManager(object):
                     self.model_dict.pop(pid)
 
                 #new refinement checker
-                thread = RefinementChecker(model, self.output_port_name, self, self.found_refinement)
+                thread = RefinementChecker(model, self.output_port_names, self, self.found_refinement)
                 #go
                 thread.start()
                 with self.pool_lock:
@@ -104,7 +104,7 @@ class ModelVerificationManager(object):
 
                 #now reject the model, to get a new candidate
                 with self.z3_lock:
-                    self.solver.add(self.z3_interface.reject_candidate(model, self.output_port_name))
+                    self.solver.add(self.z3_interface.reject_candidate(model, self.output_port_names))
                     #LOG.debug('done')
 
 
@@ -136,7 +136,7 @@ class ModelVerificationManager(object):
         spec = self.z3_interface.specification_list[0]
         with self.z3_lock:
             self.composition, self.connected_spec, self.contract_inst = \
-                self.z3_interface.build_composition_from_model(self.model, spec, self.output_port_name)
+                self.z3_interface.build_composition_from_model(self.model, spec, self.output_port_names)
         #wait for all the threads to stop
 
 
@@ -151,7 +151,7 @@ class RefinementChecker(multiprocessing.Thread):
     this thread executes a refinement checks and dies
     '''
 
-    def __init__(self, model, output_port_name, manager, found_event):
+    def __init__(self, model, output_port_names, manager, found_event):
         '''
         instantiate
         '''
@@ -161,7 +161,7 @@ class RefinementChecker(multiprocessing.Thread):
         self.manager = manager
         self.z3_lock = manager.z3_lock
 
-        self.output_port_name = output_port_name
+        self.output_port_names = output_port_names
 
         #self.result_queue = multiprocessing.Queue()
 
@@ -180,16 +180,18 @@ class RefinementChecker(multiprocessing.Thread):
         for spec in self.z3_interface.specification_list:
             with z3_lock:
                 composition, connected_spec, contract_inst = \
-                    self.z3_interface.build_composition_from_model(model, spec, self.output_port_name)
+                    self.z3_interface.build_composition_from_model(model, spec, self.output_port_names)
 
             if not composition.is_refinement(connected_spec):
                 if self.ident % 20 == 0:
                     print('.'),
                 failed_spec = spec
+                LOG.debug(failed_spec.guarantee_formula.generate())
                 return False, composition, connected_spec,contract_inst, failed_spec
 
             print('+'),
 
+        print('######'),
         return True, composition, connected_spec,contract_inst, None
 
 

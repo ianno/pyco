@@ -73,6 +73,7 @@ class SinglePortSolver(multiprocessing.Process):
             self.solver = Optimize(ctx=self.context)
 
         self.solver.add(self.assertions)
+        # self.obj = self.solver.maximize(Sum(self.lib_model.contract_use_flags))
 
         super(SinglePortSolver, self).__init__()
 
@@ -160,7 +161,7 @@ class SinglePortSolver(multiprocessing.Process):
 
         res = self.solver.check()
         # LOG.debug(self.solver.upper(self.obj))
-        #LOG.debug(self.solver.lower(self.obj))
+        # LOG.debug(self.solver.lower(self.obj))
         # LOG.debug(res)
         if res == sat:
             # LOG.debug(self.solver.model())

@@ -191,7 +191,7 @@ class RefinementChecker(multiprocessing.Thread):
 
             print('+'),
 
-        print('######'),
+        print('#'),
         return True, composition, connected_spec,contract_inst, None
 
 

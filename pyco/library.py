@@ -147,25 +147,25 @@ class ContractLibrary(object):
         self._type_compatibility_set = self._type_compatibility_set | addition
 
 
-    def add_type_compatibility(self, type_a, type_b):
+    def add_type_compatibility(self, output_type, input_type):
         '''
         add a pair of compatible types
         '''
-        if (type_a not in self.typeset or
-            type_b not in self.typeset):
-            raise UndefinedTypeError((type_a, type_b))
+        if (output_type not in self.typeset or
+            input_type not in self.typeset):
+            raise UndefinedTypeError((output_type, input_type))
 
-        self._type_compatibility_set.add((type_a, type_b))
-        self._type_compatibility_set.add((type_b, type_a))
+        self._type_compatibility_set.add((output_type, input_type))
+        # self._type_compatibility_set.add((input_type, output_type))
 
         #add compatibility also for subclasses
-        for a_type in self.typeset:
-            if issubclass(a_type, type_a):
-                self._type_compatibility_set.add((a_type, type_b))
-                self._type_compatibility_set.add((type_b, a_type))
-            if issubclass(a_type, type_b):
-                self._type_compatibility_set.add((a_type, type_a))
-                self._type_compatibility_set.add((type_a, a_type))
+        for p_type in self.typeset:
+            if issubclass(p_type, output_type):
+                self._type_compatibility_set.add((p_type, input_type))
+                # self._type_compatibility_set.add((type_b, p_type))
+            if issubclass(input_type, p_type):
+                # self._type_compatibility_set.add((p_type, output_type))
+                self._type_compatibility_set.add((output_type, p_type))
 
 
     def verify_library(self):

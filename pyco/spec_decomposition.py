@@ -255,7 +255,7 @@ def decompose_spec(spec_list):
 
                         l_passed, trace = verify_tautology(formula, return_trace=True)
 
-                        LOG.debug(l_passed)
+                        # LOG.debug(l_passed)
 
                         if not l_passed:
 
@@ -266,16 +266,16 @@ def decompose_spec(spec_list):
                                 monitored[composition.ports_dict['1_' + name].unique_name] = name
                                 monitored[w_spec.ports_dict[name].unique_name] = name
 
-                            LOG.debug(composition)
-                            LOG.debug(cluster)
-                            LOG.debug(unknowns)
-                            LOG.debug(done)
-                            LOG.debug(monitored)
-                            LOG.debug(trace)
+                            # LOG.debug(composition)
+                            # LOG.debug(cluster)
+                            # LOG.debug(unknowns)
+                            # LOG.debug(done)
+                            # LOG.debug(monitored)
+                            # LOG.debug(trace)
                             diff = parse_counterexample(trace, monitored)
 
                             assert len(diff) > 0
-                            LOG.debug(diff)
+                            # LOG.debug(diff)
                             for elem in diff:
                                 cluster.add(elem)
                                 done.add(elem)
@@ -294,7 +294,7 @@ def decompose_spec(spec_list):
     assert set([x for cluster in clusters for x in cluster]).issuperset(unclustered)
 
     LOG.debug(clusters)
-    LOG.debug(unclustered)
+    # LOG.debug(unclustered)
     return clusters
 
 
@@ -332,7 +332,7 @@ def parse_counterexample(ctx_str, monitored_vars):
         #analyze state by state
         if line.startswith('->'):
             #new state, check consistency among vars
-            LOG.debug(c_vars)
+            # LOG.debug(c_vars)
             for b_name, pair in c_vars.items():
                 pair_v = pair.values()
                 if not pair_v[0] == pair_v[1]:

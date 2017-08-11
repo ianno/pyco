@@ -102,7 +102,7 @@ class Z3Library(object):
 
         if limit is None:
             limit = len(spec.output_ports_dict)
-        LOG.debug(limit)
+        # LOG.debug(limit)
         self.max_components = min([library_max_redundancy, limit])
 
         comp_ind = 0b1
@@ -203,7 +203,7 @@ class Z3Library(object):
                     self.out_contract_index[level][contract].append(len(self.out_models) - 1)
 
 
-        LOG.debug({i:self.models[i] for i in range(0,self.max_index)})
+        # LOG.debug({i:self.models[i] for i in range(0,self.max_index)})
 
 
     def cast_to_context(self, context):

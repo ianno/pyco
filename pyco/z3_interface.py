@@ -241,7 +241,10 @@ class Z3Interface(object):
                                 Or([self.lib_model.model_by_index(index) > -1
                                     for index in self.lib_model.reverse_flag[flag.get_id()]
                                     if self.lib_model.port_by_index(index).is_input]))
-                        for flag in self.lib_model.contract_use_flags]
+                        for flag in self.lib_model.contract_use_flags
+                        if len(self.lib_model.contract_by_model(
+                self.lib_model.model_by_index(
+                    self.lib_model.reverse_flag[flag.get_id()][0]))[1].input_ports_dict.keys()) > 0]
 
         constraints += [Implies(Or([self.lib_model.model_by_index(index) > -1
                                     for index in self.lib_model.reverse_flag[flag.get_id()]
@@ -471,7 +474,7 @@ class Z3Interface(object):
         # LOG.debug(constraints)
         self.solver.add(constraints)
 
-    def lib_to_outputs_or_spec_inout(self):
+    def lib_to_outputs_or_spec_in(self):
         '''
         a lib element input port cannot be connected to another input ports of components
 
@@ -483,6 +486,11 @@ class Z3Interface(object):
                              for level in range(0, self.lib_model.max_components)
                              for index in range(0, self.lib_model.max_single_level_index)
                              if self.lib_model.port_by_index(index).is_input])
+                        for model in self.lib_model.in_models]
+
+        constraints += [And([model != self.lib_model.spec_map[name]
+                             for name in self.property_contract.output_ports_dict
+                             ])
                         for model in self.lib_model.in_models]
 
         # print constraints
@@ -585,7 +593,7 @@ class Z3Interface(object):
         # LOG.debug(constraints)
         return And(constraints)
 
-    def spec_process_types(self):
+    def spec_process_in_types(self):
         '''
         accept only connections for compatible types
         sub_types are assumed processed in type_compatibility_set
@@ -601,13 +609,22 @@ class Z3Interface(object):
                 p_name = port.base_name
                 contract = port.contract
                 p_type = contract.port_type[p_name]
-                if (
+                if (    s_port.is_input and port.is_input and
                         # (not issubclass(s_port_type, p_type))):
                         # CHECK YOUR DEFINITION OF TYPE COMPATIBILITY
-                        (not issubclass(p_type, s_port_type))):
+                        (not issubclass(s_port_type, p_type))):
 
                     for lev in range(0, self.lib_model.max_components):
                         constraints.append(self.lib_model.model_by_port(port)[lev] != self.lib_model.spec_map[s_name])
+
+                # if (s_port.is_output and port.is_output and
+                #         # (not issubclass(s_port_type, p_type))):
+                #         # CHECK YOUR DEFINITION OF TYPE COMPATIBILITY
+                #             (not issubclass(p_type, s_port_type))):
+                #
+                #         for lev in range(0, self.lib_model.max_components):
+                #             constraints.append(
+                #                 s_mod != self.lib_model.index[lev][port])
 
         # LOG.debug(constraints)
         return And(constraints)
@@ -642,7 +659,7 @@ class Z3Interface(object):
                             in_mod = self.lib_model.in_models[ind]
                             constraints.append(in_mod != self.lib_model.index[lev][out_port])
 
-        LOG.debug(constraints)
+        # LOG.debug(constraints)
         return And(constraints)
 
     def compute_distinct_port_spec_constraints(self):
@@ -1018,15 +1035,15 @@ class Z3Interface(object):
         else:
             self.max_components = limit
 
-            if limit > prop_out:
-                # augment spec with dummy types
-
-                SpecClsCopy = type('SpecClsCopy', type(property_contract).__bases__, dict(type(property_contract).__dict__))
-
-                for n in range(0, limit - prop_out):
-                    SpecClsCopy.OUTPUT_PORTS.append(('%s_dummy_%d' % (property_contract.unique_name, n), DummyType))
-
-                property_contract = SpecClsCopy('%s_c' % property_contract.base_name)
+            # if limit > prop_out:
+            #     # augment spec with dummy types
+            #
+            #     SpecClsCopy = type('SpecClsCopy', type(property_contract).__bases__, dict(type(property_contract).__dict__))
+            #
+            #     for n in range(0, limit - prop_out):
+            #         SpecClsCopy.OUTPUT_PORTS.append(('%s_dummy_%d' % (property_contract.unique_name, n), DummyType))
+            #
+            #     property_contract = SpecClsCopy('%s_c' % property_contract.base_name)
 
         # self.initiliaze_solver(property_contract, limit=self.max_components, library_max_redundancy=library_max_redundancy)
         #
@@ -1040,6 +1057,7 @@ class Z3Interface(object):
 
         # self.all_zero()
         LOG.debug(property_contract)
+        LOG.debug(self.max_components)
 
         # self.solver.reset()
 
@@ -1093,13 +1111,13 @@ class Z3Interface(object):
         ## self.lib_inputs_no_feedback_if_assumption()
         ## self._inputs_from_selected()
         constraints.append(self.lib_chosen_not_zeros())
-        constraints.append(self.lib_to_outputs_or_spec_inout())
+        constraints.append(self.lib_to_outputs_or_spec_in())
         constraints.append(self.no_connections_to_unused_components())
         ### self.lib_not_chosen_zero() # TODO: verify this is ok to remove. it seems covered by use_max_n_components
         constraints.append(self.process_bitmap_no_feedback())
 
         if use_types:
-            constraints.append(self.spec_process_types()) ### remove for tests with no types
+            constraints.append(self.spec_process_in_types()) ### remove for tests with no types
             constraints.append(self.spec_process_out_types()) ###
             constraints.append(self.lib_process_types()) ###
         if use_hints:
@@ -1152,6 +1170,7 @@ class Z3Interface(object):
         #create parallel solvers
         solvers = []
         for cluster in clusters:
+        # for cluster in [['c2','c3','c5','c6']]:
 
             #solve for port
             self.base_solver.push()

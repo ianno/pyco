@@ -138,11 +138,12 @@ class ContractLibrary(object):
         #according to the actual ones
         addition = set()
         for (type_a, type_b) in self._type_compatibility_set:
-            #if (a, b) in the set, then also (b, a) is in
+            #if (a, b) in the set, a is output and b is input
             #by constraction
             if issubclass(type_cls, type_a):
                 addition.add((type_cls, type_b))
-                addition.add((type_b, type_cls))
+            if issubclass(type_b, type_cls):
+                addition.add((type_a, type_cls))
 
         self._type_compatibility_set = self._type_compatibility_set | addition
 

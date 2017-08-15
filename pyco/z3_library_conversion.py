@@ -363,6 +363,8 @@ class Z3Library(object):
         '''
         return all the output indices for a contract
         '''
+        # LOG.debug(hex(id(contract)))
+        # LOG.debug(self.out_contract_index)
         return [self.out_contract_index[level][contract]
                 for level in range(0, self.max_components)]
 

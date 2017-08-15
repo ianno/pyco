@@ -7,7 +7,7 @@ Author: Antonio Iannopollo
 
 from pyco import LOG
 from pyco.contract import CompositionMapping
-from pycolite.formula import Globally, Equivalence, Disjunction, Implication
+from pycolite.formula import Globally, Equivalence, Disjunction, Implication, Negation, Conjunction
 from pycolite.nuxmv import NuxmvRefinementStrategy, verify_tautology
 from multiprocessing import Process, Queue, Semaphore
 
@@ -230,21 +230,44 @@ def decompose_spec(spec_list):
 
                         # add conditionals
                         # (G(a1=a2) | G(b1=b2)...) -> Spec ref. formula
-                        formula_l = []
 
-                        for name in unknowns:
-                            formula_l.append(Globally(Equivalence(w_spec1.ports_dict[name].literal,
-                                                                  w_spec2.ports_dict[name].literal,
-                                                                  merge_literals=False))
+
+                        left_formula = []
+                        for pivot in unknowns:
+                            formula_l = []
+
+                            formula_l.append(Negation(Globally(Equivalence(w_spec1.ports_dict[name].literal,
+                                                                        w_spec2.ports_dict[name].literal,
+                                                                        merge_literals=False)
+                                                               )
+                                                      )
                                              )
 
-                        if len(formula_l) >= 2:
-                            formula = Disjunction(formula_l[0], formula_l[1], merge_literals=False)
+                            for name in unknowns:
+                                if name != pivot:
+                                    formula_l.append(Globally(Equivalence(w_spec1.ports_dict[name].literal,
+                                                                      w_spec2.ports_dict[name].literal,
+                                                                      merge_literals=False)
+                                                              )
+                                                 )
 
-                            for i in range(2, len(formula_l)):
-                                formula = Disjunction(formula, formula_l[i], merge_literals=False)
+                            if len(formula_l) >= 2:
+                                formula = Conjunction(formula_l[0], formula_l[1], merge_literals=False)
+
+                                for i in range(2, len(formula_l)):
+                                    formula = Conjunction(formula, formula_l[i], merge_literals=False)
+                            else:
+                                formula = formula_l[0]
+
+                            left_formula.append(formula)
+
+                        if len(left_formula) >= 2:
+                            formula = Disjunction(left_formula[0], left_formula[1], merge_literals=False)
+
+                            for i in range(2, len(left_formula)):
+                                formula = Disjunction(formula, left_formula[i], merge_literals=False)
                         else:
-                            formula = formula_l[0]
+                            formula = left_formula[0]
 
                         # get refinement formula
                         verifier = NuxmvRefinementStrategy(composition)
@@ -256,6 +279,7 @@ def decompose_spec(spec_list):
                         l_passed, trace = verify_tautology(formula, return_trace=True)
 
                         # LOG.debug(l_passed)
+                        # LOG.debug(formula.generate())
 
                         if not l_passed:
 

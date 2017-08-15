@@ -1146,25 +1146,9 @@ class Z3Interface(object):
 
         self.base_solver = solv
 
-        if minimize_components:
-            LOG.debug('minimize components')
-            self.obj = self.base_solver.maximize(Sum(self.lib_model.contract_use_flags))
-
-        if minimize_ports:
-            # minimize ports used
-            used_ports = [z3.Int('used_%d' % i) for i in range(len(self.lib_model.models))]
-            self.base_solver.add([Or(used == 0, used == 1) for used in used_ports])
-            self.base_solver.add(
-                [Implies(used_ports[i] == 1, self.lib_model.models[i] > -1) for i in range(len(self.lib_model.models))])
-            self.base_solver.add([Implies(used_ports[i] == 0, self.lib_model.models[i] == -1) for i in
-                             range(len(self.lib_model.models))])
-
-            self.obj = self.base_solver.minimize(z3.Sum(used_ports))
-
-
-
         print('Decomposing Specification...')
         clusters = decompose_spec(self.specification_list)
+
 
         print('Instantiate Solvers...')
         #create parallel solvers

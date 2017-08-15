@@ -66,14 +66,34 @@ class SinglePortSolver(multiprocessing.Process):
 
         # r = t.apply(self.goal_constraints)
         #
+
         optimize = minimize_components or minimize_ports
+
 
         self.solver = Solver(ctx=self.context)
         if optimize:
             self.solver = Optimize(ctx=self.context)
 
+
         self.solver.add(self.assertions)
-        # self.obj = self.solver.maximize(Sum(self.lib_model.contract_use_flags))
+
+
+        if minimize_components:
+            LOG.debug('minimize components')
+            self.obj_c = self.solver.minimize(Sum(self.lib_model.contract_use_flags))
+
+        if minimize_ports:
+            LOG.debug('minimize ports')
+            # minimize ports used
+            used_ports = [z3.Int('used_%d' % i, self.context) for i in range(len(self.lib_model.models))]
+            self.solver.add([Or(used == 0, used == 1, self.context) for used in used_ports])
+            self.solver.add(
+                [Implies(used_ports[i] == 1, self.lib_model.models[i] > -1, self.context) for i in range(len(self.lib_model.models))])
+            self.solver.add([Implies(used_ports[i] == 0, self.lib_model.models[i] == -1) for i in
+                             range(len(self.lib_model.models))])
+
+            self.obj_p = self.solver.minimize(z3.Sum(used_ports))
+
 
         super(SinglePortSolver, self).__init__()
 
@@ -255,6 +275,59 @@ class SinglePortSolver(multiprocessing.Process):
 
         return set(models), set(spec_models)
 
+    def __infer_contract_dependency(self, model, output_port_names):
+        '''
+        Create a list of contracts connected to the spec, eliminating spurious results
+
+        :param model:
+        :param spec:
+        :param output_port_name:
+        :return:
+        '''
+
+        # now we need to collect all the components connected in chain to the spec output we are considering
+        # we start with the model connected to the out
+        spec_port_models = [self.spec_out_dict[name] for name in output_port_names]
+        models = []
+
+        to_process = [self.lib_model.model_by_index(model[mod].as_long()) for mod in spec_port_models]
+        done = []
+
+        dep = {}
+
+        while len(to_process) > 0:
+            m = to_process.pop()
+            done.append(m)
+
+            lev = -1
+
+            if self.lib_model.index_by_model(m) < self.lib_model.specs_at:
+                lev, contract = self.lib_model.contract_by_model(m)
+
+            # find related input models
+            comp_models = [mod for mod in self.lib_model.related_models(m) if model[mod] is not None and model[mod].as_long() > -1]
+
+            # find models these are connected to
+            connected_models = [self.lib_model.model_by_index(model[port].as_long()) for port in comp_models
+                                if (-1 < model[port].as_long() < self.lib_model.specs_at)]
+
+            if lev > -1:
+                for mod in connected_models:
+                    m_lev, m_contract = self.lib_model.contract_by_model(mod)
+
+                    if (lev, contract) not in dep:
+                        dep[(lev, contract)] = set()
+                    dep[(lev, contract)].add((m_lev, m_contract))
+
+
+            # add for further processing
+            for mod in connected_models:
+                if mod not in done:
+                    to_process.append(mod)
+
+        return dep
+
+
     def build_composition_from_model(self, model, spec, output_port_names):
         '''
         builds a contract composition out of a model
@@ -428,11 +501,131 @@ class SinglePortSolver(multiprocessing.Process):
     #
 
 
+    def recursive_reject_formula(self, current_contract, current_level, shift,
+                                 contract_model_map, model,
+                                 pending_equalities,
+                                 previous_contracts, next_contracts,
+                                 shift_map, output_port_names):
+        '''
+        build compact reject formula using recursion.
+        The current contract needs to fix all the equalities with ports
+        of contracts which came before it, and leave the evaluation of
+        model equalities with contracts with order less than this.
+        :return:
+        '''
+
+        # check if this formula has already been computed
+        # if reject_map[current_contract][] # TODO
+
+
+        # equalities = {lev: set() for lev in range(self.lib_model.max_components)}
+
+
+        equalities = set()
+
+        # if current_contract == self.spec_contract:
+        #
+        #     #spec is always the last one, all its connections are in previous contracts
+        #     assert False#len(next_contracts) == 0
+        #
+        #
+        #     for name in output_port_names:
+        #         mod = self.spec_out_dict[name]
+        #
+        #         m_index = model[mod].as_long()
+        #         m_mod = self.lib_model.model_by_index(m_index)
+        #
+        #         m_lev, m_contract = self.lib_model.contract_by_model(m_mod)
+        #
+        #         # contract shift
+        #         # LOG.debug(m_index)
+        #         # LOG.debug(shift_map)
+        #         m_shift = shift_map[(m_lev, m_contract)]
+        #         shifted_ind = self.lib_model.index_shift(m_index, m_shift)
+        #
+        #         equalities.add(mod == shifted_ind)
+        #
+        #
+        # else:
+
+        current_out_indices = self.lib_model.contract_out_indices(current_contract)[current_level]
+
+        for mod in contract_model_map[(current_level, current_contract)]:
+
+            m_index = model[mod].as_long()
+
+
+            if m_index >= self.lib_model.specs_at:
+                #this is connected to spec
+                equalities.add(mod == m_index)
+            else:
+                m_mod = self.lib_model.model_by_index(m_index)
+                m_lev, m_contract = self.lib_model.contract_by_model(m_mod)
+
+                if (m_lev, m_contract) in previous_contracts:
+                    # contract shift
+                    # LOG.debug(m_index)
+                    # LOG.debug(shift_map)
+                    m_shift = shift_map[(m_lev, m_contract)]
+                    shifted_ind = self.lib_model.index_shift(m_index, m_shift)
+
+                    equalities.add(mod == shifted_ind)
+
+                else:
+                    #else add to pending
+                    if m_index not in pending_equalities:
+                        pending_equalities[m_index] = set()
+                    pending_equalities[m_index].add(mod)
+
+
+        #now all the above models which have indices which are of this contract
+        for idx in current_out_indices:
+            if idx in pending_equalities:
+                mods = pending_equalities[idx]
+
+                shifted_ind = self.lib_model.index_shift(idx, shift)
+
+                for mod in mods:
+                    equalities.add(mod == shifted_ind)
+
+                # reset pending
+                pending_equalities.pop(idx)
+
+
+        #assemble results
+        if len(next_contracts) > 0:
+            #pick next contract
+            (next_lev, next_c) = next_contracts.pop(0)
+
+            inner_shifts = []
+            for shift in range(self.lib_model.max_components):
+                new_shifts = {(current_level, current_contract): shift}
+                new_shifts.update(shift_map)
+                pending_eq = {idx: set([x for x in eq_set]) for (idx, eq_set) in pending_equalities.items()}
+                next_ctr = [(lev, ctr) for (lev, ctr) in next_contracts]
+                prev_ctr = [(lev, ctr) for (lev, ctr) in previous_contracts]
+
+                inner_shifts.append(self.recursive_reject_formula(next_c, next_lev, shift, contract_model_map,
+                                                                    model, pending_eq,
+                                                                    prev_ctr + [(current_level, current_contract)],
+                                                                    next_ctr,
+                                                                    new_shifts, output_port_names))
+            inner_formula = Or(inner_shifts, self.context)
+            rej_formula = And(equalities | set([inner_formula]), self.context)
+        else:
+            rej_formula = And(equalities, self.context)
+
+
+
+        return rej_formula
+
+
     # def reject_candidate(self, model, failed_spec):
     def reject_candidate(self, model, output_port_names):
         '''
         reject a model and its equivalents
         '''
+        LOG.debug('IN')
 
         #get only relevant models, i.e., connected eventually to the spec
         models, spec_models = self.__infer_relevant_ports_from_model(model, output_port_names)
@@ -440,13 +633,60 @@ class SinglePortSolver(multiprocessing.Process):
         # by construction fetching only the outputs, we have the full set of contracts
         model_map, contract_map = self.lib_model.contract_copies_by_models(models)
 
-        level_contracts_pairs = set(contract_map.keys())
+        # level_contracts_pairs = set(contract_map.keys())
+
+        # infer contract dependency
+        c_dep = self.__infer_contract_dependency(model, output_port_names)
+        
 
         # LOG.debug(model)
         # LOG.debug(models)
         # LOG.debug(spec_models)
         # LOG.debug(model_map)
         # LOG.debug(contract_map)
+
+
+        next_contracts = contract_map.keys()
+
+        contract_model_map = {}
+        for (current_level, current_contract) in next_contracts:
+            contract_model_map[(current_level, current_contract)] = self.lib_model.contract_in_models(current_contract)[current_level]
+
+        #first contract
+        current_lev, current_contract = next_contracts.pop(0)
+        #add spec
+        # next_contracts.append((0, self.spec_contract))
+        inner_shifts = []
+        # LOG.debug(next_contracts)
+
+        pending_equalities = {}
+        for name in output_port_names:
+            mod = self.spec_out_dict[name]
+
+            m_index = model[mod].as_long()
+
+            if m_index not in pending_equalities:
+                pending_equalities[m_index] = set()
+            pending_equalities[m_index].add(mod)
+        LOG.debug('mid')
+        for shift in range(self.lib_model.max_components):
+            previous_contracts = []
+            pending_eq = {idx: set([x for x in eq_set]) for (idx, eq_set) in pending_equalities.items()}
+            next_c_iter = [(lev, contract) for (lev, contract) in next_contracts]
+            new_shifts = {(current_lev, current_contract): shift}
+            inner_shifts.append(self.recursive_reject_formula(current_contract, current_lev, shift,
+                                                              contract_model_map,
+                                                              model, pending_eq,
+                                                              previous_contracts, next_c_iter,
+                                                              new_shifts, output_port_names))
+        inner_formula = Or(inner_shifts, self.context)
+
+        # LOG.debug(Not(inner_formula))
+        LOG.debug('OUT')
+        return Not(inner_formula)
+
+
+
 
 
         #get the spec details. Only one component connected to spec

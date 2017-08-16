@@ -960,6 +960,18 @@ class Z3Interface(object):
         # LOG.debug(constraints)
         return And(constraints)
 
+    def max_depth(self, depth):
+        '''
+        set maximum component depth
+        :return:
+        '''
+
+        constraints = []
+        for bitvec in self.lib_model.bitvect_repr.values():
+            n = bitvec.size()
+            constraints += [Sum([ZeroExt(n, Extract(i,i,bitvec)) for i in range(n)]) <= depth]
+
+        return And(constraints)
 
     def solve_for_outputs(self, output_name_list):
         '''
@@ -1105,7 +1117,7 @@ class Z3Interface(object):
         # if strict_in_spec_map:
         #     self.full_spec_in() #
         # ---------
-
+        depth = 4
         ## _self.spec_in_to_in()
         ## _self.spec_inputs_no_feedback()
         ## self.lib_inputs_no_feedback_if_assumption()
@@ -1115,6 +1127,7 @@ class Z3Interface(object):
         constraints.append(self.no_connections_to_unused_components())
         ### self.lib_not_chosen_zero() # TODO: verify this is ok to remove. it seems covered by use_max_n_components
         constraints.append(self.process_bitmap_no_feedback())
+        constraints.append(self.max_depth(depth))
 
         if use_types:
             constraints.append(self.spec_process_in_types()) ### remove for tests with no types

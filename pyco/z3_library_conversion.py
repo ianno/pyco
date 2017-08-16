@@ -49,6 +49,7 @@ def convert_formula_to_z3(formula, contract_vars, level):
     else:
         LOG.critical('incorrect unrolled formula')
 
+
 class Z3Library(object):
     '''
     maps library to a set of integers
@@ -87,11 +88,12 @@ class Z3Library(object):
         self.contract_use_flags = []
         self.reverse_flag = {}
         self.flag_map = {}
+        self.relevant_models = {}
 
         #for bitvector map
         self.bitmap_comp_index = {}
         self.bitvect_repr = {}
-        self.model_bitmap = {}
+        # self.model_bitmap = {}
 
         self.unrolled_info = {}
 
@@ -115,6 +117,7 @@ class Z3Library(object):
             self.index[level] = {}
             self.in_index[level] = {}
             self.out_index[level] = {}
+            self.relevant_models[level] = {}
 
             for component in self.library.components:
                 contract = component.contract
@@ -149,6 +152,10 @@ class Z3Library(object):
                 #self.unrolled_info[contract][level]['unroll_assume'] = unr_a
                 #self.unrolled_info[contract][level]['unroll_guarantee'] = unr_g
                 #END UNROLL COMMENT
+
+                self.relevant_models[level][contract] = {}
+                self.relevant_models[level][contract][0] = []
+                self.relevant_models[level][contract][1] = []
 
 
                 for port in contract.input_ports_dict.values():
@@ -201,6 +208,12 @@ class Z3Library(object):
 
                     self.contract_index[level][contract].append(len(self.models) - 1)
                     self.out_contract_index[level][contract].append(len(self.out_models) - 1)
+
+
+                (rel_in, rel_out) = self.__infer_relevant_ports(level, contract)
+
+                self.relevant_models[level][contract][0] = rel_out
+                self.relevant_models[level][contract][1] = rel_in
 
 
         # LOG.debug({i:self.models[i] for i in range(0,self.max_index)})
@@ -264,6 +277,36 @@ class Z3Library(object):
         '''
         idx  = self.bitmap_comp_index['%s-%d' % (contract.base_name, level)]
         return self.bitvect_repr[idx]
+
+    def __infer_relevant_ports(self, level, contract):
+        """
+        Return the list of relevant ports for a component.
+        i.e., those ports that are involved in the evaluation of their spec
+        :param level:
+        :return:
+        :param contract:
+        :return:
+        """
+
+        literals = (contract.assume_formula.get_literal_items()
+                    | contract.guarantee_formula.get_literal_items())
+
+        literal_unames = set([literal.unique_name for _, literal in literals])
+
+        # match literals and ports
+        ports = [port for port in contract.ports_dict.values() if port.unique_name in literal_unames]
+
+        # LOG.debug(ports)
+
+        ports_names = set([port.base_name for port in ports])
+        in_models = [self.models[self.index[level][port]] for name, port in contract.input_ports_dict.items()
+                     if name in ports_names]
+
+        out_models = [self.models[self.index[level][port]] for name, port in contract.output_ports_dict.items()
+                      if name in ports_names]
+
+        return in_models, out_models
+
 
     @property
     def max_index(self):
@@ -562,3 +605,45 @@ class Z3Library(object):
             return -1
 
         return (index + self.max_single_level_in_index * shift_lev) % self.max_in_index
+
+    def relevant_input_models(self, level, contract):
+        '''
+        return relevant inputs
+        :param level:
+        :param contract:
+        :return:
+        '''
+
+        return self.relevant_models[level][contract][1]
+
+    def relevant_output_models(self, level, contract):
+        '''
+        return relevant outputs
+        :param level:
+        :param contract:
+        :return:
+        '''
+
+        return self.relevant_models[level][contract][0]
+
+    def relevant_input_indices(self, level, contract):
+        '''
+        return relevant inputs
+        :param level:
+        :param contract:
+        :return:
+        '''
+
+        rel_in = self.relevant_input_models(level, contract)
+        return [self.index_by_model(mod) for mod in rel_in]
+
+    def relevant_output_indices(self, level, contract):
+        '''
+        return relevant outputs
+        :param level:
+        :param contract:
+        :return:
+        '''
+
+        rel_out = self.relevant_output_models(level, contract)
+        return [self.index_by_model(mod) for mod in rel_out]

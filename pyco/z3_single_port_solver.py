@@ -95,6 +95,9 @@ class SinglePortSolver(multiprocessing.Process):
             self.obj_p = self.solver.minimize(z3.Sum(used_ports))
 
 
+        # set seed
+        #self.solver.set('random-seed', 12345)
+
         super(SinglePortSolver, self).__init__()
 
 
@@ -295,6 +298,8 @@ class SinglePortSolver(multiprocessing.Process):
 
         dep = {}
 
+        spec_models = []
+
         while len(to_process) > 0:
             m = to_process.pop()
             done.append(m)
@@ -311,13 +316,18 @@ class SinglePortSolver(multiprocessing.Process):
             connected_models = [self.lib_model.model_by_index(model[port].as_long()) for port in comp_models
                                 if (-1 < model[port].as_long() < self.lib_model.specs_at)]
 
+            spec_models = [port for port in comp_models
+                            if port not in connected_models and model[port].as_long() >= self.lib_model.specs_at]
+
             if lev > -1:
-                for mod in connected_models:
+                if (lev, contract) not in dep:
+                    dep[(lev, contract)] = set()
+
+                for mod in connected_models + spec_models:
                     m_lev, m_contract = self.lib_model.contract_by_model(mod)
 
-                    if (lev, contract) not in dep:
-                        dep[(lev, contract)] = set()
-                    dep[(lev, contract)].add((m_lev, m_contract))
+                    if ((lev, contract)) != ((m_lev, m_contract)):
+                        dep[(lev, contract)].add((m_lev, m_contract))
 
 
             # add for further processing
@@ -479,10 +489,10 @@ class SinglePortSolver(multiprocessing.Process):
         #
         #
         #
-        # from graphviz_converter import GraphizConverter
-        # graphviz_conv = GraphizConverter(spec_contract, composition, contracts | set([working_spec]))
-        # graphviz_conv.generate_graphviz()
-        # graphviz_conv.view()
+        from graphviz_converter import GraphizConverter
+        graphviz_conv = GraphizConverter(spec_contract, composition, contracts | set([working_spec]))
+        graphviz_conv.generate_graphviz()
+        graphviz_conv.view()
 
         # LOG.debug('done')
         return composition, spec_contract, contracts
@@ -550,8 +560,20 @@ class SinglePortSolver(multiprocessing.Process):
 
         current_out_indices = self.lib_model.contract_out_indices(current_contract)[current_level]
 
-        for mod in contract_model_map[(current_level, current_contract)]:
+        # relevant_in_mod = self.lib_model.relevant_input_models(current_level, current_contract)
 
+        # LOG.debug(relevant_in_mod)
+        # relevant_in_idx = self.lib_model.relevant_input_indices(current_level, current_contract)
+        #
+        # relevant_out_mod = self.lib_model.relevant_output_models(current_level, current_contract)
+        # relevant_out_idx = self.lib_model.relevant_output_indices(current_level, current_contract)
+
+        for mod in contract_model_map[(current_level, current_contract)]:
+        # for mod in relevant_in_mod:
+
+            # LOG.debug(mod)
+            # LOG.debug(current_level)
+            # LOG.debug(current_contract.base_name)
             m_index = model[mod].as_long()
 
 
@@ -579,8 +601,8 @@ class SinglePortSolver(multiprocessing.Process):
 
 
         #now all the above models which have indices which are of this contract
-        for idx in current_out_indices:
-            if idx in pending_equalities:
+        for idx in pending_equalities:
+            if idx in current_out_indices:
                 mods = pending_equalities[idx]
 
                 shifted_ind = self.lib_model.index_shift(idx, shift)
@@ -599,6 +621,8 @@ class SinglePortSolver(multiprocessing.Process):
 
             inner_shifts = []
             for shift in range(self.lib_model.max_components):
+
+                check_dep = [((current_level, current_contract))]+[(l,c) for (l,c) in previous_contracts]
                 new_shifts = {(current_level, current_contract): shift}
                 new_shifts.update(shift_map)
                 pending_eq = {idx: set([x for x in eq_set]) for (idx, eq_set) in pending_equalities.items()}
@@ -611,9 +635,16 @@ class SinglePortSolver(multiprocessing.Process):
                                                                     next_ctr,
                                                                     new_shifts, output_port_names))
             inner_formula = Or(inner_shifts, self.context)
+            # if len(equalities | set([inner_formula])) == 0:
+            #     rej_formula = True
+            # else:
+
             rej_formula = And(equalities | set([inner_formula]), self.context)
         else:
-            rej_formula = And(equalities, self.context)
+            if len(equalities) == 0:
+                rej_formula = True
+            else:
+                rej_formula = And(equalities, self.context)
 
 
 
@@ -637,7 +668,41 @@ class SinglePortSolver(multiprocessing.Process):
 
         # infer contract dependency
         c_dep = self.__infer_contract_dependency(model, output_port_names)
-        
+
+        next_contracts_unordered = contract_map.keys()
+
+        next_contracts_unorderedracts = next_contracts_unordered
+        next_contracts = []
+
+        # LOG.debug(c_dep)
+
+        if len(c_dep) > 0:
+            #the initial element is the one with fewer dependencies
+            next_contracts = [min(c_dep.keys(), key=lambda x: len(c_dep[x]))]
+        # else:
+        #     next_contracts = contract_map.keys()
+        #
+        # LOG.debug(next_contracts_unordered)
+        # LOG.debug(contract_map)
+
+        # next_contracts = [next_contracts_unordered[0]]
+        # LOG.debug(next_contracts)
+        while len(next_contracts) != len(next_contracts_unordered):
+            for (l1, c1) in next_contracts_unordered:
+
+                if (l1, c1) not in next_contracts:
+                    # LOG.debug((l1,c1))
+                    # LOG.debug(next_contracts)
+                    if all([x in next_contracts for x in c_dep[(l1,c1)]]):
+                        next_contracts.append((l1,c1))
+                        # LOG.debug(next_contracts)
+                        break
+
+        # LOG.debug(next_contracts)
+        # assert False
+
+
+
 
         # LOG.debug(model)
         # LOG.debug(models)
@@ -646,11 +711,21 @@ class SinglePortSolver(multiprocessing.Process):
         # LOG.debug(contract_map)
 
 
-        next_contracts = contract_map.keys()
+
+
+        # chain_c_dep = {(lev, contract): {} for lev, contract in next_contracts}
+
+        # for i in range(len(next_contracts)):
+        #     (lev, contract) = next_contracts[i]
+        #     chain_c_dep[(lev, contract)][frozenset([next_contracts[j]
+        #         for j in range(i+1, len(next_contracts))])] = [next_contracts[j] for j in range(i+1, len(next_contracts))
+
 
         contract_model_map = {}
         for (current_level, current_contract) in next_contracts:
-            contract_model_map[(current_level, current_contract)] = self.lib_model.contract_in_models(current_contract)[current_level]
+            # contract_model_map[(current_level, current_contract)] = self.lib_model.contract_in_models(current_contract)[current_level]
+            contract_model_map[(current_level, current_contract)] = self.lib_model.relevant_input_models(current_level, current_contract)
+
 
         #first contract
         current_lev, current_contract = next_contracts.pop(0)
@@ -681,8 +756,8 @@ class SinglePortSolver(multiprocessing.Process):
                                                               new_shifts, output_port_names))
         inner_formula = Or(inner_shifts, self.context)
 
-        # LOG.debug(Not(inner_formula))
-        LOG.debug('OUT')
+        LOG.debug(Not(inner_formula))
+        LOG.debug(len(Not(inner_formula).__repr__()))
         return Not(inner_formula)
 
 

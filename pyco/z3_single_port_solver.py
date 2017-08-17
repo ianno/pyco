@@ -17,6 +17,11 @@ import multiprocessing
 from pycolite.contract import CompositionMapping
 from pyco.z3_thread_manager import MAX_THREADS, ModelVerificationManager
 from pyco.z3_library_conversion import Z3Library
+# from threading import Thread
+from multiprocessing import Pool, Process, Queue
+# from Queue import Queue
+
+import time
 
 # MAX_SOLVERS = 10
 
@@ -71,6 +76,8 @@ class SinglePortSolver(multiprocessing.Process):
 
 
         self.solver = Solver(ctx=self.context)
+        # self.solver = Tactic('qflia', ctx=self.context).solver()#Solver(ctx=self.context)
+
         if optimize:
             self.solver = Optimize(ctx=self.context)
 
@@ -96,7 +103,8 @@ class SinglePortSolver(multiprocessing.Process):
 
 
         # set seed
-        #self.solver.set('random-seed', 12345)
+        # self.solver.set('seed', 12345)
+        # set_option(verbose=10)
 
         super(SinglePortSolver, self).__init__()
 
@@ -489,26 +497,14 @@ class SinglePortSolver(multiprocessing.Process):
         #
         #
         #
-        from graphviz_converter import GraphizConverter
-        graphviz_conv = GraphizConverter(spec_contract, composition, contracts | set([working_spec]))
-        graphviz_conv.generate_graphviz()
-        graphviz_conv.view()
+        # from graphviz_converter import GraphizConverter
+        # graphviz_conv = GraphizConverter(spec_contract, composition, contracts | set([working_spec]))
+        # graphviz_conv.generate_graphviz()
+        # graphviz_conv.view()
 
         # LOG.debug('done')
         return composition, spec_contract, contracts
 
-
-    # def assemble_reject_formula(self, component, connection_dict):
-    #     '''
-    #     recursively assemble the formula for the rejected model
-    #     :param component:
-    #     :param connection_dict:
-    #     :return:
-    #     '''
-    #
-    #     #base case
-    #     if connection_dict[component] == []:
-    #
 
 
     def recursive_reject_formula(self, current_contract, current_level, shift,
@@ -558,7 +554,7 @@ class SinglePortSolver(multiprocessing.Process):
         #
         # else:
 
-        current_out_indices = self.lib_model.contract_out_indices(current_contract)[current_level]
+        current_out_indices = set(self.lib_model.contract_out_indices(current_contract)[current_level])
 
         # relevant_in_mod = self.lib_model.relevant_input_models(current_level, current_contract)
 
@@ -601,7 +597,7 @@ class SinglePortSolver(multiprocessing.Process):
 
 
         #now all the above models which have indices which are of this contract
-        for idx in pending_equalities:
+        for idx in pending_equalities.keys():
             if idx in current_out_indices:
                 mods = pending_equalities[idx]
 
@@ -620,6 +616,11 @@ class SinglePortSolver(multiprocessing.Process):
             (next_lev, next_c) = next_contracts.pop(0)
 
             inner_shifts = []
+            # independent = False
+            #
+            # if (current_level, current_contract) not in dep_lookup[(next_lev, next_c)]:
+            #     independent = True
+
             for shift in range(self.lib_model.max_components):
 
                 check_dep = [((current_level, current_contract))]+[(l,c) for (l,c) in previous_contracts]
@@ -633,7 +634,8 @@ class SinglePortSolver(multiprocessing.Process):
                                                                     model, pending_eq,
                                                                     prev_ctr + [(current_level, current_contract)],
                                                                     next_ctr,
-                                                                    new_shifts, output_port_names))
+                                                                    new_shifts,
+                                                                  output_port_names))
             inner_formula = Or(inner_shifts, self.context)
             # if len(equalities | set([inner_formula])) == 0:
             #     rej_formula = True
@@ -647,16 +649,276 @@ class SinglePortSolver(multiprocessing.Process):
                 rej_formula = And(equalities, self.context)
 
 
-
         return rej_formula
 
 
+    # # def reject_candidate(self, model, failed_spec):
+    # def reject_candidate_v0(self, model, output_port_names):
+    #     '''
+    #     reject a model and its equivalents
+    #     '''
+    #     # LOG.debug('IN')
+    #
+    #     #get only relevant models, i.e., connected eventually to the spec
+    #     models, spec_models = self.__infer_relevant_ports_from_model(model, output_port_names)
+    #     # now we get all the contracts related to the models.
+    #     # by construction fetching only the outputs, we have the full set of contracts
+    #     model_map, contract_map = self.lib_model.contract_copies_by_models(models)
+    #
+    #     # LOG.debug('mid')
+    #
+    #     # tim = time.time()
+    #
+    #
+    #     #get the spec details. Only one component connected to spec
+    #
+    #     spec_port_models = [self.spec_out_dict[name] for name in output_port_names]
+    #     spec_idx = {mod.get_id(): model[mod].as_long() for mod in spec_port_models}
+    #     mods = {mod.get_id(): self.lib_model.models[spec_idx[mod.get_id()]]
+    #             for mod in spec_port_models}
+    #
+    #     spec_connections = {}
+    #     for sid, mod in mods.items():
+    #         (level, contract) = self.lib_model.contract_by_model(mod)
+    #         spec_connections[sid] = (level, contract)
+    #
+    #     comp_list_size = len(contract_map.values())
+    #
+    #     level_map = itertools.product(range(self.lib_model.max_components), repeat=comp_list_size)
+    #     contract_shift_pos = {(lev, contract): contract_map.keys().index((lev, contract))
+    #                            for lev, contract in contract_map.keys()}
+    #
+    #     contract_models = {contract:self.lib_model.contract_in_models(contract)
+    #                        for _, contract in contract_map.keys()}
+    #
+    #     contract_idx = {contract:self.lib_model.contract_indices(contract)
+    #                        for _, contract in contract_map.keys()}
+    #
+    #     constraints = []
+    #
+    #     for level_shift in level_map:
+    #
+    #         conj = []
+    #
+    #         #spec port --
+    #         for spec_mod in spec_port_models:
+    #             level, contract = spec_connections[spec_mod.get_id()]
+    #
+    #             idx_shift = level_shift[contract_shift_pos[(level, contract)]]
+    #             spec_new_idx = self.lib_model.index_shift(spec_idx[spec_mod.get_id()], idx_shift)
+    #
+    #             conj.append(spec_mod == spec_new_idx)
+    #
+    #         for mod in models:
+    #             if model[mod] is not None:
+    #                 (model_level, model_contract) = self.lib_model.contract_by_model(mod)
+    #
+    #                 try:
+    #                     connected_model = self.lib_model.model_by_index(model[mod].as_long())
+    #                 except IndexError:
+    #                     connected_model = None
+    #                     idx_contract = None
+    #                 else:
+    #                     (idx_level, idx_contract) = self.lib_model.contract_by_model(connected_model)
+    #
+    #                 shift = level_shift[contract_shift_pos[(model_level, model_contract)]]
+    #
+    #                 new_mod = self.lib_model.model_shift(mod, shift)
+    #
+    #                 if connected_model is None:
+    #                     #in this case port is connected to spec port
+    #                     #idx_shift = 0
+    #                     new_idx = model[mod].as_long()
+    #                 else:
+    #
+    #                     idx_shift = level_shift[contract_shift_pos[(idx_level, idx_contract)]]
+    #                     new_idx = self.lib_model.index_shift(model[mod].as_long(), idx_shift)
+    #
+    #                 conj.append(new_mod == new_idx)
+    #
+    #         constraints.append(And(conj, self.context))
+    #
+    #     rej_formula = Not(Or(constraints, self.context), self.context)
+    #
+    #     # LOG.debug('inner done')
+    #
+    #     self.solver.add(rej_formula)
+    #
+    #     # LOG.debug(time.time()-tim)
+    #
+    #     return None
+    #
+    # def reject_candidate_v1(self, model, output_port_names):
+    #     '''
+    #     reject a model and its equivalents
+    #     '''
+    #     # LOG.debug('IN')
+    #
+    #     #get only relevant models, i.e., connected eventually to the spec
+    #     models, spec_models = self.__infer_relevant_ports_from_model(model, output_port_names)
+    #     # now we get all the contracts related to the models.
+    #     # by construction fetching only the outputs, we have the full set of contracts
+    #     model_map, contract_map = self.lib_model.contract_copies_by_models(models)
+    #
+    #     # level_contracts_pairs = set(contract_map.keys())
+    #
+    #     # infer contract dependency
+    #     c_dep = self.__infer_contract_dependency(model, output_port_names)
+    #
+    #     next_contracts_unordered = contract_map.keys()
+    #
+    #     next_contracts_unorderedracts = next_contracts_unordered
+    #     next_contracts = []
+    #
+    #     # LOG.debug(c_dep)
+    #
+    #     if len(c_dep) > 0:
+    #         #the initial element is the one with fewer dependencies
+    #         next_contracts = [min(c_dep.keys(), key=lambda x: len(c_dep[x]))]
+    #     # else:
+    #     #     next_contracts = contract_map.keys()
+    #     #
+    #     # LOG.debug(next_contracts_unordered)
+    #     # LOG.debug(contract_map)
+    #
+    #     # next_contracts = [next_contracts_unordered[0]]
+    #     # LOG.debug(next_contracts)
+    #     while len(next_contracts) != len(next_contracts_unordered):
+    #         for (l1, c1) in next_contracts_unordered:
+    #
+    #             if (l1, c1) not in next_contracts:
+    #                 # LOG.debug((l1,c1))
+    #                 # LOG.debug(next_contracts)
+    #                 if all([x in next_contracts for x in c_dep[(l1,c1)]]):
+    #                     next_contracts.append((l1,c1))
+    #                     # LOG.debug(next_contracts)
+    #                     break
+    #
+    #     # LOG.debug(next_contracts)
+    #     # assert False
+    #
+    #
+    #
+    #
+    #     # LOG.debug(model)
+    #     # LOG.debug(models)
+    #     # LOG.debug(spec_models)
+    #     # LOG.debug(model_map)
+    #     # LOG.debug(contract_map)
+    #
+    #
+    #
+    #
+    #     # chain_c_dep = {(lev, contract): {} for lev, contract in next_contracts}
+    #
+    #     # for i in range(len(next_contracts)):
+    #     #     (lev, contract) = next_contracts[i]
+    #     #     chain_c_dep[(lev, contract)][frozenset([next_contracts[j]
+    #     #         for j in range(i+1, len(next_contracts))])] = [next_contracts[j] for j in range(i+1, len(next_contracts))
+    #
+    #
+    #     contract_model_map = {}
+    #     for (current_level, current_contract) in next_contracts:
+    #         # contract_model_map[(current_level, current_contract)] = self.lib_model.contract_in_models(current_contract)[current_level]
+    #         contract_model_map[(current_level, current_contract)] = self.lib_model.relevant_input_models(current_level, current_contract)
+    #
+    #
+    #     #first contract
+    #     current_lev, current_contract = next_contracts.pop(0)
+    #     #add spec
+    #     # next_contracts.append((0, self.spec_contract))
+    #     inner_shifts = []
+    #     # LOG.debug(next_contracts)
+    #
+    #     pending_equalities = {}
+    #     for name in output_port_names:
+    #         mod = self.spec_out_dict[name]
+    #
+    #         m_index = model[mod].as_long()
+    #
+    #         if m_index not in pending_equalities:
+    #             pending_equalities[m_index] = set()
+    #         pending_equalities[m_index].add(mod)
+    #
+    #
+    #     # #figure out reusable chunks
+    #     #     dep_lookup = {}
+    #     # for i in range(len(next_contracts)):
+    #     #     l, c = next_contracts[i]
+    #     #     dep_set = set()
+    #     #
+    #     #     for j in range(i, len(next_contracts)):
+    #     #         for x in c_dep[next_contracts[j]]:
+    #     #             dep_set.add(x)
+    #     #
+    #     #     dep_lookup[(l, c)] = dep_set
+    #     #     formula_lookup = {}
+    #
+    #
+    #     # LOG.debug('mid')
+    #
+    #     tim = time.time()
+    #
+    #     pool = []
+    #     res_queue = Queue()
+    #
+    #     for shift in range(self.lib_model.max_components):
+    #         previous_contracts = []
+    #         pending_eq = {idx: set([x for x in eq_set]) for (idx, eq_set) in pending_equalities.items()}
+    #         next_c_iter = [(lev, contract) for (lev, contract) in next_contracts]
+    #         new_shifts = {(current_lev, current_contract): shift}
+    #         # inner_shifts.append(self.recursive_reject_formula(current_contract, current_lev, shift,
+    #         #                                                   contract_model_map,
+    #         #                                                   model, pending_eq,
+    #         #                                                   previous_contracts, next_c_iter,
+    #         #                                                   new_shifts, output_port_names))
+    #
+    #         solv = RejectProcess(current_contract, current_lev, shift, contract_model_map,
+    #                              model, pending_eq,
+    #                              previous_contracts,
+    #                              next_c_iter,
+    #                                 new_shifts, output_port_names,
+    #                                 self, res_queue)
+    #
+    #         solv.start()
+    #         pool.append(solv)
+    #
+    #     # LOG.debug('started')
+    #     for p in pool:
+    #         p.join()
+    #
+    #     # LOG.debug('inner done')
+    #     # inner_shifts = []
+    #     while not res_queue.empty():
+    #         r = res_queue.get_nowait()
+    #         # LOG.debug(r)
+    #         inner_shifts.append(r)
+    #
+    #     # inner_formula = Or(inner_shifts, self.context)
+    #     # # LOG.debug(Not(inner_formula))
+    #     # # LOG.debug(len(Not(inner_formula).__repr__()))
+    #     #
+    #     # rej = Not(inner_formula, self.context)
+    #     # self.solver.add(rej)
+    #
+    #     inner_str = ' '.join(inner_shifts)
+    #     decl_str = '\n'.join(self.lib_model.int_decl)
+    #     rej_string = '%s (assert (not (or %s)))' % (decl_str, inner_str)
+    #     # LOG.debug(rej_string)
+    #     inner_formula = parse_smt2_string(rej_string,
+    #                                               ctx=self.context)
+    #
+    #
+    #     # LOG.debug(time.time()-tim)
+    #     return None
+
+
     # def reject_candidate(self, model, failed_spec):
-    def reject_candidate(self, model, output_port_names):
+    def reject_candidate_v2(self, model, output_port_names):
         '''
         reject a model and its equivalents
         '''
-        LOG.debug('IN')
+        # LOG.debug('IN')
 
         #get only relevant models, i.e., connected eventually to the spec
         models, spec_models = self.__infer_relevant_ports_from_model(model, output_port_names)
@@ -743,7 +1005,29 @@ class SinglePortSolver(multiprocessing.Process):
             if m_index not in pending_equalities:
                 pending_equalities[m_index] = set()
             pending_equalities[m_index].add(mod)
-        LOG.debug('mid')
+
+
+        # #figure out reusable chunks
+        #     dep_lookup = {}
+        # for i in range(len(next_contracts)):
+        #     l, c = next_contracts[i]
+        #     dep_set = set()
+        #
+        #     for j in range(i, len(next_contracts)):
+        #         for x in c_dep[next_contracts[j]]:
+        #             dep_set.add(x)
+        #
+        #     dep_lookup[(l, c)] = dep_set
+        #     formula_lookup = {}
+
+
+        # LOG.debug('mid')
+
+        # tim = time.time()
+
+        pool = []
+        res_queue = Queue()
+
         for shift in range(self.lib_model.max_components):
             previous_contracts = []
             pending_eq = {idx: set([x for x in eq_set]) for (idx, eq_set) in pending_equalities.items()}
@@ -754,87 +1038,134 @@ class SinglePortSolver(multiprocessing.Process):
                                                               model, pending_eq,
                                                               previous_contracts, next_c_iter,
                                                               new_shifts, output_port_names))
+
+        #     solv = RejectProcess(current_contract, current_lev, shift, contract_model_map,
+        #                          model, pending_eq,
+        #                          previous_contracts,
+        #                          next_c_iter,
+        #                             new_shifts, output_port_names,
+        #                             self, res_queue)
+        #
+        #     solv.start()
+        #     pool.append(solv)
+        #
+        # LOG.debug('started')
+        # for p in pool:
+        #     p.join()
+        #
+        # LOG.debug('inner done')
+        # # inner_shifts = []
+        # while not res_queue.empty():
+        #     r = res_queue.get_nowait()
+        #     # LOG.debug(r)
+        #     inner_shifts.append(r)
+        #
+        # inner_str = ' '.join(inner_shifts)
+        # decl_str = '\n'.join(self.lib_model.int_decl)
+        # rej_string = '%s (assert (not (or %s)))' % (decl_str, inner_str)
+        # # LOG.debug(rej_string)
+        # inner_formula = parse_smt2_string(rej_string,
+        #                                           ctx=self.context)
+        # LOG.debug('inner done')
         inner_formula = Or(inner_shifts, self.context)
+        # LOG.debug(Not(inner_formula))
+        # LOG.debug(len(Not(inner_formula).__repr__()))
 
-        LOG.debug(Not(inner_formula))
-        LOG.debug(len(Not(inner_formula).__repr__()))
-        return Not(inner_formula)
+        rej = Not(inner_formula, self.context)
+        # other = self.reject_candidate_v0(model, output_port_names)
+
+        # z3.prove(other)
+        #
+        goal = Tactic('simplify', ctx=self.context)
+        # goal.add(rej)
+        goal = goal.apply(rej)
+
+        self.solver.add(goal.as_expr())
+
+        # LOG.debug(time.time()-tim)
+        return None
 
 
 
 
 
-        #get the spec details. Only one component connected to spec
-
-        spec_port_models = [self.spec_out_dict[name] for name in output_port_names]
-        spec_idx = {mod.get_id(): model[mod].as_long() for mod in spec_port_models}
-        mods = {mod.get_id(): self.lib_model.models[spec_idx[mod.get_id()]]
-                for mod in spec_port_models}
-
-        spec_connections = {}
-        for sid, mod in mods.items():
-            (level, contract) = self.lib_model.contract_by_model(mod)
-            spec_connections[sid] = (level, contract)
-
-        comp_list_size = len(contract_map.values())
-
-        level_map = itertools.product(range(self.lib_model.max_components), repeat=comp_list_size)
-        contract_shift_pos = {(lev, contract): contract_map.keys().index((lev, contract))
-                               for lev, contract in contract_map.keys()}
-
-        contract_models = {contract:self.lib_model.contract_in_models(contract)
-                           for _, contract in contract_map.keys()}
-
-        contract_idx = {contract:self.lib_model.contract_indices(contract)
-                           for _, contract in contract_map.keys()}
-
-        constraints = []
-
-        for level_shift in level_map:
-
-            conj = []
-
-            #spec port --
-            for spec_mod in spec_port_models:
-                level, contract = spec_connections[spec_mod.get_id()]
-
-                idx_shift = level_shift[contract_shift_pos[(level, contract)]]
-                spec_new_idx = self.lib_model.index_shift(spec_idx[spec_mod.get_id()], idx_shift)
-
-                conj.append(spec_mod == spec_new_idx)
-
-            for mod in models:
-                if model[mod] is not None:
-                    (model_level, model_contract) = self.lib_model.contract_by_model(mod)
-
-                    try:
-                        connected_model = self.lib_model.model_by_index(model[mod].as_long())
-                    except IndexError:
-                        connected_model = None
-                        idx_contract = None
-                    else:
-                        (idx_level, idx_contract) = self.lib_model.contract_by_model(connected_model)
-
-                    shift = level_shift[contract_shift_pos[(model_level, model_contract)]]
-
-                    new_mod = self.lib_model.model_shift(mod, shift)
-
-                    if connected_model is None:
-                        #in this case port is connected to spec port
-                        #idx_shift = 0
-                        new_idx = model[mod].as_long()
-                    else:
-
-                        idx_shift = level_shift[contract_shift_pos[(idx_level, idx_contract)]]
-                        new_idx = self.lib_model.index_shift(model[mod].as_long(), idx_shift)
-
-                    conj.append(new_mod == new_idx)
-
-            constraints.append(And(conj, self.context))
-
-        rej_formula = Not(Or(constraints, self.context), self.context)
-        # LOG.debug(rej_formula)
-        return rej_formula
+        # #get the spec details. Only one component connected to spec
+        #
+        # spec_port_models = [self.spec_out_dict[name] for name in output_port_names]
+        # spec_idx = {mod.get_id(): model[mod].as_long() for mod in spec_port_models}
+        # mods = {mod.get_id(): self.lib_model.models[spec_idx[mod.get_id()]]
+        #         for mod in spec_port_models}
+        #
+        # spec_connections = {}
+        # for sid, mod in mods.items():
+        #     (level, contract) = self.lib_model.contract_by_model(mod)
+        #     spec_connections[sid] = (level, contract)
+        #
+        # comp_list_size = len(contract_map.values())
+        #
+        # level_map = itertools.product(range(self.lib_model.max_components), repeat=comp_list_size)
+        # contract_shift_pos = {(lev, contract): contract_map.keys().index((lev, contract))
+        #                        for lev, contract in contract_map.keys()}
+        #
+        # contract_models = {contract:self.lib_model.contract_in_models(contract)
+        #                    for _, contract in contract_map.keys()}
+        #
+        # contract_idx = {contract:self.lib_model.contract_indices(contract)
+        #                    for _, contract in contract_map.keys()}
+        #
+        # constraints = []
+        #
+        # for level_shift in level_map:
+        #
+        #     conj = []
+        #
+        #     #spec port --
+        #     for spec_mod in spec_port_models:
+        #         level, contract = spec_connections[spec_mod.get_id()]
+        #
+        #         idx_shift = level_shift[contract_shift_pos[(level, contract)]]
+        #         spec_new_idx = self.lib_model.index_shift(spec_idx[spec_mod.get_id()], idx_shift)
+        #
+        #         conj.append(spec_mod == spec_new_idx)
+        #
+        #     for mod in models:
+        #         if model[mod] is not None:
+        #             (model_level, model_contract) = self.lib_model.contract_by_model(mod)
+        #
+        #             if model in self.lib_model.relevant_input_models(model_level, model_contract):
+        #                 try:
+        #                     connected_model = self.lib_model.model_by_index(model[mod].as_long())
+        #                 except IndexError:
+        #                     connected_model = None
+        #                     idx_contract = None
+        #                 else:
+        #                     (idx_level, idx_contract) = self.lib_model.contract_by_model(connected_model)
+        #
+        #                 shift = level_shift[contract_shift_pos[(model_level, model_contract)]]
+        #
+        #                 new_mod = self.lib_model.model_shift(mod, shift)
+        #
+        #                 if connected_model is None:
+        #                     #in this case port is connected to spec port
+        #                     #idx_shift = 0
+        #                     new_idx = model[mod].as_long()
+        #                 else:
+        #
+        #                     idx_shift = level_shift[contract_shift_pos[(idx_level, idx_contract)]]
+        #                     new_idx = self.lib_model.index_shift(model[mod].as_long(), idx_shift)
+        #
+        #                 conj.append(new_mod == new_idx)
+        #
+        #     constraints.append(And(conj, self.context))
+        #
+        # rej_formula = Not(Or(constraints, self.context), self.context)
+        # LOG.debug('inner done')
+        #
+        # self.solver.add(rej_formula)
+        #
+        # LOG.debug(time.time()-tim)
+        #
+        # return rej_formula
 
 
         # c_sets = {}
@@ -906,6 +1237,144 @@ class SinglePortSolver(multiprocessing.Process):
         #
         # # self.solver.add(rej_formula)
         # return rej_formula
+
+# class RejectProcess(Process):
+#     '''
+#     process processing part of the reject formula
+#     '''
+#
+#     def __init__(self, current_contract, current_level, shift,
+#                                  contract_model_map, model,
+#                                  pending_equalities,
+#                                  previous_contracts, next_contracts,
+#                                  shift_map, output_port_names,
+#                                  manager, res_queue):
+#
+#         self.current_contract = current_contract
+#         self.current_level = current_level
+#         self.shift = shift
+#         self.contract_model_map = contract_model_map
+#         self.model = model
+#         self.pending_equalities = pending_equalities
+#         self.previous_contracts = previous_contracts
+#         self.next_contracts = next_contracts
+#         self.shift_map = shift_map
+#         self.output_port_names = output_port_names
+#         self.res_queue = res_queue
+#         self.manager = manager
+#
+#         super(RejectProcess, self).__init__()
+#
+#
+#     def run(self):
+#         '''
+#         run the process
+#         :return:
+#         '''
+#
+#         equalities = set()
+#
+#
+#         current_out_indices = self.manager.lib_model.contract_out_indices(self.current_contract)[self.current_level]
+#
+#
+#         for mod in self.contract_model_map[(self.current_level, self.current_contract)]:
+#         # for mod in relevant_in_mod:
+#
+#             # LOG.debug(mod)
+#             # LOG.debug(current_level)
+#             # LOG.debug(current_contract.base_name)
+#             m_index = self.model[mod].as_long()
+#
+#
+#             if m_index >= self.manager.lib_model.specs_at:
+#                 #this is connected to spec
+#                 equalities.add(mod == m_index)
+#             else:
+#                 m_mod = self.manager.lib_model.model_by_index(m_index)
+#                 m_lev, m_contract = self.manager.lib_model.contract_by_model(m_mod)
+#
+#                 if (m_lev, m_contract) in self.previous_contracts:
+#                     # contract shift
+#                     # LOG.debug(m_index)
+#                     # LOG.debug(shift_map)
+#                     m_shift = self.shift_map[(m_lev, m_contract)]
+#                     shifted_ind = self.manager.lib_model.index_shift(m_index, m_shift)
+#
+#                     equalities.add(mod == shifted_ind)
+#
+#                 else:
+#                     #else add to pending
+#                     if m_index not in self.pending_equalities:
+#                         self.pending_equalities[m_index] = set()
+#
+#                     self.pending_equalities[m_index].add(mod)
+#
+#
+#         #now all the above models which have indices which are of this contract
+#         for idx in current_out_indices:
+#             if idx in self.pending_equalities:
+#                 mods = self.pending_equalities[idx]
+#
+#                 shifted_ind = self.manager.lib_model.index_shift(idx, self.shift)
+#
+#                 for mod in mods:
+#                     equalities.add(mod == shifted_ind)
+#
+#                 # reset pending
+#                 self.pending_equalities.pop(idx)
+#
+#
+#         #assemble results
+#         if len(self.next_contracts) > 0:
+#             #pick next contract
+#             (next_lev, next_c) = self.next_contracts.pop(0)
+#
+#             inner_shifts = []
+#
+#
+#             pool = []
+#             inner_queue = Queue()
+#
+#
+#             for l_shift in range(self.manager.lib_model.max_components):
+#
+#                 # check_dep = [((self.current_level, self.current_contract))]+[(l,c) for (l,c) in self.previous_contracts]
+#                 new_shifts = {(self.current_level, self.current_contract): l_shift}
+#                 new_shifts.update(self.shift_map)
+#                 pending_eq = {idx: set([x for x in eq_set]) for (idx, eq_set) in self.pending_equalities.items()}
+#                 next_ctr = [(lev, ctr) for (lev, ctr) in self.next_contracts]
+#                 prev_ctr = [(lev, ctr) for (lev, ctr) in self.previous_contracts]
+#
+#                 inner_shifts.append(self.manager.recursive_reject_formula(next_c, next_lev, self.shift, self.contract_model_map,
+#                                                                       self.model, pending_eq,
+#                                                                       prev_ctr + [(self.current_level, self.current_contract)],
+#                                                                       next_ctr,
+#                                                                       new_shifts, self.output_port_names))
+#
+#             inner_formula = Or(inner_shifts, self.manager.context)
+#             # if len(equalities | set([inner_formula])) == 0:
+#             #     rej_formula = True
+#             # else:
+#
+#             rej_formula = And(equalities | {inner_formula}, self.manager.context)
+#         else:
+#             if len(equalities) == 0:
+#                 rej_formula = True#BoolVal(True, self.manager.context)
+#             else:
+#                 rej_formula = And(equalities, self.manager.context)
+#
+#         # LOG.debug(rej_formula.range())
+#         # goal = Goal(ctx=self.manager.context)
+#         # goal.add(rej_formula)
+#         t = Tactic('simplify', ctx=self.manager.context)
+#         goal = t.apply(rej_formula)
+#         self.res_queue.put(goal.as_expr().sexpr())
+#         # return rej_formula
+
+
+
+
 
 class NotSynthesizableError(Exception):
     '''

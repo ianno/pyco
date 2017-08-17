@@ -99,6 +99,8 @@ class Z3Library(object):
 
         self.spec = spec
 
+        # self.int_decl = []
+
         if library_max_redundancy is None:
             library_max_redundancy = DEFAULT_MAX_REDUNDANCY
 
@@ -160,6 +162,7 @@ class Z3Library(object):
 
                 for port in contract.input_ports_dict.values():
                     model = z3.Int('%d-%s' % (level, port.unique_name), self.context)
+                    # self.int_decl.append('(declare-const |%d-%s| Int)' % (level, port.unique_name))
                     self.models.append(model)
                     self.in_models.append(model)
                     self.ports.append(port)
@@ -185,6 +188,7 @@ class Z3Library(object):
 
                 for port in contract.output_ports_dict.values():
                     model = z3.Int('%d-%s' % (level, port.unique_name), self.context)
+                    # self.int_decl.append('(declare-const |%d-%s| Int)' % (level, port.unique_name))
                     self.models.append(model)
                     self.out_models.append(model)
                     self.ports.append(port)
@@ -215,8 +219,13 @@ class Z3Library(object):
                 self.relevant_models[level][contract][0] = rel_out
                 self.relevant_models[level][contract][1] = rel_in
 
+        # #add declarations for spec out
+        # for name in self.spec.output_ports_dict:
+        #     self.int_decl.append('(declare-const |%s| Int)' % name)
 
-        # LOG.debug({i:self.models[i] for i in range(0,self.max_index)})
+
+
+            # LOG.debug({i:self.models[i] for i in range(0,self.max_index)})
 
 
     def cast_to_context(self, context):

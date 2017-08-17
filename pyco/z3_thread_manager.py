@@ -11,6 +11,7 @@ import threading as multiprocessing
 from Queue import Queue, Empty
 import pyco
 from pyco import LOG
+import time
 
 MAX_THREADS = 7
 
@@ -73,11 +74,13 @@ class ModelVerificationManager(object):
         #testing without size constraints
         #size = 1
         # size = initial_size
-
+        # tim = time.time()
         while True:
             try:
                 with self.z3_lock:
                     model = self.z3_interface.propose_candidate()
+                    # LOG.debug(time.time()-tim)
+                    # tim = time.time()
             except pyco.z3_interface.NotSynthesizableError as err:
                 return self.terminate()
             else:
@@ -104,7 +107,9 @@ class ModelVerificationManager(object):
 
                 #now reject the model, to get a new candidate
                 with self.z3_lock:
-                    self.solver.add(self.z3_interface.reject_candidate(model, self.output_port_names))
+                    #v2 works
+                    self.z3_interface.reject_candidate(model, self.output_port_names)
+                    # self.solver.add(self.z3_interface.reject_candidate(model, self.output_port_names))
                     #LOG.debug('done')
 
 

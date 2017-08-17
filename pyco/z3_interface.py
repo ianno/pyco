@@ -1005,6 +1005,7 @@ class Z3Interface(object):
 
     def synthesize(self, property_contracts, limit=None,
                    library_max_redundancy=None,
+                   depth=4,
                    strict_out_lib_map=False,
                    strict_in_spec_map=True,
                    use_types=True,
@@ -1041,7 +1042,9 @@ class Z3Interface(object):
         # we assume all the specs have same interface
         property_contract = self.specification_list[0]
         prop_out = len(property_contract.output_ports_dict)
-
+        # limit = 8
+        # depth = 4
+        # library_max_redundancy = 1
         if limit is None:
             self.max_components = prop_out
         else:
@@ -1117,7 +1120,7 @@ class Z3Interface(object):
         # if strict_in_spec_map:
         #     self.full_spec_in() #
         # ---------
-        depth = 4
+
         ## _self.spec_in_to_in()
         ## _self.spec_inputs_no_feedback()
         ## self.lib_inputs_no_feedback_if_assumption()

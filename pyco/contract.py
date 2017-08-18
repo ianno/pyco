@@ -71,6 +71,21 @@ class Contract(BaseContract):
 
         self.port_type = {port_name: port_type for (port_name, port_type)
                           in self.INPUT_PORTS + self.OUTPUT_PORTS}
+
+
+        # for each type, put together all ports with that type
+        self.in_type_map = {p_type: set() for p_type in set([t for (_, t) in self.INPUT_PORTS])}
+        self.out_type_map = {p_type: set() for p_type in set([t for (_, t) in self.OUTPUT_PORTS])}
+
+        for (name, p_type) in self.INPUT_PORTS:
+            self.in_type_map[p_type].add(name)
+
+        for (name, p_type) in self.OUTPUT_PORTS:
+            self.out_type_map[p_type].add(name)
+
+
+
+
         # LOG.debug(self.port_type)
 
         if input_ports is None:
@@ -82,12 +97,25 @@ class Contract(BaseContract):
         if guarantee_formula is None:
             guarantee_formula = self.GUARANTEES
 
-        self.smt_model = None
 
         super(Contract, self).__init__(base_name, input_ports, output_ports,
                                        assume_formula, guarantee_formula,
                                        symbol_set_cls, context,
                                        saturated, infer_ports)
+
+
+
+
+    @property
+    def type_map(self):
+        '''
+        return generic type map, without distinction between input and output
+        :return:
+        '''
+
+        return dict(self.in_type_map.items() +
+                    self.out_type_map.items())
+
 
     def assign_to_solver(self, smt_manager):
         '''

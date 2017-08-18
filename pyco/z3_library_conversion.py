@@ -123,6 +123,7 @@ class Z3Library(object):
 
             for component in self.library.components:
                 contract = component.contract
+
                 self.contracts.add(contract)
                 self.contract_index[level][contract] = []
                 self.in_contract_index[level][contract] = []

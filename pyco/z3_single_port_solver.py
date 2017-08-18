@@ -219,27 +219,27 @@ class SinglePortSolver(multiprocessing.Process):
 
         return model
 
-    def check_all_specs(self, model, output_port_name):
-        '''
-        check if the model satisfies a number of specs, if provided
-        :param output_port_name:
-        '''
-        composition = None
-        connected_spec = None
-        contract_inst = None
-        failed_spec = None
-        for spec in self.specification_list:
-            composition, connected_spec, contract_inst = \
-                self.build_composition_from_model(model, spec, output_port_name)
-
-            if not composition.is_refinement(connected_spec):
-                LOG.debug('ref check done 1')
-                failed_spec = spec
-                return False, composition, connected_spec, contract_inst, failed_spec
-
-            LOG.debug('ref check done 2')
-
-        return True, composition, connected_spec, contract_inst, None
+    # def check_all_specs(self, model, output_port_name):
+    #     '''
+    #     check if the model satisfies a number of specs, if provided
+    #     :param output_port_name:
+    #     '''
+    #     composition = None
+    #     connected_spec = None
+    #     contract_inst = None
+    #     failed_spec = None
+    #     for spec in self.specification_list:
+    #         composition, connected_spec, contract_inst = \
+    #             self.build_composition_from_model(model, spec, output_port_name)
+    #
+    #         if not composition.is_refinement(connected_spec):
+    #             LOG.debug('ref check done 1')
+    #             failed_spec = spec
+    #             return False, composition, connected_spec, contract_inst, failed_spec
+    #
+    #         LOG.debug('ref check done 2')
+    #
+    #     return True, composition, connected_spec, contract_inst, None
 
 
     def __infer_relevant_ports_from_model(self, model, output_port_names):
@@ -914,7 +914,7 @@ class SinglePortSolver(multiprocessing.Process):
 
 
     # def reject_candidate(self, model, failed_spec):
-    def reject_candidate_v2(self, model, output_port_names):
+    def reject_candidate(self, model, output_port_names):
         '''
         reject a model and its equivalents
         '''

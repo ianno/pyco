@@ -132,7 +132,7 @@ class SinglePortSolver(multiprocessing.Process):
                 from graphviz_converter import GraphizConverter
                 graphviz_conv = GraphizConverter(spec, composition, contract_list, filename='_'.join(self.spec_port_names))
                 graphviz_conv.generate_graphviz()
-                graphviz_conv.view()
+                # graphviz_conv.view()
                 return model, composition, spec, contract_list
 
                 # return model, composition, spec, contract_list
@@ -242,7 +242,7 @@ class SinglePortSolver(multiprocessing.Process):
     #     return True, composition, connected_spec, contract_inst, None
 
 
-    def __infer_relevant_ports_from_model(self, model, output_port_names):
+    def _infer_relevant_ports_from_model(self, model, output_port_names):
         '''
         Create a list of contracts connected to the spec, eliminating spurious results
 
@@ -369,7 +369,7 @@ class SinglePortSolver(multiprocessing.Process):
         # LOG.debug(model)
         # LOG.debug(output_port_name)
 
-        models, spec_models = self.__infer_relevant_ports_from_model(model, output_port_names)
+        models, spec_models = self._infer_relevant_ports_from_model(model, output_port_names)
         #
         # LOG.debug(models)
         # LOG.debug(spec_models)
@@ -442,7 +442,7 @@ class SinglePortSolver(multiprocessing.Process):
                     other_port = other_contract.ports_dict[other_port_orig.base_name]
 
                     mapping.connect(current_port, other_port,
-                                    '%s_%s' % (current_contract.unique_name,
+                                    '%s_%d_%s' % (current_contract.unique_name, level,
                                                current_port.base_name))
 
                     # LOG.debug(current_contract.unique_name)
@@ -467,7 +467,7 @@ class SinglePortSolver(multiprocessing.Process):
                 current_contract = contract_map[(level, old_contract)]
                 current_port = current_contract.ports_dict[old_port.base_name]
                 if current_port not in processed_ports:
-                    mapping.add(current_port, '%s_%s' % (current_contract.unique_name,
+                    mapping.add(current_port, '%s_%d_%s' % (current_contract.unique_name, level,
                                                          current_port.base_name))
                     processed_ports.add(current_port)
 
@@ -506,6 +506,149 @@ class SinglePortSolver(multiprocessing.Process):
         return composition, spec_contract, contracts
 
 
+
+    # def recursive_reject_formula_no_ca(self, current_contract, current_level, shift,
+    #                              contract_model_map, model,
+    #                              pending_equalities,
+    #                              previous_contracts, next_contracts,
+    #                              shift_map, output_port_names):
+    #     '''
+    #     build compact reject formula using recursion.
+    #     The current contract needs to fix all the equalities with ports
+    #     of contracts which came before it, and leave the evaluation of
+    #     model equalities with contracts with order less than this.
+    #     :return:
+    #     '''
+    #
+    #     # check if this formula has already been computed
+    #     # if reject_map[current_contract][] # TODO
+    #
+    #
+    #     # equalities = {lev: set() for lev in range(self.lib_model.max_components)}
+    #
+    #
+    #     equalities = set()
+    #
+    #     # if current_contract == self.spec_contract:
+    #     #
+    #     #     #spec is always the last one, all its connections are in previous contracts
+    #     #     assert False#len(next_contracts) == 0
+    #     #
+    #     #
+    #     #     for name in output_port_names:
+    #     #         mod = self.spec_out_dict[name]
+    #     #
+    #     #         m_index = model[mod].as_long()
+    #     #         m_mod = self.lib_model.model_by_index(m_index)
+    #     #
+    #     #         m_lev, m_contract = self.lib_model.contract_by_model(m_mod)
+    #     #
+    #     #         # contract shift
+    #     #         # LOG.debug(m_index)
+    #     #         # LOG.debug(shift_map)
+    #     #         m_shift = shift_map[(m_lev, m_contract)]
+    #     #         shifted_ind = self.lib_model.index_shift(m_index, m_shift)
+    #     #
+    #     #         equalities.add(mod == shifted_ind)
+    #     #
+    #     #
+    #     # else:
+    #
+    #     current_out_indices = set(self.lib_model.contract_out_indices(current_contract)[current_level])
+    #
+    #     # relevant_in_mod = self.lib_model.relevant_input_models(current_level, current_contract)
+    #
+    #     # LOG.debug(relevant_in_mod)
+    #     # relevant_in_idx = self.lib_model.relevant_input_indices(current_level, current_contract)
+    #     #
+    #     # relevant_out_mod = self.lib_model.relevant_output_models(current_level, current_contract)
+    #     # relevant_out_idx = self.lib_model.relevant_output_indices(current_level, current_contract)
+    #
+    #     for mod in contract_model_map[(current_level, current_contract)]:
+    #     # for mod in relevant_in_mod:
+    #
+    #         # LOG.debug(mod)
+    #         # LOG.debug(current_level)
+    #         # LOG.debug(current_contract.base_name)
+    #         m_index = model[mod].as_long()
+    #
+    #         if m_index >= self.lib_model.specs_at:
+    #             #this is connected to spec
+    #             equalities.add(mod == m_index)
+    #         else:
+    #             m_mod = self.lib_model.model_by_index(m_index)
+    #             m_lev, m_contract = self.lib_model.contract_by_model(m_mod)
+    #
+    #             if (m_lev, m_contract) in previous_contracts:
+    #                 # contract shift
+    #                 # LOG.debug(m_index)
+    #                 # LOG.debug(shift_map)
+    #                 m_shift = shift_map[(m_lev, m_contract)]
+    #                 shifted_ind = self.lib_model.index_shift(m_index, m_shift)
+    #
+    #                 equalities.add(mod == shifted_ind)
+    #
+    #             else:
+    #                 #else add to pending
+    #                 if m_index not in pending_equalities:
+    #                     pending_equalities[m_index] = set()
+    #                 pending_equalities[m_index].add(mod)
+    #
+    #
+    #     #now all the above models which have indices which are of this contract
+    #     for idx in pending_equalities.keys():
+    #         if idx in current_out_indices:
+    #             mods = pending_equalities[idx]
+    #
+    #             shifted_ind = self.lib_model.index_shift(idx, shift)
+    #
+    #             for mod in mods:
+    #                 equalities.add(mod == shifted_ind)
+    #
+    #             # reset pending
+    #             pending_equalities.pop(idx)
+    #
+    #
+    #     #assemble results
+    #     if len(next_contracts) > 0:
+    #         #pick next contract
+    #         (next_lev, next_c) = next_contracts.pop(0)
+    #
+    #         inner_shifts = []
+    #         # independent = False
+    #         #
+    #         # if (current_level, current_contract) not in dep_lookup[(next_lev, next_c)]:
+    #         #     independent = True
+    #
+    #         for shift in range(self.lib_model.max_components):
+    #
+    #             check_dep = [((current_level, current_contract))]+[(l,c) for (l,c) in previous_contracts]
+    #             new_shifts = {(current_level, current_contract): shift}
+    #             new_shifts.update(shift_map)
+    #             pending_eq = {idx: set([x for x in eq_set]) for (idx, eq_set) in pending_equalities.items()}
+    #             next_ctr = [(lev, ctr) for (lev, ctr) in next_contracts]
+    #             prev_ctr = [(lev, ctr) for (lev, ctr) in previous_contracts]
+    #
+    #             inner_shifts.append(self.recursive_reject_formula_no_ca(next_c, next_lev, shift, contract_model_map,
+    #                                                                 model, pending_eq,
+    #                                                                 prev_ctr + [(current_level, current_contract)],
+    #                                                                 next_ctr,
+    #                                                                 new_shifts,
+    #                                                               output_port_names))
+    #         inner_formula = Or(inner_shifts, self.context)
+    #         # if len(equalities | set([inner_formula])) == 0:
+    #         #     rej_formula = True
+    #         # else:
+    #
+    #         rej_formula = And(equalities | set([inner_formula]), self.context)
+    #     else:
+    #         if len(equalities) == 0:
+    #             rej_formula = True
+    #         else:
+    #             rej_formula = And(equalities, self.context)
+    #
+    #
+    #     return rej_formula
 
     def recursive_reject_formula(self, current_contract, current_level, shift,
                                  contract_model_map, model,
@@ -565,17 +708,33 @@ class SinglePortSolver(multiprocessing.Process):
         # relevant_out_idx = self.lib_model.relevant_output_indices(current_level, current_contract)
 
         for mod in contract_model_map[(current_level, current_contract)]:
-        # for mod in relevant_in_mod:
+            # for mod in relevant_in_mod:
 
             # LOG.debug(mod)
             # LOG.debug(current_level)
             # LOG.debug(current_contract.base_name)
             m_index = model[mod].as_long()
 
-
             if m_index >= self.lib_model.specs_at:
-                #this is connected to spec
-                equalities.add(mod == m_index)
+                # this is connected to spec
+
+                s_port_name = self.lib_model.spec_by_index_map[m_index]
+                p_type = self.spec_contract.port_type[s_port_name]
+
+                # collect all ports with same type
+                # LOG.debug(s_port_name)
+                # LOG.debug(self.spec_contract.port_type)
+                # LOG.debug(self.spec_contract.out_type_map)
+                port_type_class = {x for x in self.spec_contract.in_type_map[p_type]}
+
+                local_eq = set()
+                for p_name in port_type_class:
+                    # p = self.spec_contract.ports_dict[p_name]
+                    p_index = self.lib_model.spec_map[p_name]
+                    local_eq.add(mod == p_index)
+
+                equalities.add(Or(local_eq, self.context))
+
             else:
                 m_mod = self.lib_model.model_by_index(m_index)
                 m_lev, m_contract = self.lib_model.contract_by_model(m_mod)
@@ -587,32 +746,62 @@ class SinglePortSolver(multiprocessing.Process):
                     m_shift = shift_map[(m_lev, m_contract)]
                     shifted_ind = self.lib_model.index_shift(m_index, m_shift)
 
-                    equalities.add(mod == shifted_ind)
+                    # equalities.add(mod == shifted_ind)
+                    m_port = self.lib_model.port_by_index(shifted_ind)
+                    shifted_level = (m_lev + m_shift) % self.lib_model.max_components
+                    p_type = m_contract.port_type[m_port.base_name]
+
+                    # collect all ports with same type
+                    port_type_class = {x for x in m_contract.out_type_map[p_type]}
+
+                    local_eq = set()
+                    for p_name in port_type_class:
+                        p = m_contract.ports_dict[p_name]
+                        p_index = self.lib_model.index[shifted_level][p]
+                        local_eq.add(mod == p_index)
+
+                    equalities.add(Or(local_eq, self.context))
 
                 else:
-                    #else add to pending
+                    # else add to pending
                     if m_index not in pending_equalities:
                         pending_equalities[m_index] = set()
                     pending_equalities[m_index].add(mod)
 
-
-        #now all the above models which have indices which are of this contract
+        # now all the above models which have indices which are of this contract
         for idx in pending_equalities.keys():
             if idx in current_out_indices:
                 mods = pending_equalities[idx]
 
                 shifted_ind = self.lib_model.index_shift(idx, shift)
 
+                m_port = self.lib_model.port_by_index(shifted_ind)
+                m_contract = m_port.contract
+
+                shifted_level, _ = self.lib_model.contract_by_index(shifted_ind)
+
+                p_type = m_contract.port_type[m_port.base_name]
+
+                # collect all ports with same type
+                port_type_class = {x for x in m_contract.out_type_map[p_type]}
+
                 for mod in mods:
-                    equalities.add(mod == shifted_ind)
+                    # equalities.add(mod == shifted_ind)
+
+                    local_eq = set()
+                    for p_name in port_type_class:
+                        p = m_contract.ports_dict[p_name]
+                        p_index = self.lib_model.index[shifted_level][p]
+                        local_eq.add(mod == p_index)
+
+                    equalities.add(Or(local_eq, self.context))
 
                 # reset pending
                 pending_equalities.pop(idx)
 
-
-        #assemble results
+        # assemble results
         if len(next_contracts) > 0:
-            #pick next contract
+            # pick next contract
             (next_lev, next_c) = next_contracts.pop(0)
 
             inner_shifts = []
@@ -622,8 +811,7 @@ class SinglePortSolver(multiprocessing.Process):
             #     independent = True
 
             for shift in range(self.lib_model.max_components):
-
-                check_dep = [((current_level, current_contract))]+[(l,c) for (l,c) in previous_contracts]
+                check_dep = [((current_level, current_contract))] + [(l, c) for (l, c) in previous_contracts]
                 new_shifts = {(current_level, current_contract): shift}
                 new_shifts.update(shift_map)
                 pending_eq = {idx: set([x for x in eq_set]) for (idx, eq_set) in pending_equalities.items()}
@@ -631,10 +819,10 @@ class SinglePortSolver(multiprocessing.Process):
                 prev_ctr = [(lev, ctr) for (lev, ctr) in previous_contracts]
 
                 inner_shifts.append(self.recursive_reject_formula(next_c, next_lev, shift, contract_model_map,
-                                                                    model, pending_eq,
-                                                                    prev_ctr + [(current_level, current_contract)],
-                                                                    next_ctr,
-                                                                    new_shifts,
+                                                                  model, pending_eq,
+                                                                  prev_ctr + [(current_level, current_contract)],
+                                                                  next_ctr,
+                                                                  new_shifts,
                                                                   output_port_names))
             inner_formula = Or(inner_shifts, self.context)
             # if len(equalities | set([inner_formula])) == 0:
@@ -648,9 +836,7 @@ class SinglePortSolver(multiprocessing.Process):
             else:
                 rej_formula = And(equalities, self.context)
 
-
         return rej_formula
-
 
     # # def reject_candidate(self, model, failed_spec):
     # def reject_candidate_v0(self, model, output_port_names):
@@ -921,7 +1107,7 @@ class SinglePortSolver(multiprocessing.Process):
         # LOG.debug('IN')
 
         #get only relevant models, i.e., connected eventually to the spec
-        models, spec_models = self.__infer_relevant_ports_from_model(model, output_port_names)
+        models, spec_models = self._infer_relevant_ports_from_model(model, output_port_names)
         # now we get all the contracts related to the models.
         # by construction fetching only the outputs, we have the full set of contracts
         model_map, contract_map = self.lib_model.contract_copies_by_models(models)

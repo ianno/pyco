@@ -566,6 +566,19 @@ class Z3Library(object):
 
         return (level, contract)
 
+    def contract_by_index(self, index):
+        '''
+        returns contract and level associate to a model
+        '''
+        #infer mod
+        model = self.model_by_index(index)
+        #infer level
+        level = self.model_levels[model.get_id()]
+        #get contract
+        contract = self.model_contracts[model.get_id()]
+
+        return (level, contract)
+
 
     def contract_copies_by_models(self, model_list):
         '''
@@ -657,3 +670,13 @@ class Z3Library(object):
 
         rel_out = self.relevant_output_models(level, contract)
         return [self.index_by_model(mod) for mod in rel_out]
+
+    def flag_by_contract(self, level, contract):
+        '''
+        returns the flag associate to contract and level
+        :param level:
+        :param contract:
+        :return:
+        '''
+
+        return self.flag_map['%s-%d' % (contract.base_name, level)]

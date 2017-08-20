@@ -1003,6 +1003,46 @@ class Z3Interface(object):
 
         return And(constraints)
 
+
+    def no_duplicates(self):
+        '''
+        prevents two components with same contract but different levels to be instantiated if connected to the same inputs
+        :return:
+        '''
+
+        constraints = []
+
+        for contract in self.lib_model.contracts:
+
+            flags = []
+            in_models = {}
+            for level1 in range(self.lib_model.max_components):
+
+                flag1 = self.lib_model.flag_by_contract(level1, contract)
+                # in_mods1 = self.lib_model.contract_in_models(contract)[level1]
+
+                for level2 in range(self.lib_model.max_components):
+
+                    if level1 != level2:
+                        flag2 = self.lib_model.flag_by_contract(level2, contract)
+
+                        inner_or = []
+                        for name, port in contract.input_ports_dict.items():
+                            mods = self.lib_model.in_model_by_port(port)
+
+                            inner_or.append(Or(And(mods[level1] == -1, mods[level1] == -1),
+                                               mods[level1] != mods[level2]))
+
+                        constraints += [Implies(And(flag1==1, flag2==1),
+                                                Or(inner_or))]
+
+
+        # LOG.debug(constraints)
+        return And(constraints)
+
+
+
+
     def synthesize(self, property_contracts, limit=None,
                    library_max_redundancy=None,
                    depth=4,
@@ -1132,6 +1172,8 @@ class Z3Interface(object):
         constraints.append(self.process_bitmap_no_feedback())
         constraints.append(self.max_depth(depth))
 
+        constraints.append(self.no_duplicates())
+
         if use_types:
             constraints.append(self.spec_process_in_types()) ### remove for tests with no types
             constraints.append(self.spec_process_out_types()) ###
@@ -1170,6 +1212,7 @@ class Z3Interface(object):
         #create parallel solvers
         solvers = []
         for cluster in clusters:
+        # for cluster in [['o1', 'o2', 'o3']]:
         # for cluster in [['c2','c3','c5','c6']]:
 
             #solve for port

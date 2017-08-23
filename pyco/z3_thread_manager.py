@@ -14,7 +14,7 @@ from pyco import LOG
 from counterxample_analysis import counterexample_analysis
 import time
 
-MAX_THREADS = 7
+MAX_THREADS = 1
 
 #NotSynthesizableError = z3_interface.NotSynthesizableError
 

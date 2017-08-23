@@ -23,11 +23,13 @@ def counterexample_analysis(spec_list, output_port_names, model, manager):
     :return:
     '''
 
+    LOG.debug('start')
     checked_variables = None
     passed = None
     composition = None
     connected_spec = None
     contracts = None
+    model_map = None
 
     for spec in spec_list:
         (passed, trace,
@@ -39,7 +41,9 @@ def counterexample_analysis(spec_list, output_port_names, model, manager):
 
         if not passed:
 
-            checked_variables = trace_analysis(trace, monitored_variables)
+            trace_diff = trace_analysis(trace, monitored_variables)
+            checked_variables = assemble_checked_vars(trace_diff, monitored_variables,
+                                                              checked_variables)
 
             while not last_iteration:
                 (passed, trace,
@@ -55,9 +59,13 @@ def counterexample_analysis(spec_list, output_port_names, model, manager):
                                                               checked_variables)
 
             if not passed:
-                return False
+                # assert False
+                return False, composition, connected_spec, contracts, model_map
 
+    # assert False
     # here only if all are true
+    if passed:
+        assert False
     return passed, composition, connected_spec, contracts, model_map
 
 def one_step_verification(unconnected_spec, output_port_names, model, manager, checked_variables=None):
@@ -69,12 +77,14 @@ def one_step_verification(unconnected_spec, output_port_names, model, manager, c
 
     LOG.debug('IN')
 
+    # LOG.debug(checked_variables)
+
     spec_contract = unconnected_spec.copy()
     working_spec = unconnected_spec.copy()
     formulas = []
 
     if checked_variables is None:
-        checked_variables = set()
+        checked_variables = {}
 
     monitored_variables = {}
     model_map = {}
@@ -164,7 +174,7 @@ def one_step_verification(unconnected_spec, output_port_names, model, manager, c
 
             if len(port_type_class) == 0:
                 #update model map
-                model_map[mod.get_id()] = manager.lib_model.index[level][p0]
+                model_map[mod.get_id()] = manager.lib_model.index[level][p0_orig]
 
                 #we do not monitor this variable anymore
                 monitored_variables.pop((-1, orig_spec_port, spec_port.base_name))
@@ -178,7 +188,7 @@ def one_step_verification(unconnected_spec, output_port_names, model, manager, c
                 formula = Globally(Equivalence(spec_port.literal, p0.literal, merge_literals=False))
 
                 other_composition_name = '%s_%d_%s' % (other_contract.unique_name, level,
-                                                       p0.base_name)
+                                                       p0_name)
                 #add to monitored
                 monitored_variables[(-1, orig_spec_port,
                                      spec_port.base_name)].add((level, p0_orig,
@@ -193,7 +203,7 @@ def one_step_verification(unconnected_spec, output_port_names, model, manager, c
                                           merge_literals=False)
 
                     other_composition_name = '%s_%d_%s' % (other_contract.unique_name, level,
-                                                           p.base_name)
+                                                           p_name)
                     # add to monitored
                     monitored_variables[(-1, orig_spec_port,
                                      spec_port.base_name)].add((level, orig_port,
@@ -250,7 +260,7 @@ def one_step_verification(unconnected_spec, output_port_names, model, manager, c
                     monitored_variables.pop((level, old_port, current_p_composition_name))
 
                     # update model map
-                    model_map[p_model.get_id()] = manager.lib_model.index[level][p0]
+                    model_map[p_model.get_id()] = manager.lib_model.index[level][p0_orig]
 
                     #connect
                     mapping.connect(current_port, p0,
@@ -271,7 +281,7 @@ def one_step_verification(unconnected_spec, output_port_names, model, manager, c
                     formula = Globally(Equivalence(current_port.literal, p0.literal, merge_literals=False))
 
                     other_composition_name = '%s_%d_%s' % (other_contract.unique_name, other_level,
-                                                           other_port.base_name)
+                                                           p0_name)
                     #add to monitored
                     monitored_variables[(level, old_port,
                                          current_p_composition_name)].add((level, p0_orig,
@@ -282,9 +292,9 @@ def one_step_verification(unconnected_spec, output_port_names, model, manager, c
                                     current_p_composition_name)
                         processed_ports.add(current_port)
 
-                    if other_port not in processed_ports:
-                        mapping.add(other_port, other_composition_name)
-                        processed_ports.add(other_port)
+                    if p0 not in processed_ports:
+                        mapping.add(p0, other_composition_name)
+                        processed_ports.add(p0)
 
                     for p_name in port_type_class:
                         p = other_contract.ports_dict[p_name]
@@ -295,14 +305,14 @@ def one_step_verification(unconnected_spec, output_port_names, model, manager, c
                                               merge_literals=False)
 
                         other_composition_name = '%s_%d_%s' % (other_contract.unique_name, other_level,
-                                                               p.base_name)
+                                                               p_name)
                         # add to monitored
                         monitored_variables[(level, old_port,
-                                         current_p_composition_name)].add((level, p0_orig,
+                                         current_p_composition_name)].add((level, p_orig,
                                                                            other_composition_name))
 
                         if p not in processed_ports:
-                            mapping.add(other_port, other_composition_name)
+                            mapping.add(p, other_composition_name)
                             processed_ports.add(p)
 
                     formulas.append(formula)
@@ -331,7 +341,7 @@ def one_step_verification(unconnected_spec, output_port_names, model, manager, c
 
                 if len(port_type_class) == 0:
                     # update model map
-                    model_map[p_model.get_id()] = manager.lib_model.index[level][p0]
+                    model_map[p_model.get_id()] = manager.lib_model.spec_map[p0_name]
 
                     #not monitored anymore
                     monitored_variables.pop((level, old_port, current_p_composition_name))
@@ -351,6 +361,8 @@ def one_step_verification(unconnected_spec, output_port_names, model, manager, c
 
                     for p_name in port_type_class:
                         p = spec_contract.ports_dict[p_name]
+                        p_orig = manager.spec_contract.ports_dict[p_name]
+
                         formula = Disjunction(formula, Globally(Equivalence(current_port.literal, p.literal,
                                                                             merge_literals=False)),
                                               merge_literals=False)
@@ -404,8 +416,8 @@ def one_step_verification(unconnected_spec, output_port_names, model, manager, c
         for i in range(1, l):
             formula = Conjunction(formula, formulas[i], merge_literals=False)
 
-        formula = Negation(Implication(formula, ref_formula, merge_literals=False))
-        LOG.debug(formula.generate())
+        formula = Implication(formula, ref_formula, merge_literals=False)
+        # LOG.debug(formula.generate())
     else:
         formula = ref_formula
 
@@ -465,16 +477,24 @@ def trace_analysis(trace, monitored_vars):
     c_vars = {}
     diff = {}
 
+    LOG.debug(trace)
+    # LOG.debug(monitored_vars)
+
     #create structure to record values
     for p in monitored_vars:
+        # LOG.debug(p.base_name)
+        # LOG.debug(p.unique_name)
         c_vars[p.unique_name]= None
         diff[p] = set()
 
         for v_p in monitored_vars[p]['ports']:
+            # LOG.debug(v_p.base_name)
+            # LOG.debug(v_p.unique_name)
             c_vars[v_p.unique_name] = None
             diff[p].add(v_p)
 
 
+    # LOG.debug(c_vars)
     lines = trace.split('\n')
 
     after_preamble = False
@@ -500,9 +520,11 @@ def trace_analysis(trace, monitored_vars):
 
                 p_val = c_vars[p.unique_name]
 
-                for v_p in monitored_vars[p]:
-                    if c_vars[v_p.unique_name] != p_val:
+                for v_p in monitored_vars[p]['ports']:
+                    if v_p in diff[p] and c_vars[v_p.unique_name] != p_val:
                         diff[p].remove(v_p)
+
+            # LOG.debug(diff)
 
 
 
@@ -526,7 +548,7 @@ def trace_analysis(trace, monitored_vars):
 
                 c_vars[line_elems[0]] = val
 
-
+    # LOG.debug(diff)
     return diff
 
 
@@ -539,13 +561,14 @@ def assemble_checked_vars(trace_diff, monitored_vars, checked_vars):
     :return:
     """
 
+    # LOG.debug(checked_vars)
     for p in monitored_vars:
 
         lev, orig_p = monitored_vars[p]['orig']
 
         for v_p in trace_diff[p]:
             _, old_v_p = monitored_vars[p]['ports'][v_p]
-            checked_vars[(lev, orig_p)].add(old_v_p)
+            checked_vars[(lev, orig_p)].add(old_v_p.base_name)
 
-
+    # LOG.debug(checked_vars)
     return checked_vars

@@ -132,7 +132,7 @@ class SinglePortSolver(multiprocessing.Process):
                 from graphviz_converter import GraphizConverter
                 graphviz_conv = GraphizConverter(spec, composition, contract_list, filename='_'.join(self.spec_port_names))
                 graphviz_conv.generate_graphviz()
-                # graphviz_conv.view()
+                graphviz_conv.view()
                 return model, composition, spec, contract_list
 
                 # return model, composition, spec, contract_list

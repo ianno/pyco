@@ -174,31 +174,33 @@ class RefinementChecker(multiprocessing.Process):
         super(RefinementChecker, self).__init__()
 
 
-    def check_all_specs_threadsafe(self, model, z3_lock):
-        '''
-        check if the model satisfies a number of specs, if provided
-        '''
+    # def check_all_specs_threadsafe(self, model, z3_lock):
+    #     '''
+    #     check if the model satisfies a number of specs, if provided
+    #     '''
+    #
+    #     composition = None
+    #     connected_spec = None
+    #     contract_inst = None
+    #     failed_spec = None
+    #     for spec in self.z3_interface.specification_list:
+    #         # with z3_lock:
+    #         composition, connected_spec, contract_inst = \
+    #                 self.z3_interface.build_composition_from_model(model, spec, self.output_port_names)
+    #
+    #         if not composition.is_refinement(connected_spec):
+    #             if self.ident % 20 == 0:
+    #                 print('.'),
+    #             failed_spec = spec
+    #             # LOG.debug(failed_spec.guarantee_formula.generate())
+    #             return False, composition, connected_spec,contract_inst, failed_spec
+    #
+    #         print('+'),
+    #
+    #     print('#'),
+    #     return True, composition, connected_spec,contract_inst, None
 
-        composition = None
-        connected_spec = None
-        contract_inst = None
-        failed_spec = None
-        for spec in self.z3_interface.specification_list:
-            # with z3_lock:
-            composition, connected_spec, contract_inst = \
-                    self.z3_interface.build_composition_from_model(model, spec, self.output_port_names)
 
-            if not composition.is_refinement(connected_spec):
-                if self.ident % 20 == 0:
-                    print('.'),
-                failed_spec = spec
-                # LOG.debug(failed_spec.guarantee_formula.generate())
-                return False, composition, connected_spec,contract_inst, failed_spec
-
-            print('+'),
-
-        print('#'),
-        return True, composition, connected_spec,contract_inst, None
 
 
     def run(self):
@@ -209,18 +211,16 @@ class RefinementChecker(multiprocessing.Process):
         #pdb.set_trace()
         #print 'thread %s running' % self.ident
         #return
-        state, composition, connected_spec, contract_inst, failed_spec= \
-            self.check_all_specs_threadsafe(self.model, z3_lock=self.z3_lock)
+        # state, composition, connected_spec, contract_inst= \
+            # self.check_all_specs_threadsafe(self.model, z3_lock=self.z3_lock)
+        state, composition, connected_spec, contract_inst, model_map = \
+            counterexample_analysis(self.z3_interface.specification_list, self.output_port_names,
+                                    self.model, self.z3_interface)
 
         if state:
-            self.manager.result_queue.put(self.pid)
+            self.manager.result_queue.put((self.pid, model_map))
             self.found_event.set()
         else:
-
-            #analyze counterexample
-            res = counterexample_analysis(failed_spec, self.output_port_names, self.model, self.z3_interface)
-
-
             self.manager.fail_queue.put(self.pid)
         #else:
         #    #check for consistency

@@ -229,7 +229,7 @@ def decompose_spec(spec_list):
                         composition = w_spec1.compose([w_spec2], composition_mapping=mapping)
 
                         # add conditionals
-                        # (G(a1=a2) | G(b1=b2)...) -> Spec ref. formula
+                        # (G(a1=a2 & b1!=b2 &...) | G(b1=b2 & a1!=a2 & ...)...) -> Spec ref. formula
 
 
                         left_formula = []

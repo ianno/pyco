@@ -256,9 +256,9 @@ def process_model(unconnected_spec, output_port_names, rel_spec_ports, model, ma
                             inner = Conjunction(inner, temp, merge_literals=False)
 
                         pivots.append(inner)
-
-                formula = reduce((lambda x, y: Disjunction(x, y, merge_literals=False)), pivots)
-                formulas.append(formula)
+                if len(pivots) > 0:
+                    formula = reduce((lambda x, y: Disjunction(x, y, merge_literals=False)), pivots)
+                    formulas.append(formula)
 
                 # preamble = Globally(Equivalence(spec_port.literal, p0.literal, merge_literals=False))
                 #
@@ -394,8 +394,9 @@ def process_model(unconnected_spec, output_port_names, rel_spec_ports, model, ma
 
                             pivots.append(inner)
 
-                    formula = reduce((lambda x, y: Disjunction(x, y, merge_literals=False)), pivots)
-                    formulas.append(formula)
+                    if len(pivots) > 0:
+                        formula = reduce((lambda x, y: Disjunction(x, y, merge_literals=False)), pivots)
+                        formulas.append(formula)
 
 
 
@@ -483,8 +484,9 @@ def process_model(unconnected_spec, output_port_names, rel_spec_ports, model, ma
 
                             pivots.append(inner)
 
-                    formula = reduce((lambda x, y: Disjunction(x, y, merge_literals=False)), pivots)
-                    formulas.append(formula)
+                    if len(pivots) > 0:
+                        formula = reduce((lambda x, y: Disjunction(x, y, merge_literals=False)), pivots)
+                        formulas.append(formula)
 
 
                     # preamble = Globally(Equivalence(current_port.literal, p0.literal, merge_literals=False))
@@ -679,75 +681,81 @@ def exists_forall_learner(ref_formula, preamble, spec_map, monitored_variables):
     else:
         updated_preamble = preamble
 
-    neg_ref = Negation(ref_formula)
-    formula = Implication(updated_preamble, neg_ref, merge_literals=False)
 
+    if updated_preamble is  None:
+        l_passed = verify_tautology(ref_formula, return_trace=False)
 
-    # LOG.debug(formula.generate())
-    l_passed, trace = verify_tautology(formula, return_trace=True)
-
-    # LOG.debug(l_passed)
-    print('.'),
-    # LOG.debug(formula.generate())
-
-        # diff = parse_counterexample(trace, monitored)
-
-
-    if l_passed:
-        #if this passes, it means that we are done. we could find an assignment that makes the formula false,
-        # or the formula is always false for any possible connection
-        return False, candidate,preamble, None
-
+        return l_passed, None, None, {}
     else:
-        var_assign, ret_assign = trace_analysis(trace, monitored_variables)
-
-        #build constraints from var assignment
-        v_assign = []
-
-        for p in var_assign:
-            for v_p in var_assign[p]:
-                v_assign.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
+        neg_ref = Negation(ref_formula)
+        formula = Implication(updated_preamble, neg_ref, merge_literals=False)
 
 
-        candidate = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), v_assign)
+        # LOG.debug(formula.generate())
+        l_passed, trace = verify_tautology(formula, return_trace=True)
 
-        if spec_map is not None:
-            mapped = Conjunction(candidate, spec_map, merge_literals=False)
-        else:
-            mapped = candidate
+        # LOG.debug(l_passed)
+        print('.'),
+        # LOG.debug(formula.generate())
 
+            # diff = parse_counterexample(trace, monitored)
 
-        #now check if candidate is a good solution:
-        sol_verif = Implication(mapped, ref_formula, merge_literals=False)
-
-        l_passed, trace = verify_tautology(sol_verif, return_trace=True)
-
-
-        # LOG.debug(preamble.generate())
-        # LOG.debug(updated_preamble.generate())
-        # LOG.debug(candidate.generate())
-        #
-        # for p in monitored_variables:
-        #     LOG.debug(p.base_name)
-        #     LOG.debug(p.unique_name)
-        #     LOG.debug('--')
-        #     for v in monitored_variables[p]['ports']:
-        #         LOG.debug('.')
-        #         LOG.debug(v.base_name)
-        #         LOG.debug(v.unique_name)
-        #     LOG.debug('++')
-
-
-        new_preamble = Conjunction(preamble, Negation(candidate), merge_literals=False)
 
         if l_passed:
-            #we are done
-            # LOG.debug(candidate.generate())
-            # LOG.debug(var_assign)
-            return l_passed, candidate, new_preamble, ret_assign
+            #if this passes, it means that we are done. we could find an assignment that makes the formula false,
+            # or the formula is always false for any possible connection
+            return False, candidate,preamble, None
+
         else:
-            #otherwise build the new preamble
-            return l_passed, candidate, new_preamble, ret_assign
+            var_assign, ret_assign = trace_analysis(trace, monitored_variables)
+
+            #build constraints from var assignment
+            v_assign = []
+
+            for p in var_assign:
+                for v_p in var_assign[p]:
+                    v_assign.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
+
+
+            candidate = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), v_assign)
+
+            if spec_map is not None:
+                mapped = Conjunction(candidate, spec_map, merge_literals=False)
+            else:
+                mapped = candidate
+
+
+            #now check if candidate is a good solution:
+            sol_verif = Implication(mapped, ref_formula, merge_literals=False)
+
+            l_passed, trace = verify_tautology(sol_verif, return_trace=True)
+
+
+            # LOG.debug(preamble.generate())
+            # LOG.debug(updated_preamble.generate())
+            # LOG.debug(candidate.generate())
+            #
+            # for p in monitored_variables:
+            #     LOG.debug(p.base_name)
+            #     LOG.debug(p.unique_name)
+            #     LOG.debug('--')
+            #     for v in monitored_variables[p]['ports']:
+            #         LOG.debug('.')
+            #         LOG.debug(v.base_name)
+            #         LOG.debug(v.unique_name)
+            #     LOG.debug('++')
+
+
+            new_preamble = Conjunction(preamble, Negation(candidate), merge_literals=False)
+
+            if l_passed:
+                #we are done
+                # LOG.debug(candidate.generate())
+                # LOG.debug(var_assign)
+                return l_passed, candidate, new_preamble, ret_assign
+            else:
+                #otherwise build the new preamble
+                return l_passed, candidate, new_preamble, ret_assign
 
 
 

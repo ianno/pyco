@@ -14,7 +14,7 @@ from pyco import LOG
 from counterxample_analysis import counterexample_analysis
 import time
 
-MAX_THREADS = 1
+MAX_THREADS = 7
 
 #NotSynthesizableError = z3_interface.NotSynthesizableError
 
@@ -37,6 +37,7 @@ class ModelVerificationManager(object):
         self.connected_spec = None
         self.contract_inst = None
         self.model = None
+        self.model_map = None
 
         self.solution_lock = multiprocessing.Lock()
         self.z3_lock = multiprocessing.Lock()
@@ -130,13 +131,18 @@ class ModelVerificationManager(object):
 
         if self.found_refinement.is_set():
             pids = []
+            model_map = {}
             while not self.result_queue.empty():
-                pids.append(self.result_queue.get())
+                pid, model_map_items = self.result_queue.get()
+                pids.append(pid)
+                model_map[pid] = {k: v for (k, v) in model_map_items}
+
             pid = min(pids)
         else:
             raise pyco.z3_interface.NotSynthesizableError()
 
         self.model = self.model_dict[pid]
+        self.model_map = model_map[pid]
 
         #rebuild composition
         spec = self.z3_interface.specification_list[0]
@@ -218,7 +224,7 @@ class RefinementChecker(multiprocessing.Process):
                                     self.model, self.z3_interface)
 
         if state:
-            self.manager.result_queue.put((self.pid, model_map))
+            self.manager.result_queue.put((self.pid, frozenset(model_map.items())))
             self.found_event.set()
         else:
             self.manager.fail_queue.put(self.pid)

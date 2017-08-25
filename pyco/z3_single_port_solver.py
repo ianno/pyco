@@ -346,11 +346,14 @@ class SinglePortSolver(multiprocessing.Process):
         return dep
 
 
-    def build_composition_from_model(self, model, spec, output_port_names):
+    def build_composition_from_model(self, model, spec, output_port_names, model_index_map=None):
         '''
         builds a contract composition out of a model
         :param output_port_name:
         '''
+
+        if model_index_map is None:
+            model_index_map = {}
 
         # contracts = set()
         spec_contract = spec.copy()
@@ -376,13 +379,13 @@ class SinglePortSolver(multiprocessing.Process):
 
         # now we get all the contracts related to the models.
         # by construction fetching only the outputs, we have the full set of contracts
-        model_map, contract_map = self.lib_model.contract_copies_by_models(models)
+        _, contract_map = self.lib_model.contract_copies_by_models(models)
         #
         # LOG.debug(model)
         # LOG.debug(model_map)
         # LOG.debug(contract_map)
 
-        contracts = set(model_map.values())
+        contracts = set(contract_map.values())
         # contracts.add(working_spec)
         # extended_contracts = dict(list(contracts) + [spec_contract])
 
@@ -408,7 +411,10 @@ class SinglePortSolver(multiprocessing.Process):
                     name = str(mod)
                     spec_port = spec_contract.ports_dict[name]
 
-                    index = model[mod].as_long()
+                    if mod.get_id() in model_index_map:
+                        index = model_index_map[mod.get_id()]
+                    else:
+                        index = model[mod].as_long()
                     i_mod = self.lib_model.models[index]
                     level = self.lib_model.model_levels[i_mod.get_id()]
                     orig_port = self.lib_model.port_by_index(index)
@@ -428,7 +434,11 @@ class SinglePortSolver(multiprocessing.Process):
                 current_contract = contract_map[(level, old_contract)]
                 old_port = self.lib_model.port_by_model(p_model)
                 current_port = current_contract.ports_dict[old_port.base_name]
-                other_index = model[p_model].as_long()
+
+                if p_model.get_id() in model_index_map:
+                    other_index = model_index_map[p_model.get_id()]
+                else:
+                    other_index = model[p_model].as_long()
 
                 if other_index < self.lib_model.specs_at:
 

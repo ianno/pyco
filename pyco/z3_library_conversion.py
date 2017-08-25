@@ -298,6 +298,8 @@ class Z3Library(object):
         :return:
         """
 
+        # TODO: part of this is now implemented directly in contracts.
+        # TODO: reimplement
         literals = (contract.assume_formula.get_literal_items()
                     | contract.guarantee_formula.get_literal_items())
 

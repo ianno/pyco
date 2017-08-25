@@ -106,7 +106,8 @@ class Z3Interface(object):
         '''
 
         spec_ports = {}
-
+        # TODO: this is now included inside the contract in pycolite
+        # TODO: reimplement
         for spec in specifications:
             spec_ports[spec] = {}
 

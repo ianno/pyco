@@ -124,7 +124,9 @@ class SmallMCU(Contract):
     MCU
     '''
     INPUT_PORTS = [('gnd', GND), ('vin', Voltage3V), ('i1', IOPin3)]
-    OUTPUT_PORTS = [('o1', IOPin3), ('o2', IOPin3), ('o3', IOPin3)]
+    OUTPUT_PORTS = [('o1', IOPin3), ('o2', IOPin3), ('o3', IOPin3),
+                    ('o11', IOPin3), ('o12', IOPin3), ('o13', IOPin3),
+                    ('o21', IOPin3), ('o22', IOPin3), ('o23', IOPin3)]
     ASSUMPTIONS = 'true'
     GUARANTEES = '''o1 & !o2 & !o3 &
                     G( (o1 & !i1 & X i1) -> (X !o1 & X o2 & X !o3)) &

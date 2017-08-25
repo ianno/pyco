@@ -84,7 +84,7 @@ class ModelVerificationManager(object):
                     # LOG.debug(time.time()-tim)
                     # tim = time.time()
             except pyco.z3_interface.NotSynthesizableError as err:
-                return self.terminate()
+                return self.quit()
             else:
                 #acquire semaphore
                 self.semaphore.acquire()
@@ -92,15 +92,17 @@ class ModelVerificationManager(object):
                 #check if event is successful
                 if self.found_refinement.is_set():
                     #we are done. kill all running threads and exit
-                    return self.terminate()
+                    return self.quit()
 
                 #else remove not successful models
                 while not self.fail_queue.empty():
                     pid = self.fail_queue.get_nowait()
                     self.model_dict.pop(pid)
 
+                    self.thread_pool = self.thread_pool - set([t for t in self.thread_pool if t.ident == pid])
+
                 #new refinement checker
-                thread = RefinementChecker(model, self.output_port_names, self, self.found_refinement)
+                thread = RefinementChecker(model, self.output_port_names, self, self.found_refinement, self.found_refinement)
                 #go
                 thread.start()
                 # with self.pool_lock:
@@ -115,7 +117,7 @@ class ModelVerificationManager(object):
                     #LOG.debug('done')
 
 
-    def terminate(self):
+    def quit(self, wait=False):
         '''
         close up nicely
         '''
@@ -124,7 +126,8 @@ class ModelVerificationManager(object):
         #pid = self.result_queue.get()
 
         # with self.pool_lock:
-        self.terminate_event.set()
+        if not wait:
+            self.terminate_event.set()
 
         for thread in self.thread_pool:
             thread.join()
@@ -148,7 +151,7 @@ class ModelVerificationManager(object):
         spec = self.z3_interface.specification_list[0]
         # with self.z3_lock:
         self.composition, self.connected_spec, self.contract_inst = \
-                self.z3_interface.build_composition_from_model(self.model, spec, self.output_port_names)
+                self.z3_interface.build_composition_from_model(self.model, spec, self.output_port_names, self.model_map)
         #wait for all the threads to stop
 
 
@@ -163,7 +166,7 @@ class RefinementChecker(multiprocessing.Process):
     this thread executes a refinement checks and dies
     '''
 
-    def __init__(self, model, output_port_names, manager, found_event):
+    def __init__(self, model, output_port_names, manager, found_event, terminate_event):
         '''
         instantiate
         '''
@@ -172,6 +175,7 @@ class RefinementChecker(multiprocessing.Process):
         self.found_event = found_event
         self.manager = manager
         self.z3_lock = manager.z3_lock
+        self.terminate_event = terminate_event
 
         self.output_port_names = output_port_names
 
@@ -221,7 +225,7 @@ class RefinementChecker(multiprocessing.Process):
             # self.check_all_specs_threadsafe(self.model, z3_lock=self.z3_lock)
         state, composition, connected_spec, contract_inst, model_map = \
             counterexample_analysis(self.z3_interface.specification_list, self.output_port_names,
-                                    self.model, self.z3_interface)
+                                    self.model, self.z3_interface, self.terminate_event)
 
         if state:
             self.manager.result_queue.put((self.pid, frozenset(model_map.items())))
@@ -241,10 +245,10 @@ class RefinementChecker(multiprocessing.Process):
         #we are done, release semaphore
         self.manager.semaphore.release()
 
-        #LOG.debug('lock?')
-        # with self.manager.pool_lock:
-        if not self.manager.terminate_event.is_set():
-            self.manager.thread_pool.discard(self)
+        # #LOG.debug('lock?')
+        # # with self.manager.pool_lock:
+        # if not self.manager.terminate_event.is_set():
+        #     self.manager.thread_pool.discard(self)
 
         #LOG.debug('done')
 

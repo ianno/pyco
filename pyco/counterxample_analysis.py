@@ -12,7 +12,7 @@ from pycolite.formula import Globally, Equivalence, Disjunction, Implication, Ne
 from pycolite.nuxmv import NuxmvRefinementStrategy, verify_tautology
 
 
-def counterexample_analysis(spec_list, output_port_names, model, manager):
+def counterexample_analysis(spec_list, output_port_names, model, manager, terminate_evt):
     '''
     Analyze the model thorugh a series of counterexample to infer a set of connections which satisfies
     the spec, if one exists
@@ -36,25 +36,40 @@ def counterexample_analysis(spec_list, output_port_names, model, manager):
     spec_map = None
     first_spec = None
     composition = None
+    var_assign = {}
+
+    rel_spec_ports = set()
+    for spec in spec_list:
+        rel_spec_ports |= spec.relevant_ports
 
     for spec in spec_list:
 
+        if terminate_evt.is_set():
+            return False, composition, connected_spec, contracts, model_map
+
         if first:
+            first = False
             first_spec = spec
 
             (contracts, composition, connected_spec,
              ref_formula, preamble, monitored,
-             checked_variables, model_map) = process_model(spec, output_port_names,
+             checked_variables, model_map) = process_model(spec, output_port_names, rel_spec_ports,
                                                          model, manager, checked_variables=None)
 
+            # from graphviz_converter import GraphizConverter
+            # graphviz_conv = GraphizConverter(connected_spec, composition, contracts)
+            # graphviz_conv.generate_graphviz()
+            # graphviz_conv.view()
+
         else:
-            ref_formula, spec_map = build_formulas_for_other_spec(first_spec, spec, composition)
+            ref_formula, spec_map = build_formulas_for_other_spec(connected_spec, spec, composition)
 
 
-        passed, candidate, var_assign = exists_forall_learner(ref_formula, preamble, spec_map, monitored)
-
+        passed, candidate, new_preamble, var_assign = exists_forall_learner(ref_formula, preamble, None, monitored)
 
         while not passed:
+            if terminate_evt.is_set():
+                return False, composition, connected_spec, contracts, model_map
 
             if candidate is None:
                 #nope, not found
@@ -62,19 +77,28 @@ def counterexample_analysis(spec_list, output_port_names, model, manager):
                 return False, composition, connected_spec, contracts, model_map
 
             else:
-                new_preamble = candidate
-                passed, candidate, var_assign = exists_forall_learner(ref_formula, new_preamble, spec_map, monitored)
+
+                # LOG.debug(candidate.generate())
+
+                passed, candidate, new_preamble, var_assign = exists_forall_learner(ref_formula, new_preamble, None, monitored)
+
+        preamble = new_preamble
+        # LOG.debug('spec done')
+
 
 
     #if we are here we passed
     #we need to build model map
-    # LOG.debug('found')
-    checked_vars = assemble_checked_vars(var_assign, monitored, checked_variables)
+    LOG.debug('found')
 
-    (contracts, composition, connected_spec,
-    ref_formula, preamble, monitored,
-    checked_variables, model_map) = process_model(first_spec, output_port_names,
-                                               model, manager, checked_variables=checked_vars)
+    model_map = build_model_map(connected_spec, output_port_names,  manager, var_assign)
+
+    # checked_vars = assemble_checked_vars(var_assign, monitored, checked_variables)
+    # 
+    # (contracts, composition, connected_spec,
+    # ref_formula, preamble, monitored,
+    # checked_variables, model_map) = process_model(first_spec, output_port_names, rel_spec_ports,
+    #                                            model, manager, checked_variables=checked_vars)
 
 
     # LOG.debug(model_map)
@@ -90,7 +114,7 @@ def counterexample_analysis(spec_list, output_port_names, model, manager):
     return passed, composition, connected_spec, contracts, model_map
 
 
-def process_model(unconnected_spec, output_port_names, model, manager, checked_variables=None):
+def process_model(unconnected_spec, output_port_names, rel_spec_ports, model, manager, checked_variables=None):
     '''
     Build a SMV model and checks if there is any possible alternative set of connections to satisfy the spec.
     We first need to create additional formulas to express flexible connections.
@@ -307,7 +331,7 @@ def process_model(unconnected_spec, output_port_names, model, manager, checked_v
                 #make sure initial port is always there
                 # port_type_class = port_type_class | {other_port.base_name}
                 assert len(port_type_class) > 0
-
+                # LOG.debug(port_type_class)
                 if len(port_type_class) == 1:
 
                     p0_name = port_type_class.pop()
@@ -352,7 +376,7 @@ def process_model(unconnected_spec, output_port_names, model, manager, checked_v
 
                             # add to monitored
                             monitored_variables[(level, old_port,
-                                             current_p_composition_name)].add((level, p_orig,
+                                             current_p_composition_name)].add((other_level, p_orig,
                                                                                other_composition_name))
 
                             if pivot not in processed_ports:
@@ -440,9 +464,9 @@ def process_model(unconnected_spec, output_port_names, model, manager, checked_v
                     pivots = []
                     for pivot_name in port_type_class:
                         pivot = spec_contract.ports_dict[pivot_name]
-                        p_orig = manager.spec_contract.ports_dict[pivot_name]
+                        p_orig = unconnected_spec.ports_dict[pivot_name]
 
-                        if pivot in spec_contract.relevant_ports:
+                        if pivot in rel_spec_ports:
                             # add to monitored
                             monitored_variables[(level, old_port,
                                              current_p_composition_name)].add((-1, p_orig,
@@ -554,21 +578,84 @@ def process_model(unconnected_spec, output_port_names, model, manager, checked_v
 
     return contracts, composition, spec_contract, ref_formula, preamble, monitored, checked_variables, model_map
 
-def build_formulas_for_other_spec(first_spec, spec_contract, composition):
+
+def build_model_map(connected_spec, output_port_names,  manager, var_assign):
+    '''
+    Build a SMV model and checks if there is any possible alternative set of connections to satisfy the spec.
+    We first need to create additional formulas to express flexible connections.
+    :return:
+    '''
+
+
+    model_map = {}
+
+    #now we need to collect all the components connected in chain to the spec output we are considering
+    # we start with the model connected to the out
+    spec_port_models = [manager.spec_out_dict[name] for name in output_port_names]
+
+
+    for (orig_lev, orig_port) in var_assign:
+        if orig_lev == -1:
+            #that's the spec
+            for mod in spec_port_models:
+                name = str(mod)
+                spec_port = connected_spec.ports_dict[name]
+
+                if spec_port.base_name == orig_port.base_name:
+
+                    assert len(var_assign[(orig_lev, orig_port)]) == 1
+                    c_level, c_port = var_assign[(orig_lev, orig_port)].pop()
+
+                    model_map[mod.get_id()] = manager.lib_model.index[c_level][c_port]
+
+
+        else:
+            mod = manager.lib_model.model_by_port(orig_port)[orig_lev]
+
+            assert len(var_assign[(orig_lev, orig_port)]) == 1
+            c_level, c_port = var_assign[(orig_lev, orig_port)].pop()
+
+            if c_level > -1:
+                model_map[mod.get_id()] = manager.lib_model.index[c_level][c_port]
+
+                # LOG.debug(manager.lib_model.index[c_level][c_port])
+                # LOG.debug(manager.lib_model.port_by_index(manager.lib_model.index[c_level][c_port]).base_name)
+            else:
+                model_map[mod.get_id()] = manager.lib_model.spec_map[orig_port.base_name]
+
+    # LOG.debug(model_map)
+    return model_map
+
+
+
+def build_formulas_for_other_spec(connected_spec, spec_contract, composition, monitored_vars=None):
 
     spec_map = []
 
-    for p_name in first_spec.ports_dict:
-        spec_map.append(Equivalence(spec_contract[p_name].literal, first_spec[p_name].literal, merge_literals=False))
+    for p_name in connected_spec.ports_dict:
+        # spec_map.append(Equivalence(spec_contract.ports_dict[p_name].literal, connected_spec.ports_dict[p_name].literal, merge_literals=False))
 
-    if len(spec_map) > 0:
-        spec_formula = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), spec_map)
+        connected_spec.connect_to_port(connected_spec.ports_dict[p_name], spec_contract.ports_dict[p_name])
+    # if len(spec_map) > 0:
+    #     spec_formula = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), spec_map)
+    # else:
+    #     spec_formula = None
 
     # get refinement formula
     verifier = NuxmvRefinementStrategy(composition)
     ref_formula = verifier.get_refinement_formula(spec_contract)
 
-    return ref_formula, spec_formula
+    # old_rel_names = [p.base_name for p in connected_spec.relevant_ports]
+    # new_rel_names = [p.base_name for p in spec_contract.relevant_ports]
+    #
+    # #process monitored vars
+    # for p in monitored_vars:
+    #
+    #     for vp in monitored_vars['ports']:
+    #
+    #         if vp.bas
+
+    return ref_formula, None
     # neg_ref = Negation(ref_formula)
 
 
@@ -609,10 +696,10 @@ def exists_forall_learner(ref_formula, preamble, spec_map, monitored_variables):
     if l_passed:
         #if this passes, it means that we are done. we could find an assignment that makes the formula false,
         # or the formula is always false for any possible connection
-        return False, candidate, None
+        return False, candidate,preamble, None
 
     else:
-        var_assign = trace_analysis(trace, monitored_variables)
+        var_assign, ret_assign = trace_analysis(trace, monitored_variables)
 
         #build constraints from var assignment
         v_assign = []
@@ -621,10 +708,8 @@ def exists_forall_learner(ref_formula, preamble, spec_map, monitored_variables):
             for v_p in var_assign[p]:
                 v_assign.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
 
-        candidate = v_assign.pop(0)
 
-        for v in v_assign:
-            candidate = Conjunction(candidate, v, merge_literals=False)
+        candidate = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), v_assign)
 
         if spec_map is not None:
             mapped = Conjunction(candidate, spec_map, merge_literals=False)
@@ -653,15 +738,16 @@ def exists_forall_learner(ref_formula, preamble, spec_map, monitored_variables):
         #     LOG.debug('++')
 
 
+        new_preamble = Conjunction(preamble, Negation(candidate), merge_literals=False)
+
         if l_passed:
             #we are done
             # LOG.debug(candidate.generate())
             # LOG.debug(var_assign)
-            return l_passed, candidate, var_assign
+            return l_passed, candidate, new_preamble, ret_assign
         else:
             #otherwise build the new preamble
-            new_preamble = Conjunction(preamble, Negation(candidate), merge_literals=False)
-            return l_passed, new_preamble, var_assign
+            return l_passed, candidate, new_preamble, ret_assign
 
 
 
@@ -766,8 +852,29 @@ def trace_analysis(trace, monitored_vars):
 
                 c_vars[line_elems[0]] = val
 
-    # LOG.debug(diff)
-    return var_assign
+    # for c in var_assign:
+    #     LOG.debug('**')
+    #     LOG.debug(c.base_name)
+    #     LOG.debug(c.unique_name)
+    #     assert len(var_assign[c])==1
+    #     for v in var_assign[c]:
+    #         LOG.debug('.')
+    #         LOG.debug(v.base_name)
+    #         LOG.debug(v.unique_name)
+
+
+    #return assignement
+    ret_assign = {}
+
+    for p in var_assign:
+        orig_level, orig_port = monitored_vars[p]['orig']
+        ret_assign[(orig_level, orig_port)] = set()
+
+        for v in var_assign[p]:
+            origv_level, origv_port = monitored_vars[p]['ports'][v]
+            ret_assign[(orig_level, orig_port)].add((origv_level, origv_port))
+
+    return var_assign, ret_assign
 
 
 def assemble_checked_vars(trace_diff, monitored_vars, checked_vars):

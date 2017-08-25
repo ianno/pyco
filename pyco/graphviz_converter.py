@@ -96,10 +96,10 @@ class GraphizConverter(object):
 
     def view(self):
         self.graph.view()
-        LOG.debug(self.graph.source)
+        # LOG.debug(self.graph.source)
 
     def save(self):
         # self.graph.save()
         self.graph.render()
-        LOG.debug(self.graph.source)
+        # LOG.debug(self.graph.source)
 

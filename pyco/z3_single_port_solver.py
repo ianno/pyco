@@ -124,11 +124,11 @@ class SinglePortSolver(multiprocessing.Process):
             except NotSynthesizableError:
                 raise
             else:
-                LOG.info(model)
-                for c in contract_list:
-                    LOG.debug(c)
-                LOG.info(spec)
-                LOG.info(composition)
+                # LOG.info(model)
+                # for c in contract_list:
+                #     LOG.debug(c)
+                # LOG.info(spec)
+                # LOG.info(composition)
                 from graphviz_converter import GraphizConverter
                 graphviz_conv = GraphizConverter(spec, composition, contract_list, filename='_'.join(self.spec_port_names))
                 graphviz_conv.generate_graphviz()
@@ -355,6 +355,8 @@ class SinglePortSolver(multiprocessing.Process):
         if model_index_map is None:
             model_index_map = {}
 
+        # LOG.debug(model_index_map)
+
         # contracts = set()
         spec_contract = spec.copy()
         working_spec = spec.copy()
@@ -447,10 +449,24 @@ class SinglePortSolver(multiprocessing.Process):
 
                     other_port_orig = self.lib_model.port_by_index(other_index)
 
+                    oi = model[p_model].as_long()
+                    om = self.lib_model.models[oi]
+                    ol = self.lib_model.model_levels[om.get_id()]
+
+                    LOG.debug(other_level)
+                    LOG.debug(other_port_orig.base_name)
+                    LOG.debug(ol)
+                    LOG.debug(self.lib_model.port_by_index(oi).base_name)
+
+
+                    # LOG.debug(other_index)
+                    # LOG.debug(other_port_orig.base_name)
+
                     other_contract = contract_map[(other_level, other_port_orig.contract)]
 
                     other_port = other_contract.ports_dict[other_port_orig.base_name]
 
+                    # LOG.debug(other_port.base_name)
                     mapping.connect(current_port, other_port,
                                     '%s_%d_%s' % (current_contract.unique_name, level,
                                                current_port.base_name))

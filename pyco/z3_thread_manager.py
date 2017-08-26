@@ -11,10 +11,10 @@ import multiprocessing
 # from Queue import Queue, Empty
 import pyco
 from pyco import LOG
-from counterxample_analysis import counterexample_analysis
+from counterxample_analysis import counterexample_analysis, parallel_solve
 import time
 
-MAX_THREADS = 7
+MAX_THREADS = 1
 
 #NotSynthesizableError = z3_interface.NotSynthesizableError
 
@@ -30,6 +30,8 @@ class ModelVerificationManager(object):
 
         self.solver = z3_interface.solver
         self.z3_interface = z3_interface
+        self.spec_contract = self.z3_interface.spec_contract
+        self.spec_out_dict = self.z3_interface.spec_out_dict
         self.semaphore = multiprocessing.Semaphore(MAX_THREADS)
         self.found_refinement = multiprocessing.Event()
 
@@ -84,7 +86,7 @@ class ModelVerificationManager(object):
                     # LOG.debug(time.time()-tim)
                     # tim = time.time()
             except pyco.z3_interface.NotSynthesizableError as err:
-                return self.quit()
+                return self.quit(wait=True)
             else:
                 #acquire semaphore
                 self.semaphore.acquire()
@@ -125,10 +127,14 @@ class ModelVerificationManager(object):
         LOG.debug('terminating')
         #pid = self.result_queue.get()
 
+        # import time
+        # while True:
+        #     time.sleep(1)
         # with self.pool_lock:
         if not wait:
             self.terminate_event.set()
 
+        # LOG.debug(self.thread_pool)
         for thread in self.thread_pool:
             thread.join()
 
@@ -223,15 +229,18 @@ class RefinementChecker(multiprocessing.Process):
         #return
         # state, composition, connected_spec, contract_inst= \
             # self.check_all_specs_threadsafe(self.model, z3_lock=self.z3_lock)
-        state, composition, connected_spec, contract_inst, model_map = \
-            counterexample_analysis(self.z3_interface.specification_list, self.output_port_names,
-                                    self.model, self.z3_interface, self.terminate_event)
+        state = \
+            parallel_solve(self.z3_interface.specification_list, self.output_port_names,
+                                    self.model, self.z3_interface, self.pid, self.found_event,
+                           self.manager.result_queue, self.terminate_event)
 
-        if state:
-            self.manager.result_queue.put((self.pid, frozenset(model_map.items())))
-            self.found_event.set()
-        else:
+        if not state:
             self.manager.fail_queue.put(self.pid)
+        # if state:
+        #     self.manager.result_queue.put((self.pid, frozenset(model_map.items())))
+        #     self.found_event.set()
+        # else:
+        #     self.manager.fail_queue.put(self.pid)
         #else:
         #    #check for consistency
         #    LOG.debug('pre consistency')

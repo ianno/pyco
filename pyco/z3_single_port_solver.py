@@ -453,10 +453,10 @@ class SinglePortSolver(multiprocessing.Process):
                     om = self.lib_model.models[oi]
                     ol = self.lib_model.model_levels[om.get_id()]
 
-                    LOG.debug(other_level)
-                    LOG.debug(other_port_orig.base_name)
-                    LOG.debug(ol)
-                    LOG.debug(self.lib_model.port_by_index(oi).base_name)
+                    # LOG.debug(other_level)
+                    # LOG.debug(other_port_orig.base_name)
+                    # LOG.debug(ol)
+                    # LOG.debug(self.lib_model.port_by_index(oi).base_name)
 
 
                     # LOG.debug(other_index)

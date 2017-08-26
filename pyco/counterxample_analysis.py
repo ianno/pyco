@@ -10,6 +10,247 @@ from pyco import LOG
 from pyco.contract import CompositionMapping
 from pycolite.formula import Globally, Equivalence, Disjunction, Implication, Negation, Conjunction
 from pycolite.nuxmv import NuxmvRefinementStrategy, verify_tautology
+from multiprocessing import *
+
+
+def parallel_solve(spec_list, output_port_names, model, manager, pid, found_evt, found_queue, terminate_evt):
+    '''
+    Analyze the model thorugh a series of counterexample to infer a set of connections which satisfies
+    the spec, if one exists
+    :param unconnected_spec:
+    :param output_port_names:
+    :param model:
+    :param manager:
+    :return:
+    '''
+
+    # LOG.debug('start')
+    passed = None
+    composition = None
+    connected_spec = None
+    contracts = None
+    model_map = None
+    preamble = None
+    checked_variables = None
+
+    first = True
+    spec_map = None
+    first_spec = None
+    composition = None
+    var_assign = {}
+
+    rel_spec_ports = set()
+    for spec in spec_list:
+        rel_spec_ports |= spec.relevant_ports
+
+    (contracts, composition, connected_spec,
+     ref_formula, preamble, monitored,
+     checked_variables, _) = process_model(manager.spec_contract, output_port_names, rel_spec_ports,
+                                                   model, manager, checked_variables=None)
+
+
+    to_remove = []
+    for c in monitored:
+        if len(monitored[c]['ports']) == 0:
+            to_remove.append(c)
+
+    for c in to_remove:
+        del monitored[c]
+
+    model_map = {}
+    processes = []
+    if len(monitored) == 0:
+        # LOG.debug('here')
+        proc = ParallelSolver(model, manager.spec_contract, None, None, None, None,
+                              monitored, manager, model_map,
+                              pid, found_evt, found_queue, terminate_evt)
+
+        proc.start()
+
+        processes.append(proc)
+
+    else:
+        (port, inner_d) = monitored.popitem()
+
+        (level, orig_p) = inner_d['orig']
+
+        # connections = inner_d['ports'].keys()
+
+        for c in inner_d['ports']:
+            c_lev, c_orig = inner_d['ports'][c]
+
+            proc = ParallelSolver(model, manager.spec_contract, level, orig_p, c_lev, c_orig,
+                                  monitored, manager, model_map,
+                                  pid, found_evt, found_queue, terminate_evt)
+
+            proc.start()
+
+            processes.append(proc)
+
+    for p in processes:
+        p.join()
+
+    if not found_evt.is_set():
+        return False
+
+    return True
+
+
+class ParallelSolver(Process):
+    """
+    solves a single variable assignment
+    """
+
+    def __init__(self, model, spec, lev1, port1, lev2, port2, monitored, manager, model_map,
+                 init_pid, found_evt, found_queue, terminate_evt):
+        """
+        constructor
+        """
+        # self.contracts = contracts
+        self.model = model
+        self.spec = spec
+        self.monitored = monitored
+        self.port1 = port1
+        self.lev1 = lev1
+        self.lev2 = lev2
+        self.port2 = port2
+        self.manager = manager
+        self.model_map = model_map
+        self.init_pid = init_pid
+        self.terminate_evt = terminate_evt
+        self.found_evt = found_evt
+        self.found_queue = found_queue
+
+
+        super(ParallelSolver, self).__init__()
+
+
+
+    def check_all_specs_threadsafe(self, model):
+        '''
+        check if the model satisfies a number of specs, if provided
+        '''
+
+        composition = None
+        connected_spec = None
+        contract_inst = None
+        failed_spec = None
+        for spec in self.manager.specification_list:
+
+            if self.terminate_evt.is_set():
+                return False, None, None, None, None
+
+            # with z3_lock:
+            composition, connected_spec, contract_inst = \
+                    self.manager.build_composition_from_model(model, spec, self.manager.spec_port_names,
+                                                              model_index_map=self.model_map)
+
+            if not composition.is_refinement(connected_spec):
+                if self.ident % 20 == 0:
+                    print('.'),
+                failed_spec = spec
+                # LOG.debug(failed_spec.guarantee_formula.generate())
+                return False, composition, connected_spec,contract_inst, failed_spec
+
+            print('+'),
+
+        print('#'),
+        return True, composition, connected_spec,contract_inst, None
+
+
+    def __update_map(self, orig_lev1, orig_port1, orig_lev2, orig_port2):
+        """
+        update model maps
+        :return:
+        """
+
+        spec_port_models = [self.manager.spec_out_dict[name] for name in self.manager.spec_port_names]
+
+        if orig_lev1 == -1:
+            #that's the spec
+            for mod in spec_port_models:
+                name = str(mod)
+                spec_port = self.spec.ports_dict[name]
+
+                if spec_port.base_name == orig_port1.base_name:
+                    self.model_map[mod.get_id()] = self.manager.lib_model.index[orig_lev2][orig_port2]
+
+        else:
+            mod = self.manager.lib_model.model_by_port(orig_port1)[orig_lev1]
+
+
+            if orig_lev2 > -1:
+                self.model_map[mod.get_id()] = self.manager.lib_model.index[orig_lev2][orig_port2]
+
+                # LOG.debug(manager.lib_model.index[c_level][c_port])
+                # LOG.debug(manager.lib_model.port_by_index(manager.lib_model.index[c_level][c_port]).base_name)
+            else:
+                self.model_map[mod.get_id()] = self.manager.lib_model.spec_map[orig_port1.base_name]
+
+        return
+
+
+
+    def run(self):
+        """
+        takes its own options and run several solvers
+        :return:
+        """
+
+        processes = []
+
+        # LOG.debug('start')
+        if self.terminate_evt.is_set():
+            return
+
+        # update map
+        if self.lev1 is not None:
+            self.__update_map(self.lev1, self.port1, self.lev2, self.port2)
+
+        if len(self.monitored) == 0:
+
+            # LOG.debug('checking')
+            #ok, solve now
+            state, composition, connected_spec, contract_inst, failed_spec = \
+                self.check_all_specs_threadsafe(self.model)
+
+            # LOG.debug(state)
+            if state:
+
+                # LOG.debug('done')
+                self.found_queue.put((self.init_pid, frozenset(self.model_map.items())))
+                self.found_evt.set()
+
+            return
+
+        else:
+
+            # LOG.debug('recursion top')
+            (port, inner_d) = self.monitored.popitem()
+
+            (level, orig_p) = inner_d['orig']
+
+            # connections = inner_d['ports'].keys()
+
+            for c in inner_d['ports']:
+
+                c_lev, c_orig = inner_d['ports'][c]
+
+                # LOG.debug('recursion')
+                proc = ParallelSolver(self.model, self.spec, level, orig_p, c_lev, c_orig,
+                                      self.monitored, self.manager, self.model_map,
+                                      self.init_pid, self.found_evt, self.found_queue, self.terminate_evt)
+
+                proc.start()
+
+                processes.append(proc)
+
+            for p in processes:
+                p.join()
+
+        return
+
+
 
 
 def counterexample_analysis(spec_list, output_port_names, model, manager, terminate_evt):
@@ -89,7 +330,7 @@ def counterexample_analysis(spec_list, output_port_names, model, manager, termin
 
     #if we are here we passed
     #we need to build model map
-    LOG.debug('found')
+    # LOG.debug('found')
 
     model_map = build_model_map(connected_spec, output_port_names,  manager, var_assign)
 

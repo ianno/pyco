@@ -420,14 +420,14 @@ class GenIsolation1D(Contract):
                      !fail2 & G(fail2 -> Xfail2) &
                      !fail3 & G(fail3 -> Xfail3) &
                      !fail4 & G(fail4 -> Xfail4) &
-                     !fail_r1 &
-                     !fail_r2'''
+                     !fail_r1 & G(fail_r1 -> Xfail_r1) &
+                     !fail_r2 & G(fail_r2 -> Xfail_r2)'''
     GUARANTEES = 'c1 & G(fail1 -> X!c1)'
 
-    # INPUT_PORTS = [('fail1', ActiveGeneratorT)]
+    # INPUT_PORTS = []
     # OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT)]
-    # ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1)'''
-    # GUARANTEES = 'G(c1|c2)'
+    # ASSUMPTIONS = '''true'''
+    # GUARANTEES = 'G(c1|c2) & G(c1=c2)'
 
 class GenIsolation2D(Contract):
     '''
@@ -589,7 +589,7 @@ class DCLeftD(Contract):
                      !fail2 & G(fail2 -> Xfail2) &
                      !fail3 & G(fail3 -> Xfail3) &
                      !fail4 & G(fail4 -> Xfail4) &
-                     !fail_r1 &
-                     !fail_r2'''
+                     !fail_r1 & G(fail_r1 -> Xfail_r1) &
+                     !fail_r2 & G(fail_r2 -> Xfail_r2)'''
 
     GUARANTEES = 'G(!(fail_r1 & fail_r2) -> c9)'

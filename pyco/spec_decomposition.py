@@ -7,7 +7,7 @@ Author: Antonio Iannopollo
 
 from pyco import LOG
 from pyco.contract import CompositionMapping
-from pycolite.formula import Globally, Equivalence, Disjunction, Implication, Negation, Conjunction
+from pycolite.formula import Globally, Equivalence, Disjunction, Implication, Negation, Conjunction, TrueFormula
 from pycolite.nuxmv import NuxmvRefinementStrategy, verify_tautology
 from multiprocessing import Process, Queue, Semaphore
 
@@ -162,14 +162,14 @@ class MultipleOutputProcessor(Process):
 
                     left_formula = []
                     for pivot in unknowns:
-                        formula_l = []
+                        formula_l = [TrueFormula()]
 
-                        formula_l.append(Negation(Globally(Equivalence(w_spec1.ports_dict[pivot].literal,
-                                                                       w_spec2.ports_dict[pivot].literal,
-                                                                       merge_literals=False)
-                                                           )
-                                                  )
-                                         )
+                        # formula_l.append(Negation(Globally(Equivalence(w_spec1.ports_dict[pivot].literal,
+                        #                                                w_spec2.ports_dict[pivot].literal,
+                        #                                                merge_literals=False)
+                        #                                    )
+                        #                           )
+                        #                  )
 
                         for name in unknowns - {pivot}:
                             formula_l.append(Globally(Equivalence(w_spec1.ports_dict[name].literal,
@@ -225,7 +225,7 @@ class MultipleOutputProcessor(Process):
             if passed:
                 break
 
-        assert len(cluster) > 1
+        assert len(cluster) >= 1
 
         self.res_queue.put((self.pivot_name, frozenset(cluster)))
         self.semaphore.release()
@@ -244,30 +244,30 @@ def decompose_spec(spec_list):
 
     clusters = []
 
-    unclustered = set()
+    unclustered = set(spec_outs_dict.keys())
     done = set()
 
     # first FAST pass, try to take out as many single ports as possible
     res_queue = Queue()
     pool = []
     semaphore = Semaphore(MAX_PROCESSES)
-
-    for pivot_name in spec_outs_dict:
-        semaphore.acquire()
-        proc = OutputProcessor(pivot_name, spec_list, res_queue, semaphore)
-        proc.start()
-        pool.append(proc)
-
-    for p in pool:
-        p.join()
-
-    #everyone is done now
-    while not res_queue.empty():
-        res = res_queue.get_nowait()
-        if res[1] is True:
-            clusters.append(set([res[0]]))
-        else:
-            unclustered.add(res[0])
+    #
+    # for pivot_name in spec_outs_dict:
+    #     semaphore.acquire()
+    #     proc = OutputProcessor(pivot_name, spec_list, res_queue, semaphore)
+    #     proc.start()
+    #     pool.append(proc)
+    #
+    # for p in pool:
+    #     p.join()
+    #
+    # #everyone is done now
+    # while not res_queue.empty():
+    #     res = res_queue.get_nowait()
+    #     if res[1] is True:
+    #         clusters.append(set([res[0]]))
+    #     else:
+    #         unclustered.add(res[0])
 
 
     # for pivot_name in spec_outs_dict:
@@ -498,6 +498,7 @@ def decompose_spec(spec_list):
     clusters = [x for x in clusters if len(x) > 0]
 
     LOG.debug(clusters)
+    # assert False
     # LOG.debug(unclustered)
     return clusters
 

@@ -11,7 +11,10 @@ EPS_TEST_40=false
 EPS_TEST_20_PLAIN=true
 EPS_TEST_40_PLAIN=false
 
+START=1
 REPS=10
+SPEC_INIT=6
+SPEC_STOP=9
 
 IS_CONCURRENT=false
 
@@ -24,7 +27,7 @@ fi
 
 if $EPS_TEST_20 || $EPS_TEST_40
 then
-  for exp in {1..9}
+  for ((exp=$SPEC_INIT; exp<=$SPEC_STOP; exp++))
   do
     if $EPS_TEST_20
     then
@@ -35,7 +38,7 @@ then
       rm -f test_synth_6_10_dc_${exp}_lib40_*
     fi
 
-    for (( i=1; i<=$REPS; i++ ))
+    for (( i=$START; i<=$REPS; i++ ))
     do
       if $EPS_TEST_20
       then
@@ -51,7 +54,7 @@ fi
 
 if $EPS_TEST_20_PLAIN || $EPS_TEST_40_PLAIN
 then
-  for exp in {1..9}
+  for ((exp=$SPEC_INIT; exp<=$SPEC_STOP; exp++))
   do
     if $EPS_TEST_20_PLAIN
     then
@@ -62,7 +65,7 @@ then
       rm -f test_synth_6_10_dc_${exp}_plain_lib40_*
     fi
 
-    for (( i=1; i<=$REPS; i++ ))
+    for (( i=$START; i<=$REPS; i++ ))
     do
       if $EPS_TEST_20_PLAIN
       then

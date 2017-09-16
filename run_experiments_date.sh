@@ -6,10 +6,12 @@ set -e
 #visualize with
 # tail -n -1 test_synth_6_10_dc_3_* | grep -Eo '[+-]?[0-9]+([.][0-9]+)+'
 
-EPS_TEST_20=false
+EPS_TEST_20=true
 EPS_TEST_40=false
 EPS_TEST_20_PLAIN=false
 EPS_TEST_40_PLAIN=false
+
+REPS=10
 
 IS_CONCURRENT=false
 
@@ -26,7 +28,7 @@ then
   do
     rm -f test_synth_6_10_dc_${exp}_*
 
-    for i in {1..10}
+    for (( i=1; i<=$REPS; i++ ))
     do
       if $EPS_TEST_20
       then
@@ -46,7 +48,7 @@ then
   do
     rm -f test_synth_6_10_dc_${exp}_*
 
-    for i in {1..10}
+    for (( i=1; i<=$REPS; i++ ))
     do
       if $EPS_TEST_20
       then

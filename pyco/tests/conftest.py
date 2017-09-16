@@ -19,6 +19,8 @@ def pytest_addoption(parser):
         help="minimize number of ports.")
     parser.addoption("--out", action="store",
         help="output file name")
+    parser.addoption("--plain", action="store_true",
+        help="disable specification decomposition")
 
 def pytest_generate_tests(metafunc):
     name = ''
@@ -65,3 +67,12 @@ def pytest_generate_tests(metafunc):
         if value is None:
             value = name
         metafunc.parametrize("filename", [value])
+
+    if 'plain' in metafunc.fixturenames:
+        if metafunc.config.option.plain:
+            value = True
+        else:
+            value = False
+
+        name = name + "_plain-"+str(value)
+        metafunc.parametrize("plain", [value])

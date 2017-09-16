@@ -106,7 +106,7 @@ class Z3Interface(object):
         '''
 
         spec_ports = {}
-        # TODO: this is now included inside the contract in pycolite
+        # TODO: this is now included inside the contract
         # TODO: reimplement
         for spec in specifications:
             spec_ports[spec] = {}
@@ -1046,7 +1046,7 @@ class Z3Interface(object):
 
     def synthesize(self, property_contracts, limit=None,
                    library_max_redundancy=None,
-                   depth=4,
+                   depth=3,
                    strict_out_lib_map=False,
                    strict_in_spec_map=True,
                    use_types=True,
@@ -1058,7 +1058,8 @@ class Z3Interface(object):
                    distinct_mapping_constraints=None,
                    fixed_components=None,
                    fixed_connections=None,
-                   fixed_connections_spec=None):
+                   fixed_connections_spec=None,
+                   decompose=True):
         '''
         perform synthesis process
         '''
@@ -1205,9 +1206,12 @@ class Z3Interface(object):
 
         self.base_solver = solv
 
-        print('Decomposing Specification...')
-        clusters = decompose_spec(self.specification_list)
-
+        if decompose:
+            print('Decomposing Specification...')
+            clusters = decompose_spec(self.specification_list)
+        else:
+            clusters = [self.property_contract.output_ports_dict.keys()]
+            # LOG.debug(clusters)
 
         print('Instantiate Solvers...')
         #create parallel solvers

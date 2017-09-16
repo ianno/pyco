@@ -424,6 +424,11 @@ class GenIsolation1D(Contract):
                      !fail_r2'''
     GUARANTEES = 'c1 & G(fail1 -> X!c1)'
 
+    # INPUT_PORTS = [('fail1', ActiveGeneratorT)]
+    # OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT)]
+    # ASSUMPTIONS = '''!fail1 & G(fail1 -> Xfail1)'''
+    # GUARANTEES = 'G(c1|c2)'
+
 class GenIsolation2D(Contract):
     '''
     generator 2 is eventually disconnected if faulty.
@@ -543,6 +548,7 @@ class IsolateEmergencyBusD(Contract):
                      !fail_r1 & G(fail_r1 -> Xfail_r1) &
                      !fail_r2 & G(fail_r2 -> Xfail_r2)'''
     GUARANTEES = 'G((!fail1 & !fail2 & ! fail3 & !fail4) -> F(!c2 & !c3 & !c5 & !c6))'
+    # GUARANTEES = 'G((!fail1 & !fail2 & ! fail3 & !fail4) -> F(!c5 & !c6 ))'
 
 
 class DCRightD(Contract):

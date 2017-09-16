@@ -443,7 +443,7 @@ def test_synth_4gen_6c_ac_7spec(ac_lib, library_redundancy):
                          library_max_redundancy=library_redundancy)
 
 
-def test_synth_6_10_dc_1spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
+def test_synth_6_10_dc_1spec(acdc_lib, min_comps, min_ports, library_redundancy, filename, plain):
     '''
     Performs simple synthesis
     '''
@@ -466,14 +466,15 @@ def test_synth_6_10_dc_1spec(acdc_lib, min_comps, min_ports, library_redundancy,
     for _ in range(0, REP):
         interface.synthesize(strict_out_lib_map=False,
                              library_max_redundancy=library_redundancy,
-                             limit=3,
+                             limit=10,
                              minimize_components=min_comps,
                              minimize_ports=min_ports,
                              filename=filename,
-                             visualize=False)
+                             visualize=False,
+                             decompose=(not plain))
 
 
-def test_synth_6_10_dc_2spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
+def test_synth_6_10_dc_2spec(acdc_lib, min_comps, min_ports, library_redundancy, filename, plain):
     '''
     Performs simple synthesis
     '''
@@ -497,14 +498,15 @@ def test_synth_6_10_dc_2spec(acdc_lib, min_comps, min_ports, library_redundancy,
     for _ in range(0, REP):
         interface.synthesize(strict_out_lib_map=False,
                              library_max_redundancy=library_redundancy,
-                             limit=3,
+                             limit=10,
                              minimize_components=min_comps,
                              minimize_ports=min_ports,
                              filename=filename,
-                             visualize=False)
+                             visualize=False,
+                             decompose=(not plain))
 
 
-def test_synth_6_10_dc_3spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
+def test_synth_6_10_dc_3spec(acdc_lib, min_comps, min_ports, library_redundancy, filename, plain):
     '''
     Performs simple synthesis
     '''
@@ -529,14 +531,15 @@ def test_synth_6_10_dc_3spec(acdc_lib, min_comps, min_ports, library_redundancy,
     for _ in range(0, REP):
         interface.synthesize(strict_out_lib_map=False,
                          library_max_redundancy=library_redundancy,
-                         limit=3,
+                         limit=10,
                          minimize_components=min_comps,
                          minimize_ports=min_ports,
                              filename=filename,
-                             visualize=False)
+                             visualize=False,
+                             decompose=(not plain))
 
 
-def test_synth_6_10_dc_4spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
+def test_synth_6_10_dc_4spec(acdc_lib, min_comps, min_ports, library_redundancy, filename, plain):
     '''
     Performs simple synthesis
     '''
@@ -562,14 +565,15 @@ def test_synth_6_10_dc_4spec(acdc_lib, min_comps, min_ports, library_redundancy,
     for _ in range(0, REP):
         interface.synthesize(strict_out_lib_map=False,
                          library_max_redundancy=library_redundancy,
-                         limit=3,
+                         limit=10,
                          minimize_components=min_comps,
                          minimize_ports=min_ports,
                              filename=filename,
-                             visualize=False)
+                             visualize=False,
+                             decompose=(not plain))
 
 
-def test_synth_6_10_dc_5spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
+def test_synth_6_10_dc_5spec(acdc_lib, min_comps, min_ports, library_redundancy, filename, plain):
     '''
     Performs simple synthesis
     '''
@@ -597,14 +601,15 @@ def test_synth_6_10_dc_5spec(acdc_lib, min_comps, min_ports, library_redundancy,
     for _ in range(0, REP):
         interface.synthesize(strict_out_lib_map=False,
                          library_max_redundancy=library_redundancy,
-                         limit=3,
+                         limit=10,
                          minimize_components=min_comps,
                          minimize_ports=min_ports,
                              filename=filename,
-                             visualize=False)
+                             visualize=False,
+                             decompose=(not plain))
 
 
-def test_synth_6_10_dc_6spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
+def test_synth_6_10_dc_6spec(acdc_lib, min_comps, min_ports, library_redundancy, filename, plain):
     '''
     Performs simple synthesis
     '''
@@ -633,13 +638,14 @@ def test_synth_6_10_dc_6spec(acdc_lib, min_comps, min_ports, library_redundancy,
     for _ in range(0, REP):
         interface.synthesize(strict_out_lib_map=False,
                          library_max_redundancy=library_redundancy,
-                         limit=3,
+                         limit=10,
                          minimize_components=min_comps,
                          minimize_ports=min_ports,
                              filename=filename,
-                             visualize=False)
+                             visualize=False,
+                             decompose=(not plain))
 
-def test_synth_6_10_dc_7spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
+def test_synth_6_10_dc_7spec(acdc_lib, min_comps, min_ports, library_redundancy, filename, plain):
     '''
     Performs simple synthesis
     '''
@@ -668,13 +674,14 @@ def test_synth_6_10_dc_7spec(acdc_lib, min_comps, min_ports, library_redundancy,
     for _ in range(0, REP):
         interface.synthesize(strict_out_lib_map=False,
                          library_max_redundancy=library_redundancy,
-                         limit=3,
+                         limit=10,
                          minimize_components=min_comps,
                          minimize_ports=min_ports,
                              filename=filename,
-                             visualize=False)
+                             visualize=False,
+                             decompose=(not plain))
 
-def test_synth_6_10_dc_8spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
+def test_synth_6_10_dc_8spec(acdc_lib, min_comps, min_ports, library_redundancy, filename, plain):
     '''
     Performs simple synthesis
     '''
@@ -704,13 +711,14 @@ def test_synth_6_10_dc_8spec(acdc_lib, min_comps, min_ports, library_redundancy,
     for _ in range(0, REP):
         interface.synthesize(strict_out_lib_map=False,
                          library_max_redundancy=library_redundancy,
-                         limit=3,
+                         limit=10,
                          minimize_components=min_comps,
                          minimize_ports=min_ports,
                              filename=filename,
-                             visualize=False)
+                             visualize=False,
+                             decompose=(not plain))
 
-def test_synth_6_10_dc_9spec(acdc_lib, min_comps, min_ports, library_redundancy, filename):
+def test_synth_6_10_dc_9spec(acdc_lib, min_comps, min_ports, library_redundancy, filename, plain):
     '''
     Performs simple synthesis
     '''
@@ -744,11 +752,12 @@ def test_synth_6_10_dc_9spec(acdc_lib, min_comps, min_ports, library_redundancy,
     for _ in range(0, REP):
         interface.synthesize(strict_out_lib_map=False,
                          library_max_redundancy=library_redundancy,
-                         limit=3,
+                         limit=10,
                          minimize_components=min_comps,
                          minimize_ports=min_ports,
                              filename=filename,
-                             visualize=False)
+                             visualize=False,
+                             decompose=(not plain))
 
 
 ############# INCREMENTAL TESTS #################

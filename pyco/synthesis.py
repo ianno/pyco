@@ -111,7 +111,8 @@ class SynthesisInterface(object):
                    minimize_ports=False,
                    minimize_cost=False,
                    filename=None,
-                   visualize=True
+                   visualize=True,
+                   decompose=True
                    ):
         '''
         call for synthesis
@@ -136,7 +137,8 @@ class SynthesisInterface(object):
                                          distinct_mapping_constraints=self.distinct_map,
                                          fixed_components=self.fixed_components,
                                          fixed_connections=self.fixed_connections,
-                                         fixed_connections_spec=self.fixed_connections_spec)
+                                         fixed_connections_spec=self.fixed_connections_spec,
+                                         decompose=decompose)
         time2 = time.time()
         graphviz_conv = GraphizConverter(spec, composition, contract_list,
                                          synthesis_time=time2-time1, filename=filename)

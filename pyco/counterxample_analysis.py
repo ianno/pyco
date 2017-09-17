@@ -41,8 +41,7 @@ def parallel_solve(spec_list, output_port_names, model, manager, pid, found_evt,
 
     rel_spec_ports = set()
     for spec in spec_list:
-    #     rel_spec_ports |= spec.relevant_ports
-        rel_spec_ports |= {port for port in spec.ports_dict.values()}
+        rel_spec_ports |= spec.relevant_ports
 
     (contracts, composition, connected_spec,
      ref_formula, preamble, monitored,

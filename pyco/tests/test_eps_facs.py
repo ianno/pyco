@@ -739,6 +739,8 @@ def test_synth_6_10_dc_9spec(acdc_lib, min_comps, min_ports, library_redundancy,
     interface.same_block_constraint([spec1.fail2, spec1.c2])
     interface.same_block_constraint([spec1.fail3, spec1.c3])
     interface.same_block_constraint([spec1.fail4, spec1.c4])
+    ## interface.same_block_constraint([spec1.c2, spec1.c5])
+    ## interface.same_block_constraint([spec1.c3, spec1.c6])
     interface.distinct_ports_constraints([spec1.fail1, spec1.fail2, spec1.fail3, spec1.fail4,
                                           spec1.c1, spec1.c2, spec1.c3,
                                           spec1.c4, spec1.c5, spec1.c6,
@@ -754,7 +756,7 @@ def test_synth_6_10_dc_9spec(acdc_lib, min_comps, min_ports, library_redundancy,
                              filename=filename,
                              visualize=False,
                              decompose=(not plain))
-    
+
 
 ############# INCREMENTAL TESTS #################
 def test_synth_inc_1(acdc_lib, library_redundancy, no_types, filename):

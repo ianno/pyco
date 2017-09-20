@@ -81,9 +81,9 @@ class OutputProcessor(Process):
 
 class MultipleOutputProcessor(Process):
 
-    def __init__(self, pivot_name, spec_list, res_queue, semaphore):
+    def __init__(self, init_cluster, spec_list, res_queue, semaphore):
 
-        self.pivot_name = pivot_name
+        self.init_cluster = init_cluster
         self.spec_list = spec_list
         self.res_queue = res_queue
         self.semaphore = semaphore
@@ -95,12 +95,12 @@ class MultipleOutputProcessor(Process):
         process one output at a time
         :return:
         '''
-        print('\tmultiple output clusters, processing port %s' % self.pivot_name)
+        print('\tmultiple output clusters, processing port %s' % ', '.join(self.init_cluster))
 
         # LOG.debug(pivot_name)
-        cluster = set([self.pivot_name])
-        done = set()
-        done.add(self.pivot_name)
+        cluster = {x for x in self.init_cluster}
+        done = {x for x in self.init_cluster}
+        # done.add(self.pivot_name)
 
         while True:
             passed = True
@@ -227,7 +227,8 @@ class MultipleOutputProcessor(Process):
 
         assert len(cluster) >= 1
 
-        self.res_queue.put((self.pivot_name, frozenset(cluster)))
+        for pivot in self.init_cluster:
+            self.res_queue.put((pivot, frozenset(cluster)))
         self.semaphore.release()
         return
 
@@ -246,6 +247,44 @@ def decompose_spec(spec_list):
 
     unclustered = set(spec_outs_dict.keys())
     done = set()
+
+    #preprocess:
+    # find ports which behave exactly the same
+    init_clusters = []
+    done = set()
+    for pivot_name in unclustered:
+
+        if pivot_name not in done:
+            cluster = {pivot_name}
+            done.add(pivot_name)
+
+
+            for other_name in (unclustered - set([pivot_name])):
+
+                for spec in spec_list:
+                    w_spec = spec.copy()
+
+                    formula_r = Globally(Equivalence(w_spec.ports_dict[pivot_name].literal,
+                                                                      w_spec.ports_dict[other_name].literal,
+                                                                      merge_literals=False))
+
+                    guarantees = w_spec.guarantee_formula
+
+                    formula = Implication(guarantees, formula_r, merge_literals=False)
+
+                    l_passed = verify_tautology(formula, return_trace=False)
+
+                    if not l_passed:
+                        break
+
+
+                if l_passed:
+                    cluster.add(other_name)
+                    done.add(other_name)
+
+            init_clusters.append(cluster)
+
+    #done
 
     # first FAST pass, try to take out as many single ports as possible
     res_queue = Queue()
@@ -326,10 +365,10 @@ def decompose_spec(spec_list):
     # now process remaining unclustered elements, a bit slower.
     # we need to give a special input to the model checker,
     # to let it suggest what are related outputs
-    for pivot_name in unclustered:
+    for init in init_clusters:
 
         semaphore.acquire()
-        proc = MultipleOutputProcessor(pivot_name, spec_list, res_queue, semaphore)
+        proc = MultipleOutputProcessor(init, spec_list, res_queue, semaphore)
         proc.start()
         pool.append(proc)
 
@@ -339,6 +378,7 @@ def decompose_spec(spec_list):
         # everyone is done now
     while not res_queue.empty():
         (name, cluster) = res_queue.get_nowait()
+        # LOG.debug(cluster)
         clusters.append(set(cluster))
 
 
@@ -507,7 +547,8 @@ def parse_counterexample(ctx_str, monitored_vars):
     '''
     parse the counterexample trace and return the list of vars which are changing
     :param ctx_str:
-    :param monitored_vars: needs to be a dict {unique_name: base_name, ...}
+    :para
+    m monitored_vars: needs to be a dict {unique_name: base_name, ...}
     :return:
     '''
     diff = set()

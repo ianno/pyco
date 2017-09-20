@@ -89,18 +89,20 @@ if __name__ == "__main__":
 
     if args.eps20_plain in ['1', '2', '3', '4', '5', '6', '7', '8', '9']:
         print 'Running EPS test in pyco/tests/test_eps_facs.py::test_synth_6_10_dc_%sspec ' \
-              'with library of 20 elements...\n' % args.eps20
+              'with library of 20 elements and NO decomposition...\n' % args.eps20_plain
         pytest.main(['--lib2', '--plain', '--timeout='+str(TIMEOUT_SEC), '-s', 'pyco/tests/test_eps_facs.py::test_synth_6_10_dc_%sspec' % args.eps20_plain])
     if args.eps20_plain == 'all' or run_all:
-        print 'Running 9 EPS tests in pyco/tests/test_eps_facs.py::test_synth_6_10_dc_* with library of 20 elements...\n'
+        print 'Running 9 EPS tests in pyco/tests/test_eps_facs.py::test_synth_6_10_dc_* with library of 20 elements' \
+              ' and NO decomposition...\n'
         pytest.main(['--lib2', '--plain', '--timeout='+str(TIMEOUT_SEC), '-s', '-k test_synth_6_10_dc_', 'pyco/tests/test_eps_facs.py'])
 
     if args.eps40_plain in ['1', '2', '3', '4', '5', '6', '7', '8', '9']:
         print 'Running EPS test in pyco/tests/test_eps_facs.py::test_synth_6_10_dc_%sspec ' \
-              'with library of 40 elements...\n' % args.eps40
+              'with library of 40 elements and NO decomposition...\n' % args.eps40_plain
         pytest.main(['--lib4', '--plain', '--timeout='+str(TIMEOUT_SEC), '-s', 'pyco/tests/test_eps_facs.py::test_synth_6_10_dc_%sspec' % args.eps40_plain])
     if args.eps40_plain == 'all' or run_all:
-        print 'Running 9 EPS tests in pyco/tests/test_eps_facs.py::test_synth_6_10_dc_* with library of 40 elements...\n'
+        print 'Running 9 EPS tests in pyco/tests/test_eps_facs.py::test_synth_6_10_dc_* with library of 40 elements' \
+              ' and NO decomposition...\n'
         pytest.main(['--lib4', '--plain', '--timeout='+str(TIMEOUT_SEC), '-s', '-k test_synth_6_10_dc_', 'pyco/tests/test_eps_facs.py'])
 
     if args.eps20_ports in ['1', '2', '3', '4', '5', '6', '7', '8', '9']:

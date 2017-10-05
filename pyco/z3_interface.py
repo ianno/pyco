@@ -11,7 +11,7 @@ from time import time
 import types
 from z3 import *
 
-from pyco.contract import CompositionMapping, DummyType
+from pyco.contract import CompositionMapping
 from pyco import LOG
 from pyco.z3_thread_manager import ModelVerificationManager, MAX_THREADS
 from pyco.smt_factory import SMTModelFactory
@@ -1046,7 +1046,7 @@ class Z3Interface(object):
 
     def synthesize(self, property_contracts, limit=None,
                    library_max_redundancy=None,
-                   depth=3,
+                   depth=4,
                    strict_out_lib_map=False,
                    strict_in_spec_map=True,
                    use_types=True,

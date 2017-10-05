@@ -107,12 +107,18 @@ class Z3Library(object):
         if limit is None:
             limit = len(spec.output_ports_dict)
         # LOG.debug(limit)
-        self.max_components = min([library_max_redundancy, limit])
+        # self.max_components = min([library_max_redundancy, limit])
+        # self.max_num_components = self.max_components * len(self.library.components)
+
+
+        self.max_components = {}
+        self.max_num_components = {}
 
         comp_ind = 0b1
-        self.max_num_components = self.max_components * len(self.library.components)
 
-        for level in range(0, self.max_components):
+        for component in self.library.components:
+            contract = component.contract
+
             self.contract_index[level] = {}
             self.in_contract_index[level] = {}
             self.out_contract_index[level] = {}
@@ -121,8 +127,7 @@ class Z3Library(object):
             self.out_index[level] = {}
             self.relevant_models[level] = {}
 
-            for component in self.library.components:
-                contract = component.contract
+            for level in range(0, self.max_components):
 
                 self.contracts.add(contract)
                 self.contract_index[level][contract] = []

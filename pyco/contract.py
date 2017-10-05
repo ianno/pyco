@@ -10,7 +10,7 @@
 from pycolite.contract import (Contract as BaseContract, PortMapping, CompositionMapping,
                            RefinementMapping, NotARefinementError)
 from pycolite.parser.lexer import BaseSymbolSet
-
+from pycolite.types import Bool, Int, Float
 from pyco import LOG
 
 LOG.debug('In contract.py')
@@ -61,26 +61,40 @@ class Contract(BaseContract):
             try:
                 (port_name, port_type) = item
             except ValueError:
-                self.INPUT_PORTS[index] = (item, BaseType)
+                if isinstance(item, (list, tuple)):
+                    if len(item) >= 4:
+                        pass
+                else:
+                    self.INPUT_PORTS[index] = (item, BaseTypeBool)
 
         for index, item in enumerate(self.OUTPUT_PORTS):
             try:
                 (port_name, port_type) = item
             except ValueError:
-                self.OUTPUT_PORTS[index] = (item, BaseType)
+                if isinstance(item, (list, tuple)):
+                    if len(item) >= 4:
+                        pass
+                else:
+                    self.OUTPUT_PORTS[index] = (item, BaseTypeBool)
 
-        self.port_type = {port_name: port_type for (port_name, port_type)
+        self.port_type = {t_elems[0]: t_elems[1] for t_elems
                           in self.INPUT_PORTS + self.OUTPUT_PORTS}
+
+        # LOG.debug(self.port_type)
 
 
         # for each type, put together all ports with that type
-        self.in_type_map = {p_type: set() for p_type in set([t for (_, t) in self.INPUT_PORTS])}
-        self.out_type_map = {p_type: set() for p_type in set([t for (_, t) in self.OUTPUT_PORTS])}
+        self.in_type_map = {p_type: set() for p_type in set([t[1] for t in self.INPUT_PORTS])}
+        self.out_type_map = {p_type: set() for p_type in set([t[1] for t in self.OUTPUT_PORTS])}
 
-        for (name, p_type) in self.INPUT_PORTS:
+        for t in self.INPUT_PORTS:
+            name = t[0]
+            p_type = t[1]
             self.in_type_map[p_type].add(name)
 
-        for (name, p_type) in self.OUTPUT_PORTS:
+        for t in self.OUTPUT_PORTS:
+            name = t[0]
+            p_type = t[1]
             self.out_type_map[p_type].add(name)
 
 
@@ -89,9 +103,9 @@ class Contract(BaseContract):
         # LOG.debug(self.port_type)
 
         if input_ports is None:
-            input_ports = [port_name for (port_name, _) in self.INPUT_PORTS]
+            input_ports = [t for t in self.INPUT_PORTS]
         if output_ports is None:
-            output_ports = [port_name for (port_name, _) in self.OUTPUT_PORTS]
+            output_ports = [t for t in self.OUTPUT_PORTS]
         if assume_formula is None:
             assume_formula = self.ASSUMPTIONS
         if guarantee_formula is None:
@@ -129,26 +143,30 @@ class Contract(BaseContract):
             # port.assign_to_solver(smt_manager)
 
 
-class DummyType(object):
-    '''
-    Implements base type for contract ports
-    '''
-    pass
+# class DummyType(object):
+#     '''
+#     Implements base type for contract ports
+#     '''
+#     pass
 
 
-class BaseType(DummyType):
+class BaseTypeBool(Bool):
     """
     Implements base type for contract ports
     """
     pass
 
-
-class IntRangeType(BaseType):
+class BaseTypeInt(Int):
     """
     Implements base type for contract ports
     """
-    min = None
-    max = None
+    pass
+
+class BaseTypeFloat(Float):
+    """
+    Implements base type for contract ports
+    """
+    pass
 
 
 class PortMappingError(Exception):

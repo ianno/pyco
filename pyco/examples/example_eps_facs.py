@@ -9,7 +9,7 @@ Author: Antonio Iannopollo
 '''
 
 
-from pyco.contract import Contract, BaseType
+from pyco.contract import Contract, BaseTypeBool as BaseType
 from pyco.library import (ContractLibrary, LibraryComponent,
                           LibraryPortMapping, LibraryCompositionMapping)
 from pyco.synthesis import SynthesisInterface

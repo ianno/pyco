@@ -117,7 +117,7 @@ class SynthesisInterface(object):
         '''
         call for synthesis
         '''
-        LOG.debug(filename)
+        # LOG.debug(filename)
         if filename is None:
             filename = 'out'
 

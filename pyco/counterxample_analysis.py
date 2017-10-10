@@ -173,14 +173,14 @@ class ParallelSolver(Process):
                 spec_port = self.spec.ports_dict[name]
 
                 if spec_port.base_name == orig_port1.base_name:
-                    self.model_map[mod.get_id()] = self.manager.lib_model.index[orig_lev2][orig_port2]
+                    self.model_map[mod.get_id()] = self.manager.lib_model.index[orig_port2][orig_lev2]
 
         else:
             mod = self.manager.lib_model.model_by_port(orig_port1)[orig_lev1]
 
 
             if orig_lev2 > -1:
-                self.model_map[mod.get_id()] = self.manager.lib_model.index[orig_lev2][orig_port2]
+                self.model_map[mod.get_id()] = self.manager.lib_model.index[orig_port2][orig_lev2]
 
                 # LOG.debug(manager.lib_model.index[c_level][c_port])
                 # LOG.debug(manager.lib_model.port_by_index(manager.lib_model.index[c_level][c_port]).base_name)
@@ -462,7 +462,7 @@ def process_model(unconnected_spec, output_port_names, rel_spec_ports, model, ma
                 p0_orig = other_contract_orig.ports_dict[p0_name]
 
                 # update model map
-                model_map[mod.get_id()] = manager.lib_model.index[level][p0_orig]
+                model_map[mod.get_id()] = manager.lib_model.index[p0_orig][level]
 
                 # we do not monitor this variable anymore
                 monitored_variables.pop((-1, orig_spec_port, spec_port.base_name))
@@ -583,7 +583,7 @@ def process_model(unconnected_spec, output_port_names, rel_spec_ports, model, ma
                     monitored_variables.pop((level, old_port, current_p_composition_name))
 
                     # update model map
-                    model_map[p_model.get_id()] = manager.lib_model.index[level][p0_orig]
+                    model_map[p_model.get_id()] = manager.lib_model.index[p0_orig][level]
 
                     #connect
                     mapping.connect(current_port, p0,

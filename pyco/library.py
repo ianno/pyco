@@ -9,8 +9,8 @@ import itertools
 from pycolite.attribute import Attribute
 
 from pyco.contract import (RefinementMapping, PortMappingError, PortMapping,
-                           CompositionMapping, NotARefinementError, BaseType,
-                           NotATypeError)
+                           CompositionMapping, NotARefinementError, BaseTypeBool, BaseTypeInt,
+                            BaseTypeFloat, NotATypeError)
 from pyco import LOG
 from pyco.solver_interface import SMTManager
 
@@ -29,7 +29,7 @@ class ContractLibrary(object):
 
         #type structures
         self.typeset = set()
-        self.typeset.add(BaseType)
+        self.typeset.add(BaseTypeBool)
 
         self._type_compatibility_set = set()
 
@@ -102,10 +102,10 @@ class ContractLibrary(object):
     @property
     def type_compatibility_set(self):
         '''
-        Returns BaseType-BaseType if the set is empty
+        Returns BaseTypeBool-BaseTypeBool if the set is empty
         '''
         if not self._type_compatibility_set:
-            return set([(BaseType, BaseType)])
+            return set([(BaseTypeBool, BaseTypeBool)])
         else:
             return self._type_compatibility_set
 
@@ -129,7 +129,9 @@ class ContractLibrary(object):
         '''
         add a type class to the list
         '''
-        if not issubclass(type_cls, BaseType):
+        if not (issubclass(type_cls, BaseTypeBool) or
+                issubclass(type_cls, BaseTypeInt) or
+                issubclass(type_cls, BaseTypeFloat)):
             raise NotATypeError(type_cls)
 
         self.typeset.add(type_cls)
@@ -224,12 +226,14 @@ class LibraryComponent(object):
     '''
 
     def __init__(self, base_name, components, mapping=None,
-                 distinct_set = None, verify=True, context=None):
+                 distinct_set = None, verify=True, context=None,
+                 cardinality=0):
         '''
         initialize component
         '''
         self.library = None
         self.mapping = mapping
+        self.cardinality = cardinality
 
         self.distinct_set = distinct_set
         if self.distinct_set == None:

@@ -16,38 +16,38 @@ LOG.debug('in z3_library_conversion')
 DEFAULT_MAX_REDUNDANCY = 1
 
 
-def convert_formula_to_z3(formula, contract_vars, level):
-    '''
-    return a Z3 formula from a pycolite-lite-dev formula structure
-    '''
-
-    if formula.is_literal:
-        return contract_vars['%d-%s' % (level, formula.unique_name)]
-    elif isinstance(formula, TrueFormula):
-        return True
-    elif isinstance(formula, FalseFormula):
-        return False
-    elif isinstance(formula, Negation):
-        return Not(convert_formula_to_z3(formula.right_formula,
-            contract_vars, level))
-    elif isinstance(formula, Conjunction):
-        return And(convert_formula_to_z3(formula.left_formula,
-                                                contract_vars, level),
-         convert_formula_to_z3(formula.right_formula, contract_vars, level))
-    elif isinstance(formula, Disjunction):
-        return Or(convert_formula_to_z3(formula.left_formula,
-                                                    contract_vars, level),
-         convert_formula_to_z3(formula.right_formula, contract_vars, level))
-    elif isinstance(formula, Implication):
-        return Implies(convert_formula_to_z3(formula.left_formula,
-                                                        contract_vars, level),
-         convert_formula_to_z3(formula.right_formula, contract_vars, level))
-    elif isinstance(formula, Equivalence):
-        return (convert_formula_to_z3(formula.left_formula,
-                                                        contract_vars, level)
-         == convert_formula_to_z3(formula.right_formula, contract_vars, level))
-    else:
-        LOG.critical('incorrect unrolled formula')
+# def convert_formula_to_z3(formula, contract_vars, level):
+#     '''
+#     return a Z3 formula from a pycolite-dev formula structure
+#     '''
+#
+#     if formula.is_literal:
+#         return contract_vars['%d-%s' % (level, formula.unique_name)]
+#     elif isinstance(formula, TrueFormula):
+#         return True
+#     elif isinstance(formula, FalseFormula):
+#         return False
+#     elif isinstance(formula, Negation):
+#         return Not(convert_formula_to_z3(formula.right_formula,
+#             contract_vars, level))
+#     elif isinstance(formula, Conjunction):
+#         return And(convert_formula_to_z3(formula.left_formula,
+#                                                 contract_vars, level),
+#          convert_formula_to_z3(formula.right_formula, contract_vars, level))
+#     elif isinstance(formula, Disjunction):
+#         return Or(convert_formula_to_z3(formula.left_formula,
+#                                                     contract_vars, level),
+#          convert_formula_to_z3(formula.right_formula, contract_vars, level))
+#     elif isinstance(formula, Implication):
+#         return Implies(convert_formula_to_z3(formula.left_formula,
+#                                                         contract_vars, level),
+#          convert_formula_to_z3(formula.right_formula, contract_vars, level))
+#     elif isinstance(formula, Equivalence):
+#         return (convert_formula_to_z3(formula.left_formula,
+#                                                         contract_vars, level)
+#          == convert_formula_to_z3(formula.right_formula, contract_vars, level))
+#     else:
+#         LOG.critical('incorrect unrolled formula')
 
 
 class Z3Library(object):
@@ -95,7 +95,7 @@ class Z3Library(object):
         self.bitvect_repr = {}
         # self.model_bitmap = {}
 
-        self.unrolled_info = {}
+        # self.unrolled_info = {}
 
         self.spec = spec
 
@@ -112,27 +112,34 @@ class Z3Library(object):
 
 
         self.max_components = {}
-        self.max_num_components = {}
+
+        elems = [component.cardinality if component.cardinality > 0 else min([library_max_redundancy, limit])
+                 for component in self.library.components]
+        self.max_num_components = sum(elems)
 
         comp_ind = 0b1
 
         for component in self.library.components:
             contract = component.contract
 
-            self.contract_index[level] = {}
-            self.in_contract_index[level] = {}
-            self.out_contract_index[level] = {}
-            self.index[level] = {}
-            self.in_index[level] = {}
-            self.out_index[level] = {}
-            self.relevant_models[level] = {}
+            self.contract_index[contract] = {}
+            self.in_contract_index[contract] = {}
+            self.out_contract_index[contract] = {}
+            self.relevant_models[contract] = {}
 
-            for level in range(0, self.max_components):
+
+            cardinality = component.cardinality
+            if cardinality == 0:
+                cardinality = min([library_max_redundancy, limit])
+
+            self.max_components[contract] = cardinality
+
+            for level in range(0, cardinality):
 
                 self.contracts.add(contract)
-                self.contract_index[level][contract] = []
-                self.in_contract_index[level][contract] = []
-                self.out_contract_index[level][contract] = []
+                self.contract_index[contract][level] = []
+                self.in_contract_index[contract][level] = []
+                self.out_contract_index[contract][level] = []
 
                 c_flag = Int('%s-%d' % (contract.base_name, level), self.context)
                 self.contract_use_flags.append(c_flag)
@@ -142,7 +149,7 @@ class Z3Library(object):
                 #bitvector map
                 self.bitmap_comp_index['%s-%d' % (contract.base_name, level)] = comp_ind #z3.BitVecVal(comp_ind,  self.max_num_components)
 
-                self.bitvect_repr[comp_ind] = z3.BitVec("bitvar_"+str(comp_ind), self.max_num_components, self.context)
+                self.bitvect_repr[comp_ind] = z3.BitVec("bitvar_"+str(comp_ind),  self.max_num_components, self.context)
 
                 #shift one bit
                 comp_ind = comp_ind << 1
@@ -161,9 +168,9 @@ class Z3Library(object):
                 #self.unrolled_info[contract][level]['unroll_guarantee'] = unr_g
                 #END UNROLL COMMENT
 
-                self.relevant_models[level][contract] = {}
-                self.relevant_models[level][contract][0] = []
-                self.relevant_models[level][contract][1] = []
+                self.relevant_models[contract][level] = {}
+                self.relevant_models[contract][level][0] = []
+                self.relevant_models[contract][level][1] = []
 
 
                 for port in contract.input_ports_dict.values():
@@ -176,6 +183,10 @@ class Z3Library(object):
                     self.model_levels[model.get_id()] = level
                     self.model_contracts[model.get_id()] = contract
 
+                    if port not in self.index:
+                        self.index[port] = {}
+                        self.in_index[port] = {}
+
                     #bitvector map
                     #self.model_bitmap[model.get_id()] = z3.Bool('bit_%d-%s' % (level, port.unique_name))
 
@@ -186,11 +197,11 @@ class Z3Library(object):
                     #reverse lookup
                     self.model_index[model.get_id()] = len(self.models) - 1
                     self.model_in_index[model.get_id()] = len(self.models) - 1
-                    self.index[level][port] = len(self.models) - 1
-                    self.in_index[level][port] = len(self.in_models) - 1
+                    self.index[port][level] = len(self.models) - 1
+                    self.in_index[port][level] = len(self.in_models) - 1
 
-                    self.contract_index[level][contract].append(len(self.models) - 1)
-                    self.in_contract_index[level][contract].append(len(self.in_models) - 1)
+                    self.contract_index[contract][level].append(len(self.models) - 1)
+                    self.in_contract_index[contract][level].append(len(self.in_models) - 1)
 
                 for port in contract.output_ports_dict.values():
                     model = z3.Int('%d-%s' % (level, port.unique_name), self.context)
@@ -201,6 +212,11 @@ class Z3Library(object):
                     self.out_ports.append(port)
                     self.model_levels[model.get_id()] = level
                     self.model_contracts[model.get_id()] = contract
+
+
+                    if port not in self.index:
+                        self.index[port] = {}
+                        self.out_index[port] = {}
 
                     #bitvector map
                     #no need for outputs
@@ -213,17 +229,17 @@ class Z3Library(object):
                     #reverse lookup
                     self.model_index[model.get_id()] = len(self.models) - 1
                     self.model_out_index[model.get_id()] = len(self.models) - 1
-                    self.index[level][port] = len(self.models) - 1
-                    self.out_index[level][port] = len(self.out_models) - 1
+                    self.index[port][level] = len(self.models) - 1
+                    self.out_index[port][level] = len(self.out_models) - 1
 
-                    self.contract_index[level][contract].append(len(self.models) - 1)
-                    self.out_contract_index[level][contract].append(len(self.out_models) - 1)
+                    self.contract_index[contract][level].append(len(self.models) - 1)
+                    self.out_contract_index[contract][level].append(len(self.out_models) - 1)
 
 
                 (rel_in, rel_out) = self.__infer_relevant_ports(level, contract)
 
-                self.relevant_models[level][contract][0] = rel_out
-                self.relevant_models[level][contract][1] = rel_in
+                self.relevant_models[contract][level][0] = rel_out
+                self.relevant_models[contract][level][1] = rel_in
 
         # #add declarations for spec out
         # for name in self.spec.output_ports_dict:
@@ -316,10 +332,10 @@ class Z3Library(object):
         # LOG.debug(ports)
 
         ports_names = set([port.base_name for port in ports])
-        in_models = [self.models[self.index[level][port]] for name, port in contract.input_ports_dict.items()
+        in_models = [self.models[self.index[port][level]] for name, port in contract.input_ports_dict.items()
                      if name in ports_names]
 
-        out_models = [self.models[self.index[level][port]] for name, port in contract.output_ports_dict.items()
+        out_models = [self.models[self.index[port][level]] for name, port in contract.output_ports_dict.items()
                       if name in ports_names]
 
         return in_models, out_models
@@ -409,15 +425,15 @@ class Z3Library(object):
         '''
         return all the indices for a contract
         '''
-        return [self.contract_index[level][contract]
-                for level in range(0, self.max_components)]
+        return [self.contract_index[contract][level]
+                for level in range(0, self.max_components[contract])]
 
     def contract_in_indices(self, contract):
         '''
         return all the input indices for a contract
         '''
-        return [self.in_contract_index[level][contract]
-                for level in range(0, self.max_components)]
+        return [self.in_contract_index[contract][level]
+                for level in range(0, self.max_components[contract])]
 
     def contract_out_indices(self, contract):
         '''
@@ -425,8 +441,8 @@ class Z3Library(object):
         '''
         # LOG.debug(hex(id(contract)))
         # LOG.debug(self.out_contract_index)
-        return [self.out_contract_index[level][contract]
-                for level in range(0, self.max_components)]
+        return [self.out_contract_index[contract][level]
+                for level in range(0, self.max_components[contract])]
 
     def port_by_model(self, model):
         '''
@@ -438,46 +454,46 @@ class Z3Library(object):
         '''
         returns the model given a port
         '''
-        return [self.models[self.index[level][port]]
-                for level in range(0, self.max_components)]
+        return [self.models[self.index[port][level]]
+                for level in range(0, self.max_components[port.contract])]
 
     def in_model_by_port(self, port):
         '''
         returns the model given a port
         '''
-        return [self.in_models[self.in_index[level][port]]
-                for level in range(0, self.max_components)]
+        return [self.in_models[self.in_index[port][level]]
+                for level in range(0, self.max_components[port.contract])]
 
     def out_model_by_port(self, port):
         '''
         returns the model given a port
         '''
-        return [self.out_models[self.out_index[level][port]]
-                for level in range(0, self.max_components)]
+        return [self.out_models[self.out_index[port][level]]
+                for level in range(0, self.max_components[port.contract])]
 
     def contract_models(self, contract):
         '''
         returns all models related to a contract
         '''
         return [[self.models[index]
-                 for index in self.contract_index[level][contract]]
-                for level in range(0, self.max_components)]
+                 for index in self.contract_index[contract][level]]
+                for level in range(0, self.max_components[contract])]
 
     def contract_in_models(self, contract):
         '''
         returns all models related to a contract
         '''
         return [[self.in_models[index]
-                 for index in self.in_contract_index[level][contract]]
-                for level in range(0, self.max_components)]
+                 for index in self.in_contract_index[contract][level]]
+                for level in range(0, self.max_components[contract])]
 
     def contract_out_models(self, contract):
         '''
         returns all models related to a contract
         '''
         return [[self.out_models[index]
-                 for index in self.out_contract_index[level][contract]]
-                for level in range(0, self.max_components)]
+                 for index in self.out_contract_index[contract][level]]
+                for level in range(0, self.max_components[contract])]
 
     def all_other_models(self, model):
         '''
@@ -505,7 +521,7 @@ class Z3Library(object):
         contract = self.model_contracts[model.get_id()]
 
         return [self.models[index]
-                 for index in self.contract_index[level][contract]]
+                 for index in self.contract_index[contract][level]]
 
     def related_in_models(self, model):
         '''
@@ -517,7 +533,7 @@ class Z3Library(object):
         contract = self.model_contracts[model.get_id()]
 
         return [self.in_models[index]
-                 for index in self.in_contract_index[level][contract]]
+                 for index in self.in_contract_index[contract][level]]
 
     def related_out_models(self, model):
         '''
@@ -529,7 +545,7 @@ class Z3Library(object):
         contract = self.model_contracts[model.get_id()]
 
         return [self.out_models[index]
-                 for index in self.out_contract_index[level][contract]]
+                 for index in self.out_contract_index[contract][level]]
 
     def models_by_contracts(self):
         '''
@@ -592,17 +608,28 @@ class Z3Library(object):
         makes copies of contracts considering models
         and levels, and put them in a dictionary
         '''
-        levels = [{} for _ in range(0, self.max_components)]
+        # levels = [{} for _ in range(0, self.max_components)]
+        levels = {}
         model_map_contract = {}
         contract_map = {}
 
+        # for model in model_list:
+        #     level, contract = self.contract_by_model(model)
+        #     if contract not in levels[level]:
+        #         levels[contract][level] = contract.copy()
+        #
+        #     model_map_contract[model.get_id()] = levels[contract][level]
+        #     contract_map[(level, contract)] = levels[contract][level]
+
         for model in model_list:
             level, contract = self.contract_by_model(model)
-            if contract not in levels[level]:
-                levels[level][contract] = contract.copy()
+            if contract not in levels:
+                levels[contract] = {}
+            if level not in levels[contract]:
+                levels[contract][level] = contract.copy()
 
-            model_map_contract[model.get_id()] = levels[level][contract]
-            contract_map[(level, contract)] = levels[level][contract]
+            model_map_contract[model.get_id()] = levels[contract][level]
+            contract_map[(level, contract)] = levels[contract][level]
 
 
         return model_map_contract, contract_map
@@ -615,7 +642,17 @@ class Z3Library(object):
         if index == -1:
             return -1
 
-        return (index + self.max_single_level_index * shift_lev) % self.max_index
+        # return (index + self.max_single_level_index * shift_lev) % self.max_index
+
+        port = self.port_by_index(index)
+        contract = port.contract
+        mod = self.models[index]
+        level = self.model_levels[mod.get_id()]
+
+        shifted = (level + shift_lev) % self.max_components[contract]
+
+        return self.index[port][shifted]
+
 
     def model_shift(self, model, shift_lev):
         '''
@@ -644,7 +681,7 @@ class Z3Library(object):
         :return:
         '''
 
-        return self.relevant_models[level][contract][1]
+        return self.relevant_models[contract][level][1]
 
     def relevant_output_models(self, level, contract):
         '''
@@ -654,7 +691,7 @@ class Z3Library(object):
         :return:
         '''
 
-        return self.relevant_models[level][contract][0]
+        return self.relevant_models[contract][level][0]
 
     def relevant_input_indices(self, level, contract):
         '''

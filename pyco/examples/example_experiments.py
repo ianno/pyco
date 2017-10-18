@@ -15,7 +15,7 @@ from pyco import LOG
 
 
 #let's start with types
-class IntT(BaseTypeFloat):
+class IntT(BaseTypeInt):
     '''
      type
     '''

@@ -14,7 +14,7 @@ from pyco import LOG
 from counterxample_analysis import counterexample_analysis, parallel_solve
 import time
 
-MAX_THREADS = 1
+MAX_THREADS = 7
 
 #NotSynthesizableError = z3_interface.NotSynthesizableError
 
@@ -229,10 +229,14 @@ class RefinementChecker(multiprocessing.Process):
         #return
         # state, composition, connected_spec, contract_inst= \
             # self.check_all_specs_threadsafe(self.model, z3_lock=self.z3_lock)
+        # state = \
+        #     parallel_solve(self.z3_interface.specification_list, self.output_port_names,
+        #                             self.model, self.z3_interface, self.pid, self.found_event,
+        #                    self.manager.result_queue, self.terminate_event)
         state = \
-            parallel_solve(self.z3_interface.specification_list, self.output_port_names,
+            counterexample_analysis(self.z3_interface.specification_list, self.output_port_names,
                                     self.model, self.z3_interface, self.pid, self.found_event,
-                           self.manager.result_queue, self.terminate_event)
+                                    self.manager.result_queue, self.terminate_event)
 
         if not state:
             self.manager.fail_queue.put(self.pid)

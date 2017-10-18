@@ -35,6 +35,9 @@ class SinglePortSolver(multiprocessing.Process):
                  spec_port_names, spec_contract, library_max_redundancy, limit,
                  minimize_components=False, minimize_ports=False):
 
+        # set_option(verbose=15)
+        # set_option(proof=False)
+
         self.z3_interface = z3_interface
 
         self.spec_contract = spec_contract
@@ -71,11 +74,16 @@ class SinglePortSolver(multiprocessing.Process):
 
         # r = t.apply(self.goal_constraints)
         #
+        # t = Then('simplify', 'elim-term-ite', 'solve-eqs', 'smt', ctx=self.context)
 
         optimize = minimize_components or minimize_ports
 
 
         self.solver = Solver(ctx=self.context)
+        # self.solver = Then('simplify', 'bit-blast', 'split-clause',
+        #                    'qfbv', 'sat', ctx=self.context).solver()
+
+        # self.solver = Then('simplify', 'smt', ctx=self.context).solver()
         # self.solver = Tactic('qflia', ctx=self.context).solver()#Solver(ctx=self.context)
 
         if optimize:
@@ -104,7 +112,7 @@ class SinglePortSolver(multiprocessing.Process):
 
         # set seed
         # self.solver.set('seed', 12345)
-        # set_option(verbose=10)
+
 
         super(SinglePortSolver, self).__init__()
 

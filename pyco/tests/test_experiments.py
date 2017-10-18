@@ -86,7 +86,7 @@ def test_spec_1(lib):
 
     interface.synthesize(strict_out_lib_map=False,
                              library_max_redundancy=2,
-                             limit=3,
+                             limit=4,
                              minimize_components=False,
                              minimize_ports=False,
                              filename='exp',

@@ -23,7 +23,7 @@ class ModelVerificationManager(object):
     manages refinement threads
     '''
 
-    def __init__(self, z3_interface, output_port_names):
+    def __init__(self, z3_interface, output_port_names, semaphore):
         '''
         set up solver and thread status
         '''
@@ -32,7 +32,7 @@ class ModelVerificationManager(object):
         self.z3_interface = z3_interface
         self.spec_contract = self.z3_interface.spec_contract
         self.spec_out_dict = self.z3_interface.spec_out_dict
-        self.semaphore = multiprocessing.Semaphore(MAX_THREADS)
+        self.semaphore = semaphore
         self.found_refinement = multiprocessing.Event()
 
         self.composition = None
@@ -123,15 +123,15 @@ class ModelVerificationManager(object):
         '''
         close up nicely
         '''
-        print('')
-        LOG.debug('terminating')
         #pid = self.result_queue.get()
 
+        print('')
         # import time
         # while True:
         #     time.sleep(1)
         # with self.pool_lock:
         if not wait:
+            LOG.debug('terminating')
             self.terminate_event.set()
 
         # LOG.debug(self.thread_pool)
@@ -139,6 +139,7 @@ class ModelVerificationManager(object):
             thread.join()
 
         if self.found_refinement.is_set():
+            LOG.debug("get solution")
             pids = []
             model_map = {}
             while not self.result_queue.empty():

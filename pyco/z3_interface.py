@@ -11,6 +11,7 @@ from time import time
 import types
 from z3 import *
 
+import multiprocessing
 from pyco.contract import CompositionMapping
 from pyco import LOG
 from pyco.z3_thread_manager import ModelVerificationManager, MAX_THREADS
@@ -1284,6 +1285,8 @@ class Z3Interface(object):
         print('Instantiate Solvers...')
         #create parallel solvers
         solvers = []
+
+        semaphore = multiprocessing.Semaphore(MAX_THREADS)
         for cluster in clusters:
         # for cluster in [['o1', 'o2', 'o3']]:
         # for cluster in [['c2','c3','c5','c6']]:
@@ -1301,7 +1304,8 @@ class Z3Interface(object):
             self.base_solver.pop()
 
             solver_p = SinglePortSolver(self, new_assertions, context,
-                                        cluster, property_contract,
+                                        cluster, semaphore,
+                                        property_contract,
                                         library_max_redundancy, limit,
                                         minimize_components, minimize_ports)
 

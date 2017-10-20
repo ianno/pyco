@@ -32,13 +32,16 @@ class SinglePortSolver(multiprocessing.Process):
 
     def __init__(self, z3_interface, assertions,
                  context,
-                 spec_port_names, spec_contract, library_max_redundancy, limit,
+                 spec_port_names, semaphore, spec_contract,
+                 library_max_redundancy, limit,
                  minimize_components=False, minimize_ports=False):
 
         # set_option(verbose=15)
         # set_option(proof=False)
 
         self.z3_interface = z3_interface
+
+        self.semaphore = semaphore
 
         self.spec_contract = spec_contract
         self.context = context
@@ -124,7 +127,7 @@ class SinglePortSolver(multiprocessing.Process):
 
         size = initial_size
         if MAX_THREADS >= 1:
-            thread_manager = ModelVerificationManager(self, self.spec_port_names)
+            thread_manager = ModelVerificationManager(self, self.spec_port_names, self.semaphore)
 
             try:
                 (model, composition,

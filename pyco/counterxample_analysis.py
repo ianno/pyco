@@ -1202,7 +1202,14 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, monit
                 # LOG.debug(preamble)
                 if len(cex_list) > 0:
                     LOG.debug(len(cex_list))
-                    formula = build_formula_for_multiple_inputs(preamble, all_candidates, neg_formula, left_sides, cex_list, monitored_variables)
+                    # formula = build_formula_for_multiple_inputs(preamble, all_candidates, neg_formula, left_sides, cex_list, monitored_variables)
+
+                    left = Conjunction(preamble, left_sides, merge_literals=False)
+                    left = Conjunction(left, Negation(all_candidates), merge_literals=False)
+                    # left = Conjunction(left, all_cex, merge_literals=False)
+
+                    formula = Implication(left, neg_formula, merge_literals=False)
+
                 else:
                     temp = Conjunction(preamble, left_sides, merge_literals=False)
                     formula = Implication(temp, neg_formula, merge_literals=False)
@@ -1212,7 +1219,7 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, monit
                 # LOG.debug(formula.generate())
                 l_passed, trace = verify_tautology(formula, return_trace=True)
 
-                LOG.debug(l_passed)
+                # LOG.debug(l_passed)
                 # LOG.debug(trace)
                 # LOG.debug(l_passed)
                 print('.'),
@@ -1259,10 +1266,10 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, monit
                     #
                     #     assert not l_passed
 
-                    if all_candidates is None:
-                        all_candidates = candidate_connection
-                    else:
-                        all_candidates = Disjunction(all_candidates, candidate_connection, merge_literals=False)
+                    # if all_candidates is None:
+                    #     all_candidates = candidate_connection
+                    # else:
+                    #     all_candidates = Disjunction(all_candidates, candidate_connection, merge_literals=False)
 
 
                     #now check if candidate is a good solution in general:
@@ -1271,20 +1278,20 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, monit
                     # for ref_formula in ref_formulas:
                     # if all_cex is not None:
                     #     candidate_connection = Conjunction(candidate_connection, Negation(all_cex), merge_literals=False)
+                    for ref_formula in ref_formulas:
+                        candidate = Implication(candidate_connection, ref_formula, merge_literals=False)
 
-                    candidate = Implication(candidate_connection, conj_specs, merge_literals=False)
+                        l_passed, trace = verify_tautology(candidate, return_trace=True)
 
-                    l_passed, trace = verify_tautology(candidate, return_trace=True)
+                        if terminate_evt.is_set():
+                            return False, None, None, None
 
-                        # if terminate_evt.is_set():
-                        #     return False, None, None, None
-                        #
-                        # if not l_passed:
-                        #     break
+                        if not l_passed:
+                            break
 
                     if terminate_evt.is_set():
                         return False, None, None, None
-                    LOG.debug(l_passed)
+                    # LOG.debug(l_passed)
                     # LOG.debug(trace)
                     # if not l_passed:
                     #     new_preamble = Conjunction(preamble, Negation(candidate_connection), merge_literals=False)
@@ -1311,8 +1318,10 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, monit
                         candidate = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), v_assign)
 
                         # LOG.debug(candidate)
-
-                        all_candidates = Disjunction(all_candidates, candidate, merge_literals=False)
+                        if all_candidates is None:
+                            all_candidates = candidate
+                        else:
+                            all_candidates = Disjunction(all_candidates, candidate, merge_literals=False)
 
 
                     # if l_passed:
@@ -1354,10 +1363,11 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, monit
 
                                 #next_cex = Disjunction(all_cex, input_formula, merge_literals=False)
 
-                                check = Implication(input_formula, all_cex, merge_literals=False)
-                                checked = verify_tautology(check, return_trace=False)
-
-                                if checked:
+                                # check = Implication(input_formula, all_cex, merge_literals=False)
+                                # checked = verify_tautology(check, return_trace=False)
+                                #
+                                # if checked:
+                                if False:
                                     LOG.debug('same learned input sequence... done with this candidate')
                                     # LOG.debug('check for non-deterministic solutions')
 
@@ -1573,7 +1583,7 @@ def trace_analysis(trace, monitored_vars):
                 p_val = c_vars[p.unique_name]
 
                 for v_p in monitored_vars[p]['ports']:
-                    if v_p in var_assign[p] and c_vars[v_p.unique_name] != p_val:
+                    if v_p in var_assign[p] and c_vars[v_p.unique_name] != p_val and c_vars[v_p.unique_name] is not None:
                         # LOG.debug('remove')
                         # LOG.debug(p.unique_name)
                         # LOG.debug(p_val)

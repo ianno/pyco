@@ -10,8 +10,9 @@ from pyco import LOG
 from pyco.contract import CompositionMapping
 from pycolite.formula import (Globally, Equivalence, Disjunction, Implication,
                               Negation, Conjunction, Next, TrueFormula, FalseFormula,
-                                Constant, Eventually)
+                                Constant, Eventually, Until)
 from pycolite.nuxmv import NuxmvRefinementStrategy, verify_tautology
+from pycolite.parser.parser import LTL_PARSER
 from multiprocessing import *
 
 
@@ -296,10 +297,12 @@ def counterexample_analysis(spec_list, output_port_names, model, manager, pid,
         return False, composition, connected_spec, contracts, model_map
 
     (contracts, compositions, connected_spec,
-     ref_formulas, neg_formula, preamble, monitored, model_map) = process_model(spec_list, output_port_names, rel_spec_ports,
+     ref_formulas, neg_formula, preamble, left_sides, monitored, model_map) = process_model(spec_list, output_port_names, rel_spec_ports,
                                                      model, manager)
 
     input_variables = set([p for p in connected_spec.input_ports_dict.values()])
+
+
         # from graphviz_converter import GraphizConverter
         # graphviz_conv = GraphizConverter(connected_spec, composition, contracts)
         # graphviz_conv.generate_graphviz()
@@ -312,7 +315,7 @@ def counterexample_analysis(spec_list, output_port_names, model, manager, pid,
 
 
     #performs first step of learning loo?p
-    passed, candidate, new_preamble, var_assign = exists_forall_learner(ref_formulas, neg_formula, preamble, monitored, input_variables, terminate_evt)
+    passed, candidate, new_preamble, var_assign = exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, monitored, input_variables, terminate_evt)
     # LOG.debug(passed)
     # while not passed:
     #     #check again if terminate is set
@@ -321,7 +324,8 @@ def counterexample_analysis(spec_list, output_port_names, model, manager, pid,
     #
     if not passed:
         #nope, not found
-        # LOG.debug('nope')
+        LOG.debug('nope')
+        # assert False
         return False, composition, connected_spec, contracts, model_map
 
         # else:
@@ -823,6 +827,8 @@ def process_model(spec_list, output_port_names, relevant_spec_ports,
 
     # neg_formula = Negation(reduce(lambda x, y: Conjunction(x, y, merge_literals=False), ref_formulas))
 
+    left_sides = TrueFormula()
+
     if len(formulas) > 0:
 
         preamble = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), formulas)
@@ -845,10 +851,10 @@ def process_model(spec_list, output_port_names, relevant_spec_ports,
         # ref = Disjunction(ref, ref1, merge_literals=False)
 
         for c in compositions.values():
-            preamble = Conjunction(preamble, c.guarantee_formula, merge_literals=False)
+            left_sides = Conjunction(left_sides, c.guarantee_formula, merge_literals=False)
 
         for s in spec_list:
-            preamble = Conjunction(preamble, s.assume_formula, merge_literals=False)
+            left_sides = Conjunction(left_sides, s.assume_formula, merge_literals=False)
 
 
         # preamble = Conjunction(preamble, composition.guarantee_formula, merge_literals=False)
@@ -882,10 +888,10 @@ def process_model(spec_list, output_port_names, relevant_spec_ports,
     monitored = {}
     base_composition = compositions.values()[0]
 
-    from graphviz_converter import GraphizConverter
-    graphviz_conv = GraphizConverter(spec_contract, base_composition, contracts | set([working_specs.values()[0]]))
-    graphviz_conv.generate_graphviz()
-    graphviz_conv.view()
+    # from graphviz_converter import GraphizConverter
+    # graphviz_conv = GraphizConverter(spec_contract, base_composition, contracts | set([working_specs.values()[0]]))
+    # graphviz_conv.generate_graphviz()
+    # graphviz_conv.view()
 
     for (level, orig_port, name), v_set in monitored_variables.items():
 
@@ -911,7 +917,7 @@ def process_model(spec_list, output_port_names, relevant_spec_ports,
 
     # LOG.debug(monitored)
 
-    return contracts, compositions, spec_contract, ref_formulas, neg_formula, preamble, monitored, model_map
+    return contracts, compositions, spec_contract, ref_formulas, neg_formula, preamble, left_sides, monitored, model_map
 
 
 def build_model_map(connected_spec, output_port_names,  manager, var_assign):
@@ -1014,9 +1020,138 @@ def build_formula_for_all_specs(connected_spec, spec_list, composition):
 
     return Conjunction(a_check, g_check, merge_literals=False)
 
+
+def build_formula_for_multiple_inputs(preamble, all_candidates, neg_formula, left_sides, counterexamples, monitored_vars):
+    """
+    Build a single formula by replicating the model for each counterexample
+    and constraining the combinations
+    :param formula:
+    :param counterexamples:
+    :return:
+    """
+
+    # new_preamble = preamble
+    # new_neg_formula = neg_formula
+    if counterexamples is None:
+        temp = Conjunction(preamble, left_sides, merge_literals=False)
+        formula = Implication(temp, neg_formula, merge_literals=False)
+        return formula
+    else:
+        first = counterexamples[0]
+
+        # new_preamble = Conjunction(preamble, first, merge_literals=False)
+        cex = first
+
+        # LOG.debug(cex)
+        formula = Implication(cex, neg_formula, merge_literals=False)
+
+        left_sides_formula = left_sides
+
+
+        preamble_cls = {}
+        for p in monitored_vars:
+            old_vars = monitored_vars[p]['ports']
+
+            if p not in preamble_cls:
+                preamble_cls[p] = {}
+
+            for ov in old_vars:
+
+                if ov not in preamble_cls[p]:
+                    preamble_cls[p][ov] = set()
+
+                temp = Equivalence(p.literal, ov.literal, merge_literals=False)
+                temp = Globally(temp)
+                preamble_cls[p][ov].add(temp)
+
+        for c in counterexamples[1:]:
+            new_neg = neg_formula.generate()
+            new_neg = LTL_PARSER.parse(new_neg)
+            #now the unique names of the original formula are the base_names of the new
+
+            new_vars = dict(new_neg.get_literal_items())
+
+            new_c = c.generate()
+            new_c = LTL_PARSER.parse(new_c)
+
+            # LOG.debug(new_c)
+
+            new_c_vars = dict(new_c.get_literal_items())
+
+            for name, var in new_c_vars.items():
+                var.merge(new_vars[name])
+
+
+            new_left = left_sides.generate()
+            new_left = LTL_PARSER.parse(new_left)
+
+            new_left_vars = dict(new_left.get_literal_items())
+
+            for name, var in new_left_vars.items():
+                var.merge(new_vars[name])
+
+            # LOG.debug(new_vars)
+            # LOG.debug(preamble)
+
+            for p in monitored_vars:
+                old_vars = monitored_vars[p]['ports']
+
+                if p.unique_name in new_vars:
+                    for ov in old_vars:
+                        if ov.unique_name in new_vars:
+                            temp1 = Equivalence(new_vars[p.unique_name], new_vars[ov.unique_name], merge_literals=False)
+                            temp1 = Globally(temp1)
+                            preamble_cls[p][ov].add(temp1)
+
+                            # imp = Implication(temp, temp1, merge_literals=False)
+                            #
+                            # conditions.appe   nd(imp)
+
+
+
+            temp = Implication(new_c, new_neg, merge_literals=False)
+            formula = Conjunction(formula, temp, merge_literals=False)
+
+            left_sides_formula = Conjunction(left_sides_formula, new_left, merge_literals=False)
+
+            # LOG.debug(temp)
+            # LOG.debug(left_sides_formula)
+
+            # if len(conditions) > 0:
+            #     cond = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), conditions)
+            #     #LOG.debug(cond)
+            #     new_neg_formula = Conjunction(new_neg_formula, cond, merge_literals=False)
+
+        init = None
+        # LOG.debug(preamble_cls)
+        for p_dict in preamble_cls.values():
+            p_formulas = []
+            for c_set in p_dict.values():
+                f = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), c_set)
+                p_formulas.append(f)
+
+            f = reduce(lambda x, y: Disjunction(x, y, merge_literals=False), p_formulas)
+
+            if init is None:
+                init = f
+            else:
+                init = Conjunction(init, f, merge_literals=False)
+
+        assert (init is not None)
+        # LOG.debug(init)
+        temp = Conjunction(init, left_sides_formula, merge_literals=False)
+        temp = Conjunction(temp, Negation(all_candidates), merge_literals=False)
+        formula = Implication(temp, formula, merge_literals=False)
+
+
+        # LOG.debug(formula)
+        # formula = Implication(new_preamble, new_neg_formula, merge_literals=False)
+        return formula
+
+
 #TODO: case in which preamble is None
 
-def exists_forall_learner(ref_formulas, neg_formula, preamble, monitored_variables,
+def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, monitored_variables,
                           input_variables, terminate_evt):
     """
     verify refinement formula according to preamble
@@ -1029,7 +1164,9 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, monitored_variabl
 
     candidate = None
     l_passed = False
-    all_cex = TrueFormula()
+    all_cex = None
+    cex_list = []
+    all_candidates = None
 
 
     if preamble is None:
@@ -1063,12 +1200,19 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, monitored_variabl
             #     return False, None, None, None
             else:
                 # LOG.debug(preamble)
-                formula = Implication(preamble, neg_formula, merge_literals=False)
+                if len(cex_list) > 0:
+                    LOG.debug(len(cex_list))
+                    formula = build_formula_for_multiple_inputs(preamble, all_candidates, neg_formula, left_sides, cex_list, monitored_variables)
+                else:
+                    temp = Conjunction(preamble, left_sides, merge_literals=False)
+                    formula = Implication(temp, neg_formula, merge_literals=False)
+
+
 
                 # LOG.debug(formula.generate())
                 l_passed, trace = verify_tautology(formula, return_trace=True)
 
-                # LOG.debug(l_passed)
+                LOG.debug(l_passed)
                 # LOG.debug(trace)
                 # LOG.debug(l_passed)
                 print('.'),
@@ -1106,12 +1250,28 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, monitored_variabl
 
                     candidate_connection = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), v_assign)
 
-
                     # LOG.debug(candidate_connection)
+
+                    # if all_candidates is not None:
+                    #     test = Implication(all_candidates, candidate_connection, merge_literals=False)
+                    #
+                    #     l_passed = verify_tautology(test, return_trace=False)
+                    #
+                    #     assert not l_passed
+
+                    if all_candidates is None:
+                        all_candidates = candidate_connection
+                    else:
+                        all_candidates = Disjunction(all_candidates, candidate_connection, merge_literals=False)
+
+
                     #now check if candidate is a good solution in general:
 
                     #test for all specs:
                     # for ref_formula in ref_formulas:
+                    # if all_cex is not None:
+                    #     candidate_connection = Conjunction(candidate_connection, Negation(all_cex), merge_literals=False)
+
                     candidate = Implication(candidate_connection, conj_specs, merge_literals=False)
 
                     l_passed, trace = verify_tautology(candidate, return_trace=True)
@@ -1124,13 +1284,36 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, monitored_variabl
 
                     if terminate_evt.is_set():
                         return False, None, None, None
-                    # LOG.debug(l_passed)
+                    LOG.debug(l_passed)
                     # LOG.debug(trace)
                     # if not l_passed:
                     #     new_preamble = Conjunction(preamble, Negation(candidate_connection), merge_literals=False)
                     # else:
                     #     new_preamble = preamble
                     # new_preamble = preamble
+
+
+                    var_assign, _ = trace_analysis(trace, monitored_variables)
+
+                    # build constraints from var assignment
+                    v_assign = []
+
+                    for p in var_assign:
+                        p_opt = []
+                        for v_p in var_assign[p]:
+                            p_opt.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
+
+                        if len(p_opt) > 0:
+                            temp = reduce(lambda x, y: Disjunction(x, y, merge_literals=False), p_opt)
+                            v_assign.append(temp)
+
+                    if len(v_assign) > 0:
+                        candidate = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), v_assign)
+
+                        # LOG.debug(candidate)
+
+                        all_candidates = Disjunction(all_candidates, candidate, merge_literals=False)
+
 
                     # if l_passed:
                         # LOG.debug('FOUND!')
@@ -1150,7 +1333,13 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, monitored_variabl
 
                     if not l_passed:
                         #derive the input sequence anyway, as it can be used for other specs
-                        input_formula = derive_inputs_from_trace(trace, input_variables)
+                        input_formula, i = derive_inputs_from_trace(trace, input_variables)
+
+                        # if len(next_counters) > 0:
+                        #     val = next_counters[-1]
+                        #     next_counters.append(val + i)
+                        # else:
+                        #     next_counters.append(i)
 
                         if input_formula is not None:
                             # LOG.debug(input_formula.generate())
@@ -1158,19 +1347,29 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, monitored_variabl
                             #if components are non-deterministic,
                             # it can happen that the same counterexample is shown over and over.
                             # we need to make sure we learn something new.
-
-                            check = Implication(all_cex, input_formula, merge_literals=False)
-                            checked = verify_tautology(check, return_trace=False)
-
-                            if checked:
-                                # LOG.debug('same learned input sequence... done with this candidate')
-                                # LOG.debug(input_formula)
-                                #not a good solution
-                                return l_passed, None, None, {}
+                            if all_cex is None:
+                                all_cex = input_formula
+                                cex_list.append(input_formula)
                             else:
-                                # LOG.debug('good cex')
-                                all_cex = Conjunction(all_cex, input_formula, merge_literals=False)
-                                preamble = Conjunction(preamble, input_formula, merge_literals=False)
+
+                                #next_cex = Disjunction(all_cex, input_formula, merge_literals=False)
+
+                                check = Implication(input_formula, all_cex, merge_literals=False)
+                                checked = verify_tautology(check, return_trace=False)
+
+                                if checked:
+                                    LOG.debug('same learned input sequence... done with this candidate')
+                                    # LOG.debug('check for non-deterministic solutions')
+
+                                    LOG.debug("wait")
+
+                                    #not a good solution
+                                    #return l_passed, None, None, {}
+                                else:
+                                    LOG.debug('good cex')
+                                    all_cex = Disjunction(all_cex, input_formula, merge_literals=False)
+                                    cex_list.append(input_formula)
+                                    preamble = Conjunction(preamble, input_formula, merge_literals=False)
                         # else:
                         #     new_preamble = preamble
                         else:
@@ -1245,12 +1444,12 @@ def derive_inputs_from_trace(trace, input_variables):
 
             # new state, check consistency among vars
             # LOG.debug(c_vars)
-            for p in input_variables:
-
-                if i > 0:
-                    time_sequence[i][p.unique_name] = time_sequence[i-1][p.unique_name]
-                else:
-                    time_sequence[i][p.unique_name] = Constant(0)
+            # for p in input_variables:
+            #
+            #     if i > 0:
+            #         time_sequence[i][p.unique_name] = time_sequence[i-1][p.unique_name]
+            #     else:
+            #         time_sequence[i][p.unique_name] = Constant(0)
 
             # LOG.debug(diff)
 
@@ -1291,21 +1490,23 @@ def derive_inputs_from_trace(trace, input_variables):
         for u_name, val in time_sequence[i].items():
             inner.append(Equivalence(unique_names[u_name].literal, val, merge_literals=False))
 
-        inner = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), inner)
+        if len(inner) > 0:
+            inner = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), inner)
 
-        for j in range(i):
-            inner = Next(inner)
+            for j in range(i):
+                inner = Next(inner)
 
-        formula_bits.append(inner)
+            formula_bits.append(inner)
 
     try:
         conj = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), formula_bits)
     except TypeError:
         formula = None
     else:
-        formula = Globally(Eventually(conj))
+        # formula = Globally(Eventually(conj))
+        formula = conj
 
-    return formula
+    return formula, i
 
 def trace_analysis(trace, monitored_vars):
     """

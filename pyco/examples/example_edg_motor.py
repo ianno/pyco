@@ -8,14 +8,14 @@ Author: Antonio Iannopollo, Rohit Ramesh, Richard Lin
 '''
 
 
-from pyco.contract import Contract, BaseType, IntRangeType
+from pyco.contract import Contract, BaseTypeBool, BaseTypeInt, BaseTypeFloat
 from pyco.library import (ContractLibrary, LibraryComponent,
                           LibraryPortMapping, LibraryCompositionMapping)
 from pyco.synthesis import SynthesisInterface
 from pyco import LOG
 
 #let's start with types
-class Voltage(BaseType):
+class Voltage(BaseTypeBool):
     '''
     general Voltage
     '''
@@ -40,7 +40,7 @@ class Voltage12V(Voltage):
     '''
     pass
 
-class IOPin(BaseType):
+class IOPin(BaseTypeBool):
     '''
     input/output pin
     '''
@@ -76,7 +76,7 @@ class IOPin12(IOPin):
     '''
     pass
 
-class GND(BaseType):
+class GND(BaseTypeBool):
     '''
     ground
     '''

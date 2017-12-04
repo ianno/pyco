@@ -425,9 +425,10 @@ class GenIsolation1D(Contract):
     GUARANTEES = 'c1 & G(fail1 -> X!c1)'
 
     # INPUT_PORTS = []
-    # OUTPUT_PORTS = [('c1', ACGenContactorT), ('c2', ACGenContactorT)]
+    # OUTPUT_PORTS = [('a', ACGenContactorT), ('b', ACGenContactorT),
+    #                 ('c', ACGenContactorT)]
     # ASSUMPTIONS = '''true'''
-    # GUARANTEES = 'G(c1|c2) & G(c1=c2)'
+    # GUARANTEES = 'G(a|b) & G(c)'
 
 class GenIsolation2D(Contract):
     '''

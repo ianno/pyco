@@ -1112,7 +1112,7 @@ class Z3Interface(object):
 
     def synthesize(self, property_contracts, limit=None,
                    library_max_redundancy=None,
-                   depth=None,
+                   depth=4,
                    strict_out_lib_map=False,
                    strict_in_spec_map=True,
                    use_types=True,
@@ -1159,7 +1159,7 @@ class Z3Interface(object):
             self.max_components = limit
 
         if depth is None:
-            depth = limit
+            depth = min(int(3* limit/prop_out), limit)
 
             # if limit > prop_out:
             #     # augment spec with dummy types

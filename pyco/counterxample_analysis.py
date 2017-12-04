@@ -855,6 +855,7 @@ def process_model(spec_list, output_port_names, relevant_spec_ports,
 
         for s in spec_list:
             left_sides = Conjunction(left_sides, s.assume_formula, merge_literals=False)
+            break
 
 
         # preamble = Conjunction(preamble, composition.guarantee_formula, merge_literals=False)
@@ -1200,22 +1201,26 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, monit
             #     return False, None, None, None
             else:
                 # LOG.debug(preamble)
+                # LOG.debug(left_sides)
+
+                left = Conjunction(preamble, left_sides, merge_literals=False)
                 if len(cex_list) > 0:
                     LOG.debug(len(cex_list))
                     # formula = build_formula_for_multiple_inputs(preamble, all_candidates, neg_formula, left_sides, cex_list, monitored_variables)
 
-                    left = Conjunction(preamble, left_sides, merge_literals=False)
                     left = Conjunction(left, Negation(all_candidates), merge_literals=False)
+
+                    # left1 = Conjunction(left_sides, Negation(all_candidates), merge_literals=False)
+                    # test = verify_tautology(Negation(left), return_trace=False)
+                    # assert not test
+
                     # left = Conjunction(left, all_cex, merge_literals=False)
 
-                    formula = Implication(left, neg_formula, merge_literals=False)
 
-                else:
-                    temp = Conjunction(preamble, left_sides, merge_literals=False)
-                    formula = Implication(temp, neg_formula, merge_literals=False)
+                formula = Implication(left, neg_formula, merge_literals=False)
 
 
-
+                # LOG.debug(preamble)
                 # LOG.debug(formula.generate())
                 l_passed, trace = verify_tautology(formula, return_trace=True)
 
@@ -1278,16 +1283,20 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, monit
                     # for ref_formula in ref_formulas:
                     # if all_cex is not None:
                     #     candidate_connection = Conjunction(candidate_connection, Negation(all_cex), merge_literals=False)
-                    for ref_formula in ref_formulas:
-                        candidate = Implication(candidate_connection, ref_formula, merge_literals=False)
 
-                        l_passed, trace = verify_tautology(candidate, return_trace=True)
+                    candidate = Implication(candidate_connection, conj_specs, merge_literals=False)
 
-                        if terminate_evt.is_set():
-                            return False, None, None, None
-
-                        if not l_passed:
-                            break
+                    l_passed, trace = verify_tautology(candidate, return_trace=True)
+                    # for ref_formula in ref_formulas:
+                    #     candidate = Implication(candidate_connection, ref_formula, merge_literals=False)
+                    #
+                    #     l_passed, trace = verify_tautology(candidate, return_trace=True)
+                    #
+                    #     if terminate_evt.is_set():
+                    #         return False, None, None, None
+                    #
+                    #     if not l_passed:
+                    #         break
 
                     if terminate_evt.is_set():
                         return False, None, None, None
@@ -1379,7 +1388,7 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, monit
                                     LOG.debug('good cex')
                                     all_cex = Disjunction(all_cex, input_formula, merge_literals=False)
                                     cex_list.append(input_formula)
-                                    preamble = Conjunction(preamble, input_formula, merge_literals=False)
+                                    #preamble = Conjunction(preamble, input_formula, merge_literals=False)
                         # else:
                         #     new_preamble = preamble
                         else:
@@ -1388,6 +1397,7 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, monit
                             return l_passed, None, None, {}
 
         LOG.debug("FOUND")
+        LOG.debug(l_passed)
         return l_passed, candidate, preamble, ret_assign
 
 
@@ -1433,12 +1443,18 @@ def derive_inputs_from_trace(trace, input_variables):
     lines = trace.split('\n')
 
     after_preamble = False
+    pre_trace = True
 
     for line in lines:
         line = line.strip()
 
         # LOG.debug(line)
 
+        if not pre_trace:
+            if not line.startswith('-- Trace was successfully completed.'):
+                continue
+            else:
+                pre_trace = True
         if not after_preamble:
             if not line.startswith('->'):
                 continue
@@ -1560,11 +1576,20 @@ def trace_analysis(trace, monitored_vars):
     lines = trace.split('\n')
 
     after_preamble = False
+    pre_trace = True
+
+    #seen = {p_name for p_name in c_vars}
 
     for line in lines:
         line = line.strip()
-
+        #
         # LOG.debug(line)
+        # LOG.debug(seen)
+        if not pre_trace:
+            if not line.startswith('-- Trace was successfully completed.'):
+                continue
+            else:
+                pre_trace = True
 
         if not after_preamble:
             if not line.startswith('->'):
@@ -1579,21 +1604,26 @@ def trace_analysis(trace, monitored_vars):
             # new state, check consistency among vars
             # LOG.debug(c_vars)
             for p in monitored_vars:
+                if p in var_assign:
+                    p_val = c_vars[p.unique_name]
 
-                p_val = c_vars[p.unique_name]
-
-                for v_p in monitored_vars[p]['ports']:
-                    if v_p in var_assign[p] and c_vars[v_p.unique_name] != p_val and c_vars[v_p.unique_name] is not None:
-                        # LOG.debug('remove')
-                        # LOG.debug(p.unique_name)
-                        # LOG.debug(p_val)
+                    for v_p in monitored_vars[p]['ports']:
                         # LOG.debug(v_p.unique_name)
-                        # LOG.debug(c_vars[v_p.unique_name])
-                        var_assign[p].remove(v_p)
+                        # LOG.debug(seen)
+                        # LOG.debug(var_assign[p])
+                        if (v_p in var_assign[p] and c_vars[v_p.unique_name] != p_val
+                            and c_vars[v_p.unique_name] is not None):
+                            # LOG.debug('remove')
+                            # LOG.debug(p.unique_name)
+                            # LOG.debug(p_val)
+                            # LOG.debug(v_p.unique_name)
+                            # LOG.debug(c_vars[v_p.unique_name])
+                            var_assign[p].remove(v_p)
 
             # LOG.debug(diff)
 
-
+            # #reset
+            # seen = set()
 
         elif line.startswith('--'):
             # indicates loop in trace, skip line
@@ -1606,6 +1636,7 @@ def trace_analysis(trace, monitored_vars):
             # LOG.debug(c_vars)
 
             if line_elems[0] in c_vars:
+                # seen.add(line_elems[0])
                 # base_n = monitored_vars[line_elems[0]]
 
                 if line_elems[1] == 'TRUE':

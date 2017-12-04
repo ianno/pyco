@@ -752,12 +752,14 @@ class SinglePortSolver(multiprocessing.Process):
         # relevant_out_mod = self.lib_model.relevant_output_models(current_level, current_contract)
         # relevant_out_idx = self.lib_model.relevant_output_indices(current_level, current_contract)
         # LOG.debug(contract_model_map)
+        # shifted_level = (current_level + shift) % self.lib_model.max_components[current_contract]
         for mod in contract_model_map[(current_level, current_contract)]:
             # for mod in relevant_in_mod:
 
             # LOG.debug(mod)
             # LOG.debug(current_level)
             # LOG.debug(current_contract.base_name)
+            shifted_mod = self.lib_model.model_shift(mod, shift)
             m_index = model[mod].as_long()
 
             if m_index >= self.lib_model.specs_at:
@@ -776,7 +778,7 @@ class SinglePortSolver(multiprocessing.Process):
                 for p_name in port_type_class:
                     # p = self.spec_contract.ports_dict[p_name]
                     p_index = self.lib_model.spec_map[p_name]
-                    local_eq.add(mod == p_index)
+                    local_eq.add(shifted_mod == p_index)
 
                 equalities.add(Or(local_eq, self.context))
 
@@ -803,7 +805,7 @@ class SinglePortSolver(multiprocessing.Process):
                     for p_name in port_type_class:
                         p = m_contract.ports_dict[p_name]
                         p_index = self.lib_model.index[p][shifted_level]
-                        local_eq.add(mod == p_index)
+                        local_eq.add(shifted_mod == p_index)
 
                     equalities.add(Or(local_eq, self.context))
 
@@ -811,7 +813,7 @@ class SinglePortSolver(multiprocessing.Process):
                     # else add to pending
                     if m_index not in pending_equalities:
                         pending_equalities[m_index] = set()
-                    pending_equalities[m_index].add(mod)
+                    pending_equalities[m_index].add(shifted_mod)
 
         # now all the above models which have indices which are of this contract
         for idx in pending_equalities.keys():

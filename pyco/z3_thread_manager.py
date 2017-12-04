@@ -14,7 +14,7 @@ from pyco import LOG
 from counterxample_analysis import counterexample_analysis, parallel_solve
 import time
 
-MAX_THREADS = 7
+MAX_THREADS = 8
 
 #NotSynthesizableError = z3_interface.NotSynthesizableError
 
@@ -94,6 +94,7 @@ class ModelVerificationManager(object):
                 #check if event is successful
                 if self.found_refinement.is_set():
                     #we are done. kill all running threads and exit
+                    self.semaphore.release()
                     return self.quit()
 
                 #else remove not successful models

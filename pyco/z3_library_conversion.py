@@ -660,8 +660,13 @@ class Z3Library(object):
         works as a circular buffer
         '''
         index = self.model_index[model.get_id()]
+        port = self.port_by_index(index)
+        contract = port.contract
+        level = self.model_levels[model.get_id()]
+        shifted = (level + shift_lev) % self.max_components[contract]
 
-        return self.models[(index + self.max_single_level_index * shift_lev) % self.max_index]
+
+        return self.models[self.index[port][shifted]]
 
     def index_in_shift(self, index, shift_lev):
         '''

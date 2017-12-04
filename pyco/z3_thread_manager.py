@@ -78,7 +78,17 @@ class ModelVerificationManager(object):
                 with self.z3_lock:
                     model = self.z3_interface.propose_candidate()
             except pyco.z3_interface.NotSynthesizableError as err:
-                return self.terminate()
+                if size < self.z3_interface.max_components:
+                    # # this should happen anymore
+                    # LOG.debug('Synthesis for size %d failed. Increasing number of components...', size)
+                    # size = size + 1
+                    # with self.z3_lock:
+                    #     self.solver.pop()
+                    #     self.solver.push()
+                    #     self.solver.add(size_constraints[size])
+                    pass
+                else:
+                    return self.terminate()
             else:
                 #acquire semaphore
                 self.semaphore.acquire()
@@ -104,10 +114,12 @@ class ModelVerificationManager(object):
 
                 #now reject the model, to get a new candidate
                 #LOG.debug('pre-lock')
-                with self.z3_lock:
+                # self.semaphore.acquire()
+	        with self.z3_lock:
                     #LOG.debug('pre-reject')
                     self.solver.add(self.z3_interface.reject_candidate(model))
                     #LOG.debug('done')
+		# self.semaphore.release()
 
 
     def terminate(self):

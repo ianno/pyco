@@ -46,7 +46,15 @@ group.add_argument('--inc20nt', help='run the incremental EPS synthesis with a l
 group.add_argument('--inc40nt', help='run the incremental EPS synthesis with a library of 40 elements'
                                      'WITHOUT types and user hints.',
                    choices=['1', '2', '3', '4', '5', 'all'])
-
+group.add_argument('--bldc_nocost', help='run the Brushless DC motor controller synthesis.'
+                                          'No cost function set.',
+                   action="store_true")
+group.add_argument('--bldc_comps', help='run the Brushless DC motor controller synthesis.'
+                                        'Minimize number of components.',
+                   action="store_true")
+group.add_argument('--bldc_ports', help='run the Brushless DC motor controller synthesis.'
+                                        'Minimize number of ports.',
+                   action="store_true")
 
 if __name__ == "__main__":
 
@@ -108,7 +116,7 @@ if __name__ == "__main__":
         print 'Running 9 EPS tests in pyco/tests/test_eps_facs.py::test_synth_6_10_dc_* ' \
               'with library of 40 elements. Minimize number of components...\n'
         pytest.main(['--lib4', '--comps', '--timeout='+str(TIMEOUT_SEC), '-s', '-k test_synth_6_10_dc_', 'pyco/tests/test_eps_facs.py'])
-
+    
     if args.inc20wt in ['1', '2', '3', '4', '5']:
         print 'Running EPS incremental test in pyco/tests/test_eps_facs.py::test_synth_inc_%s ' \
               'with library of 20 elements. Use types and user hints...\n' % args.inc20wt
@@ -148,4 +156,21 @@ if __name__ == "__main__":
               'with library of 40 elements. ' \
               'WITHOUT types and user hints...\n'
         pytest.main(['--lib4', '--nt', '--timeout='+str(TIMEOUT_SEC), '-s', '-k test_synth_inc_', 'pyco/tests/test_eps_facs.py'])
+
+    if args.bldc_nocost or run_all:
+        print 'Run the Brushless DC motor controller synthesis tests in pyco/tests/test_edg_motor.py::test_ltl_spec_med. ' \
+              'No cost function set...\n'
+        pytest.main(['--lib3', '--timeout='+str(TIMEOUT_SEC), '-s', 'pyco/tests/test_edg_motor.py::test_ltl_spec_med'])
+
+    if args.bldc_comps or run_all:
+        print 'Run the Brushless DC motor controller synthesis tests in pyco/tests/test_edg_motor.py::test_ltl_spec_med. ' \
+              'Minimize number of components...\n'
+        pytest.main(['--lib3', '--comps', '--timeout='+str(TIMEOUT_SEC), '-s', 'pyco/tests/test_edg_motor.py::test_ltl_spec_med'])
+
+    if args.bldc_ports or run_all:
+        print 'Run the Brushless DC motor controller synthesis tests in pyco/tests/test_edg_motor.py::test_ltl_spec_med. ' \
+              'Minimize number of ports...\n'
+        pytest.main(['--lib3', '--ports', '--timeout='+str(TIMEOUT_SEC), '-s', 'pyco/tests/test_edg_motor.py::test_ltl_spec_med'])
+
+
 

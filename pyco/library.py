@@ -25,7 +25,8 @@ class ContractLibrary(object):
         '''
         initializer
         '''
-        self.components = []
+        self.components = {}
+        self.connection_map = {}
 
         #type structures
         self.typeset = set()
@@ -60,7 +61,7 @@ class ContractLibrary(object):
         :return: dict containing pairs name:component
         """
 
-        return {comp.base_name: comp for comp in self.components}
+        return {comp.base_name: comp for comp in self.components.keys()}
 
 
     def component_by_name(self, name):
@@ -109,21 +110,25 @@ class ContractLibrary(object):
         else:
             return self._type_compatibility_set
 
-    def add(self, library_component):
+    def add(self, library_component, number_of_instances=1):
         '''
         add a library_component to the library object
         '''
-        if library_component in self.components:
-            raise ValueError()
+        if library_component not in self.components:
+            self.components[library_component] = set()
+            library_component.register_to_library(self)
+            library_component.assign_to_solver(self.smt_manager)
+            self.hierarchy[library_component.contract.base_name] = 0
 
-        if library_component.base_name in self.component_map:
-            raise DuplicateNameError(library_component.base_name)
 
-        library_component.register_to_library(self)
-        library_component.assign_to_solver(self.smt_manager)
+        for i in range(number_of_instances):
+            num_elem = len(self.components[library_component])
+            name = '%s_%d' % (library_component.base_name, num_elem)
+            self.components[library_component].add(library_component.contract.copy())
 
-        self.components.append(library_component)
-        self.hierarchy[library_component.contract.base_name] = 0
+            if name in self.component_map:
+                raise DuplicateNameError(name)
+
 
     def add_type(self, type_cls):
         '''
@@ -213,6 +218,76 @@ class ContractLibrary(object):
         is consistent and compatible and refines property_contract
         '''
         pass
+
+    @property
+    def all_contracts(self):
+        '''
+        Collects all the contracts associated to a certain component in the library
+        :return:
+        '''
+
+        return reduce(lambda x, y: x | y, self.components.values())
+
+    def preprocess_types(self):
+        '''
+        preprocess library to determine connections between components.
+        To do so, checks types of input and output ports.
+        If there is a match, we are good to go
+        :return:
+        '''
+
+        all_c = self.all_contracts
+
+        for contract in all_c:
+            whole_set = set()
+            candidate_set = set()
+            ports_left = set(contract.input_ports_dict.values())
+            contracts_left = all_c - {contract}
+
+            self.create_connection_map_for_component(candidate_set, contracts_left,
+                                                     ports_left, whole_set)
+
+            self.connection_map[contract] = whole_set
+
+        LOG.debug(self.connection_map)
+
+
+
+
+
+    def create_connection_map_for_component(self, candidate_set, contracts_left, ports_left, whole_set):
+        """
+        recursive function that populate the whole_set which sets of components which can
+        provide full inputs for a certain component
+        :param candidate_set:
+        :param contracts_left:
+        :param ports_left:
+        :param whole_set:
+        :return:
+        """
+
+        if len(ports_left) == 0:
+            whole_set.add(frozenset(candidate_set))
+        else:
+            for iport in ports_left:
+                itype = iport.contract.port_type[iport.base_name]
+                for contract in contracts_left:
+                    for oname, oport in contract.output_ports_dict.items():
+                        otype = contract.port_type[oname]
+
+                        if (((otype, itype) in self.type_compatibility_set)
+                                or (otype == itype)
+                                or (issubclass(otype, itype))):
+                            #we found a good match!
+                            #fork
+                            new_cand = candidate_set | {contract}
+                            #new_leftc = contracts_left - {comp}
+                            new_leftp = ports_left - {iport}
+                            self.create_connection_map_for_component(new_cand, contracts_left, new_leftp, whole_set)
+
+
+
+
 
 
 

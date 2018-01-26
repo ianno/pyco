@@ -255,12 +255,13 @@ class ContractLibrary(object):
 
 
 
-    def create_connection_map_for_component(self, candidate_set, contracts_left, ports_left, whole_set):
+    def create_connection_map_for_component(self, candidate_set, contract_pool,
+                                            ports_left, whole_set, spec=None):
         """
         recursive function that populate the whole_set which sets of components which can
         provide full inputs for a certain component
         :param candidate_set:
-        :param contracts_left:
+        :param contract_pool:
         :param ports_left:
         :param whole_set:
         :return:
@@ -271,19 +272,81 @@ class ContractLibrary(object):
         else:
             for iport in ports_left:
                 itype = iport.contract.port_type[iport.base_name]
-                for contract in contracts_left:
+                for contract in contract_pool:
                     for oname, oport in contract.output_ports_dict.items():
                         otype = contract.port_type[oname]
 
-                        if (((otype, itype) in self.type_compatibility_set)
-                                or (otype == itype)
-                                or (issubclass(otype, itype))):
-                            #we found a good match!
-                            #fork
+                        if self.__check_match(itype, otype):
+                            # we found a good match!
+                            # fork
                             new_cand = candidate_set | {contract}
-                            #new_leftc = contracts_left - {comp}
                             new_leftp = ports_left - {iport}
-                            self.create_connection_map_for_component(new_cand, contracts_left, new_leftp, whole_set)
+                            self.create_connection_map_for_component(new_cand, contract_pool, new_leftp, whole_set)
+                if spec is not None:
+                    for sname, sport in spec.input_ports_dict.items():
+                        stype = spec.port_type[sname]
+
+                        if self.__check_match(itype, stype):
+                            # we found a good match!
+                            # fork
+                            new_leftp = ports_left - {iport}
+                            #we pass the old candidate set
+                            self.create_connection_map_for_component(candidate_set, contract_pool, new_leftp, whole_set,
+                                                                     spec=spec)
+
+
+    def __check_match(self, itype, otype):
+        '''
+        inner loops of create_connection_map_for_component
+        :return:
+        '''
+        if (((otype, itype) in self.type_compatibility_set)
+                or (otype == itype)
+                or (issubclass(otype, itype))):
+            return True
+        else:
+            return False
+
+    def preprocess_with_spec(self, spec):
+        """
+        Augment the connectivity map including info from ports of the specififcation
+        :param spec_inputs:
+        :param spec_outputs:
+        :return:
+        """
+
+        # output first
+        spec_outputs = spec.output_ports_dict.values()
+        spec_out_map = {x: set() for x in spec_outputs}
+
+        all_c = self.all_contracts
+
+        for contract in all_c:
+            for s_name, s_port in spec.output_ports_dict.items():
+                s_type = s_port.contract.port_type[s_name]
+                for oname, oport in contract.output_ports_dict.items():
+                    otype = contract.port_type[oname]
+
+                    if (((otype, s_type) in self.type_compatibility_set)
+                            or (otype == s_type)
+                            or (issubclass(otype, s_type))):
+                        spec_out_map[s_port].add(contract)
+                        break
+
+        #inputs are a bit different
+        for contract in all_c:
+            whole_set = set()
+            candidate_set = set()
+            ports_left = set(contract.input_ports_dict.values())
+            contract_pool = all_c - {contract}
+
+            self.create_connection_map_for_component(candidate_set, contract_pool,
+                                                     ports_left, whole_set, spec=spec)
+
+            self.connection_map[contract] = whole_set
+
+        LOG.debug(self.connection_map)
+
 
 
 

@@ -167,6 +167,8 @@ class HalfBridge(Contract):
     GUARANTEES = '''G(i1 = o1)
                  '''
 
+#SPECIFICATIONS
+
 class SimpleReq(Contract):
     '''
     MCU

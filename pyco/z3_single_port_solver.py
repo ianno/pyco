@@ -32,9 +32,8 @@ class SinglePortSolver(multiprocessing.Process):
 
     def __init__(self, z3_interface, assertions,
                  context,
-                 spec_port_names, semaphore, spec_contract,
-                 library_max_redundancy, limit,
-                 minimize_components=False, minimize_ports=False):
+                 spec_port_names, semaphore, spec,
+                 minimize_components=False):
 
         # set_option(verbose=15)
         # set_option(proof=False)
@@ -43,43 +42,22 @@ class SinglePortSolver(multiprocessing.Process):
 
         self.semaphore = semaphore
 
-        self.spec_contract = spec_contract
+        self.spec = spec
         self.context = context
         self.assertions = assertions
         self.spec_port_names = spec_port_names
-        # self.lib_model = self.z3_interface.lib_model
-        # self.spec_out_dict = {name: mod.translate(self.context) for (name, mod) in
-        #                       self.z3_interface.spec_out_dict.items()}
+        self.spec_out_dict = self.spec.output_ports_dict
 
-        # self.spec_out_dict = self.z3_interface.spec_out_dict
+        self.num_out = len(self.spec_out_dict)
 
-        self.spec_out_dict = {name: z3.Int('%s' % name, self.context) for name
-                              in self.spec_contract.output_ports_dict}
-        self.spec_in_dict = {name: z3.Int('%s' % name, self.context) for name
-                             in self.spec_contract.input_ports_dict}
+        self.lib_model = Z3Library(self.z3_interface.library, context=self.context)
 
-        self.spec_dict = dict(self.spec_in_dict.items() + self.spec_out_dict.items())
-
-        self.spec_outs = self.spec_out_dict.values()
-        self.spec_ins = self.spec_in_dict.values()
-
-        self.num_out = len(self.spec_outs)
-
-        self.lib_model = Z3Library(self.z3_interface.library, self.spec_contract,
-                                   library_max_redundancy=library_max_redundancy, limit=limit,
-                                   context=self.context)
-        self.lib_model.include_spec_ports(self.spec_contract)
+        self.lib_model.preprocess(self.spec)
 
 
         self.specification_list = self.z3_interface.specification_list
-        self.dummy_model_set = self.z3_interface.dummy_model_set
 
-
-        # r = t.apply(self.goal_constraints)
-        #
-        # t = Then('simplify', 'elim-term-ite', 'solve-eqs', 'smt', ctx=self.context)
-
-        optimize = minimize_components or minimize_ports
+        optimize = minimize_components
 
 
         self.solver = Solver(ctx=self.context)
@@ -93,24 +71,13 @@ class SinglePortSolver(multiprocessing.Process):
             self.solver = Optimize(ctx=self.context)
 
 
+        LOG.debug(self.assertions)
         self.solver.add(self.assertions)
 
 
         if minimize_components:
             LOG.debug('minimize components')
-            self.obj_c = self.solver.minimize(Sum(self.lib_model.contract_use_flags))
-
-        if minimize_ports:
-            LOG.debug('minimize ports')
-            # minimize ports used
-            used_ports = [z3.Int('used_%d' % i, self.context) for i in range(len(self.lib_model.models))]
-            self.solver.add([Or(used == 0, used == 1, self.context) for used in used_ports])
-            self.solver.add(
-                [Implies(used_ports[i] == 1, self.lib_model.models[i] > -1, self.context) for i in range(len(self.lib_model.models))])
-            self.solver.add([Implies(used_ports[i] == 0, self.lib_model.models[i] == -1) for i in
-                             range(len(self.lib_model.models))])
-
-            self.obj_p = self.solver.minimize(z3.Sum(used_ports))
+            self.obj_c = self.solver.minimize(Sum(self.lib_model.use_flags.values()))
 
 
         # set seed
@@ -162,7 +129,7 @@ class SinglePortSolver(multiprocessing.Process):
                         LOG.info(model)
                         for c in contract_list:
                             LOG.debug(c)
-                        LOG.info(self.spec_contract)
+                        LOG.info(self.spec)
                         LOG.info(composition)
                         return model, composition, spec, contract_list
 
@@ -766,13 +733,13 @@ class SinglePortSolver(multiprocessing.Process):
                 # this is connected to spec
 
                 s_port_name = self.lib_model.spec_by_index_map[m_index]
-                p_type = self.spec_contract.port_type[s_port_name]
+                p_type = self.spec.port_type[s_port_name]
 
                 # collect all ports with same type
                 # LOG.debug(s_port_name)
                 # LOG.debug(self.spec_contract.port_type)
                 # LOG.debug(self.spec_contract.out_type_map)
-                port_type_class = {x for x in self.spec_contract.in_type_map[p_type]}
+                port_type_class = {x for x in self.spec.in_type_map[p_type]}
 
                 local_eq = set()
                 for p_name in port_type_class:

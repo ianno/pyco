@@ -30,8 +30,8 @@ class ModelVerificationManager(object):
 
         self.solver = z3_interface.solver
         self.z3_interface = z3_interface
-        self.spec_contract = self.z3_interface.spec_contract
-        self.spec_out_dict = self.z3_interface.spec_out_dict
+        self.spec = self.z3_interface.spec
+        self.spec_out_dict = self.spec.output_ports_dict
         self.semaphore = semaphore
         self.found_refinement = multiprocessing.Event()
 
@@ -83,6 +83,7 @@ class ModelVerificationManager(object):
             try:
                 # with self.z3_lock:
                 model = self.z3_interface.propose_candidate()
+                LOG.debug(model)
                     # LOG.debug(time.time()-tim)
                     # tim = time.time()
             except pyco.z3_interface.NotSynthesizableError as err:

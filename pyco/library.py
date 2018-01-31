@@ -110,7 +110,7 @@ class ContractLibrary(object):
         else:
             return self._type_compatibility_set
 
-    def add(self, library_component, number_of_instances=1):
+    def add(self, library_component, number_of_instances=2):
         '''
         add a library_component to the library object
         '''
@@ -315,9 +315,12 @@ class ContractLibrary(object):
         :return:
         """
 
+        # LOG.debug(self.type_compatibility_set)
+
         # output first
         spec_outputs = spec.output_ports_dict.values()
-        spec_out_map = {x: set() for x in spec_outputs}
+        spec_out_map = {x.base_name: set() for x in spec_outputs}
+        libspec_connection_map = {}
 
         all_c = self.all_contracts
 
@@ -330,7 +333,7 @@ class ContractLibrary(object):
                     if (((otype, s_type) in self.type_compatibility_set)
                             or (otype == s_type)
                             or (issubclass(otype, s_type))):
-                        spec_out_map[s_port].add(contract)
+                        spec_out_map[s_port.base_name].add(contract)
                         break
 
         #inputs are a bit different
@@ -343,9 +346,15 @@ class ContractLibrary(object):
             self.create_connection_map_for_component(candidate_set, contract_pool,
                                                      ports_left, whole_set, spec=spec)
 
-            self.connection_map[contract] = whole_set
+            libspec_connection_map[contract] = whole_set
 
-        LOG.debug(self.connection_map)
+        # LOG.debug(spec_out_map)
+        # LOG.debug(libspec_connection_map)
+
+        self.connection_map = libspec_connection_map
+        self.spec_out_map = spec_out_map
+
+        return libspec_connection_map, spec_out_map
 
 
 

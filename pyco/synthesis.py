@@ -124,16 +124,8 @@ class SynthesisInterface(object):
         time1 = time.time()
 
         self.solver_interface.synthesize(self.spec_contract_list, limit=limit,
-                                                                 library_max_redundancy=library_max_redundancy,
-                                                                 strict_out_lib_map=strict_out_lib_map,
-                                                                 strict_in_spec_map=strict_in_spec_map,
-                                                                 use_types=use_types,
-                                                                 use_hints=use_hints,
                                                                  minimize_components=minimize_components,
-                                                                 minimize_ports=minimize_ports,
                                                                  minimize_cost=minimize_cost,
-                                                                 same_block_constraints=self.same_block_pairs,
-                                                                 distinct_mapping_constraints=self.distinct_map,
                                                                  fixed_components=self.fixed_components,
                                                                  fixed_connections=self.fixed_connections,
                                                                  fixed_connections_spec=self.fixed_connections_spec,

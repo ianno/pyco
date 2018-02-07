@@ -50,9 +50,10 @@ class SinglePortSolver(multiprocessing.Process):
 
         self.num_out = len(self.spec_out_dict)
 
-        self.lib_model = Z3Library(self.z3_interface.library, context=self.context)
+        self.lib_model = self.z3_interface.lib_model
+        self.library = self.z3_interface.library
 
-        self.lib_model.preprocess(self.spec)
+        self.lib_model.instantiate_models(context=self.context)
 
 
         self.specification_list = self.z3_interface.specification_list
@@ -71,7 +72,7 @@ class SinglePortSolver(multiprocessing.Process):
             self.solver = Optimize(ctx=self.context)
 
 
-        LOG.debug(self.assertions)
+        #LOG.debug(self.assertions)
         self.solver.add(self.assertions)
 
 
@@ -218,6 +219,149 @@ class SinglePortSolver(multiprocessing.Process):
     #         LOG.debug('ref check done 2')
     #
     #     return True, composition, connected_spec, contract_inst, None
+
+
+    def _infer_relevant_components_from_model(self, model, output_port_names):
+        '''
+        Infer the valid configurations represented by the current model
+
+        :param model:
+        :param output_port_names:
+        :return:
+        '''
+
+        connection_map = self.lib_model.library.connection_map
+        spec_map = self.lib_model.library.spec_out_map
+        #uname_map = self.lib_model.library.all_contracts_by_uname
+        vals = [model[v].as_long() for v in self.lib_model.level_index.values()]
+        depth = max(vals)
+
+        LOG.debug(vals)
+
+        reject_list = []
+
+
+        configurations = {}
+
+        all_contracts_in_model = {x
+                                  for x, m in self.lib_model.use_flags.items()
+                                  if model[m].as_long() == 1}
+
+
+        #start from the outputs, and go backward to map all the possible configs
+
+        for spec_out in output_port_names:
+            configurations[spec_out] = {x: [] for x in spec_map[spec_out] if x in all_contracts_in_model}
+
+            rej_port_conf = []
+            for x in configurations[spec_out]:
+                #x is a contract
+
+                rej_single_p = []
+
+                # append current contract and its siblings
+                all_cs = self.library.contracts_by_name(x.base_name)
+                rej_single_p.append(Or([self.lib_model.use_flags[q] == 1
+                                    for q in all_cs], self.context))
+
+                for conf in connection_map[x]:
+                    if conf <= all_contracts_in_model:
+
+                        conf_dict = {}
+                        rej_conf = []
+
+                        for c in conf:
+                            c_list = []
+                            rej_clist = []
+
+                            # append current contract and its siblings
+                            all_cs = self.library.contracts_by_name(c.base_name)
+                            rej_conf.append(Or([self.lib_model.use_flags[q] == 1
+                                                    for q in all_cs], self.context))
+
+                            self.__find_configurations_for_contract(1, depth, c,
+                                                                    all_contracts_in_model,
+                                                                    connection_map,
+                                                                    c_list, rej_clist)
+
+                            conf_dict[c] = c_list
+
+                            if len(rej_clist) > 0:
+                                rej_conf.append(Or(rej_clist, self.context))
+
+
+                        configurations[spec_out][x].append(conf_dict)
+
+                        rej_single_p.append(And(rej_conf, self.context))
+
+                rej_port_conf.append(And(rej_single_p, self.context))
+
+            reject_list.append(Or(rej_port_conf, self.context))
+
+        reject_formula = And(reject_list, self.context)
+
+        return configurations
+
+
+
+
+
+
+
+    def __find_configurations_for_contract(self, depth, max_depth, contract,
+                                           all_contracts, connection_map, upper_list,
+                                           reject_list):
+        '''
+        fill possible configurations dict up to a certain depth
+        :param depth:
+        :param contract:
+        :param all_contracts:
+        :param connection_map:
+        :return:
+        '''
+
+        if depth >= max_depth:
+            return None
+
+        for conf in connection_map[contract]:
+            if conf <= all_contracts:
+                conf_dict = {}
+                rej_list = []
+                for c in conf:
+                    c_list = []
+                    rej_clist = []
+
+                    #append current contract and its siblings
+                    all_cs = self.library.contracts_by_name(c.base_name)
+                    rej_list.append(Or([self.lib_model.use_flags[x] == 1
+                                         for x in all_cs], self.context))
+
+                    self.__find_configurations_for_contract(depth+1, max_depth, c,
+                                                            all_contracts,
+                                                            connection_map,
+                                                            c_list, rej_clist)
+
+                    conf_dict[c] = c_list
+
+                    if len(rej_clist) > 0:
+                        rej_list.append(Or(rej_clist, self.context))
+
+        if len(rej_list) > 0:
+            reject_list.append(And(rej_list, self.context))
+        if len(conf_dict) > 0:
+            upper_list.append(conf_dict)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     def _infer_relevant_ports_from_model(self, model, output_port_names):

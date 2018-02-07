@@ -404,7 +404,11 @@ def process_model(spec_list, output_port_names, relevant_spec_ports,
     # LOG.debug(model)
     # LOG.debug(output_port_names)
 
-    models, spec_models = manager._infer_relevant_ports_from_model(model, output_port_names)
+    #models, spec_models = manager._infer_relevant_ports_from_model(model, output_port_names)
+    configurations = manager._infer_relevant_components_from_model(model, output_port_names)
+
+    LOG.debug(configurations)
+
     #
     # LOG.debug(models)
     # LOG.debug(spec_models)

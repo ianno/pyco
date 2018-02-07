@@ -65,7 +65,8 @@ class Z3Interface(object):
         Create environment and models from library
         '''
 
-        self.lib_model.preprocess(spec)
+        self.lib_model.preprocess_spec(spec)
+        self.lib_model.instantiate_models()
 
 
     def use_max_n_components(self, n):
@@ -110,7 +111,7 @@ class Z3Interface(object):
         '''
 
         constraints = []
-        LOG.debug(self.library.connection_map)
+        #LOG.debug(self.library.connection_map)
         # limit the values
         for contract in self.library.all_contracts:
             options = []

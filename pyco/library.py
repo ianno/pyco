@@ -26,6 +26,7 @@ class ContractLibrary(object):
         initializer
         '''
         self.components = {}
+        self.component_map = {}
         self.connection_map = {}
 
         #type structures
@@ -54,15 +55,24 @@ class ContractLibrary(object):
         return max(self.hierarchy.values())
 
 
-    @property
-    def component_map(self):
-        """
+    # @property
+    # def component_map(self):
+    #     """
+    #
+    #     :return: dict containing pairs name:component
+    #     """
+    #
+    #     return {comp.base_name: comp for comp in self.components.keys()}
 
-        :return: dict containing pairs name:component
-        """
+    def contracts_by_name(self, name):
+        '''
 
-        return {comp.base_name: comp for comp in self.components.keys()}
+        :param name:
+        :return:
+        '''
 
+        comp = self.component_map[name]
+        return self.components[comp]
 
     def component_by_name(self, name):
         """
@@ -116,18 +126,20 @@ class ContractLibrary(object):
         '''
         if library_component not in self.components:
             self.components[library_component] = set()
+            self.component_map[library_component.base_name] = library_component
             library_component.register_to_library(self)
             library_component.assign_to_solver(self.smt_manager)
             self.hierarchy[library_component.contract.base_name] = 0
 
 
         for i in range(number_of_instances):
-            num_elem = len(self.components[library_component])
-            name = '%s_%d' % (library_component.base_name, num_elem)
+            #num_elem = len(self.components[library_component])
+            #name = '%s_%d' % (library_component.base_name, num_elem)
+            #copied_comp = library_component.contract.copy(name)
             self.components[library_component].add(library_component.contract.copy())
 
-            if name in self.component_map:
-                raise DuplicateNameError(name)
+            # if name in self.component_map:
+            #     raise DuplicateNameError(name)
 
 
     def add_type(self, type_cls):
@@ -228,6 +240,15 @@ class ContractLibrary(object):
 
         return reduce(lambda x, y: x | y, self.components.values())
 
+    @property
+    def all_contracts_by_uname(self):
+        '''
+        Collects all the contracts associated to a certain component in the library
+        :return:
+        '''
+
+        return {x.unique_name: x for x in self.all_contracts}
+
     def preprocess_types(self):
         '''
         preprocess library to determine connections between components.
@@ -317,6 +338,7 @@ class ContractLibrary(object):
 
         # LOG.debug(self.type_compatibility_set)
 
+        LOG.debug('preprocessing...')
         # output first
         spec_outputs = spec.output_ports_dict.values()
         spec_out_map = {x.base_name: set() for x in spec_outputs}
@@ -336,6 +358,8 @@ class ContractLibrary(object):
                         spec_out_map[s_port.base_name].add(contract)
                         break
 
+        # TODO: make a contract interface class associated to contracts and
+        # TODO: make the following executed by a pool of processes
         #inputs are a bit different
         for contract in all_c:
             whole_set = set()
@@ -350,6 +374,7 @@ class ContractLibrary(object):
 
         # LOG.debug(spec_out_map)
         # LOG.debug(libspec_connection_map)
+        LOG.debug('preprocess complete')
 
         self.connection_map = libspec_connection_map
         self.spec_out_map = spec_out_map

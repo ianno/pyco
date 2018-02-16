@@ -405,23 +405,25 @@ def process_model(spec_list, output_port_names, relevant_spec_ports,
     # LOG.debug(output_port_names)
 
     #models, spec_models = manager._infer_relevant_ports_from_model(model, output_port_names)
-    configurations = manager._infer_relevant_components_from_model(model, output_port_names)
+    (relevant, reject_f) = manager._infer_relevant_contracts_and_reject_formula(model, output_port_names)
 
-    LOG.debug(configurations)
+    LOG.debug(relevant)
+    LOG.debug(reject_f)
 
-    #
-    # LOG.debug(models)
-    # LOG.debug(spec_models)
+
+    #TODO
+
+
 
     # now we get all the contracts related to the models.
     # by construction fetching only the outputs, we have the full set of contracts
-    contract_to_model_map, contract_map = manager.lib_model.contract_copies_by_models(models)
+    # contract_to_model_map, contract_map = manager.lib_model.contract_copies_by_models(models)
     #
     # LOG.debug(model)
     # LOG.debug(model_map)
     # LOG.debug(contract_map)
 
-    contracts = set(contract_to_model_map.values())
+    # contracts = set(contract_to_model_map.values())
 
     # composition mapping to define new names
     # mapping = CompositionMapping(contracts| set([working_spec]))

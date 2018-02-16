@@ -69,6 +69,19 @@ class Z3Interface(object):
         self.lib_model.instantiate_models()
 
 
+    def init_models(self):
+        '''
+        basic constraints
+        :return:
+        '''
+
+
+        constraints = []
+        constraints += [Or(comp == 0, comp == 1) for comp in self.lib_model.use_flags.values()]
+        #constraints += [lev >= 0 for lev in self.lib_model.level_index.values()]
+
+        return And(constraints)
+
     def use_max_n_components(self, n):
         '''
         Force the solver to use up to n components for a candidate solution
@@ -77,7 +90,6 @@ class Z3Interface(object):
         constraints = []
 
         # limit the values
-        constraints += [Or(comp == 0, comp == 1) for comp in self.lib_model.use_flags.values()]
         constraints += [Sum(self.lib_model.use_flags.values()) <= n]
 
         # LOG.debug(constraints)
@@ -119,12 +131,52 @@ class Z3Interface(object):
                 single_conf = [And(self.lib_model.use_flags[c] == 1,
                                    self.lib_model.level_index[c] < self.lib_model.level_index[contract])
                                for c in opt]
-                options.append(And(single_conf))
+                if len(single_conf) > 0:
+                    options.append(And(single_conf))
+                else:
+                    options.append(True)
 
             constraints.append(Implies(self.lib_model.use_flags[contract] == 1,
                                        Or(options)))
 
-        #LOG.debug(constraints)
+        # LOG.debug(constraints)
+        # self.solver.add(constraints)
+        return And(constraints)
+
+    def type_connection_rules(self):
+        '''
+        Force the solver to include related components if a component is chosen
+        '''
+
+        constraints = []
+        #LOG.debug(self.library.connection_map)
+        # limit the values
+        for contract in self.library.all_contracts:
+            options = []
+            for opt in self.library.connection_map[contract]:
+                single_conf = [self.lib_model.use_flags[c] == 1
+                               for c in opt]
+                if len(single_conf) > 0:
+                    options.append(And(single_conf))
+                else:
+                    options.append(True)
+
+            constraints.append(Implies(self.lib_model.use_flags[contract] == 1,
+                                       Or(options)))
+
+            # #now force all contracts not in right config to be 0:
+            # clist = []
+            # for conf in self.library.depending_on[contract]:
+            #     f = And([self.lib_model.use_flags[c] == 1 for c in conf])
+            #     clist.append(f)
+            #
+            # if len(clist) > 0:
+            #     f = Not(Or(clist))
+            # else:
+            #     f = True
+            # constraints.append(Implies(f, self.lib_model.use_flags[contract] == 0))
+
+        # LOG.debug(constraints)
         # self.solver.add(constraints)
         return And(constraints)
 
@@ -132,11 +184,10 @@ class Z3Interface(object):
         '''
         Set max depth of solution
         '''
-        constraints = []
+        # constraints = []
 
         # limit the values
-        constraints = [lev > 0 for lev in self.lib_model.level_index.values()]
-        constraints += [lev <= n for lev in self.lib_model.level_index.values()]
+        constraints = [lev <= n for lev in self.lib_model.level_index.values()]
 
         # LOG.debug(constraints)
         # self.solver.add(constraints)
@@ -215,10 +266,11 @@ class Z3Interface(object):
             LOG.debug('%s' % (contract.base_name))
 
 
-
-        constraints.append(self.use_max_n_components(self.max_components))
-        constraints.append(self.max_depth(depth))
-        constraints.append(self.type_connection_rules_and_no_loops())
+        constraints.append(self.init_models())
+        #constraints.append(self.use_max_n_components(self.max_components))
+        #constraints.append(self.max_depth(depth))
+        constraints.append(self.type_connection_rules())
+        # constraints.append(self.type_connection_rules_and_no_loops())
 
         goal = Goal()
         goal.add(constraints)

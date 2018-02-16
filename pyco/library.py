@@ -28,6 +28,8 @@ class ContractLibrary(object):
         self.components = {}
         self.component_map = {}
         self.connection_map = {}
+        self.depending_on = {}
+        self.spec_out_map = {}
 
         #type structures
         self.typeset = set()
@@ -376,10 +378,38 @@ class ContractLibrary(object):
         # LOG.debug(libspec_connection_map)
         LOG.debug('preprocess complete')
 
-        self.connection_map = libspec_connection_map
+        #self.connection_map = libspec_connection_map
+        self.connection_map = self._remove_subset_configs(libspec_connection_map)
+        # self.depending_on = {x: {c for conf in libspec_connection_map.values()
+        #                          for c in conf
+        #                          if x in c}
+        #                      for x in all_c}
         self.spec_out_map = spec_out_map
 
         return libspec_connection_map, spec_out_map
+
+
+
+    def _remove_subset_configs(self, oldmap):
+        '''
+        removes all the configurations which are subsets of larger ones.
+        Only keep configurations which exclusively require no inputs or spec inputs
+        :return:
+        '''
+
+        new_map = {}
+        for contract, configs in oldmap.items():
+            new_set = set()
+
+            for cset in configs:
+                if len(cset) == 0 or not any(map(lambda x: cset <= x, configs - {cset})):
+                    new_set.add(cset)
+
+
+            new_map[contract] = new_set
+
+        return new_map
+
 
 
 

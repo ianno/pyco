@@ -26,7 +26,8 @@ class ContractLibrary(object):
         initializer
         '''
         self.components = {}
-        self.component_map = {}
+        #self.component_map = {}
+        self.contract_map = {}
         self.connection_map = {}
         self.depending_on = {}
         self.spec_out_map = {}
@@ -73,7 +74,7 @@ class ContractLibrary(object):
         :return:
         '''
 
-        comp = self.component_map[name]
+        comp = self.contract_map[name]
         return self.components[comp]
 
     def component_by_name(self, name):
@@ -82,7 +83,7 @@ class ContractLibrary(object):
         :param name: name of the component
         :return: return component associated to name
         """
-        return self.component_map[name]
+        return self.contract_map[name]
 
     def _new_refinement_assertion(self, assertion):
         '''
@@ -128,7 +129,7 @@ class ContractLibrary(object):
         '''
         if library_component not in self.components:
             self.components[library_component] = set()
-            self.component_map[library_component.base_name] = library_component
+            self.contract_map[library_component.contract.base_name] = library_component
             library_component.register_to_library(self)
             library_component.assign_to_solver(self.smt_manager)
             self.hierarchy[library_component.contract.base_name] = 0
@@ -380,10 +381,13 @@ class ContractLibrary(object):
 
         #self.connection_map = libspec_connection_map
         self.connection_map = self._remove_subset_configs(libspec_connection_map)
-        # self.depending_on = {x: {c for conf in libspec_connection_map.values()
-        #                          for c in conf
-        #                          if x in c}
-        #                      for x in all_c}
+        self.depending_on = {x: {c for conf in libspec_connection_map.values()
+                                 for c in conf
+                                 if x in c}
+                             for x in all_c}
+        self.spec_depending_on = {x: {frozenset(conf) for conf in spec_out_map.values()
+                                 if x in conf}
+                             for x in all_c}
         self.spec_out_map = spec_out_map
 
         return libspec_connection_map, spec_out_map

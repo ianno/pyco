@@ -220,8 +220,7 @@ class SinglePortSolver(multiprocessing.Process):
     #
     #     return True, composition, connected_spec, contract_inst, None
 
-
-    def _infer_relevant_contracts_and_reject_formula(self, model, output_port_names):
+    def _infer_relevant_contracts(self, model, output_port_names):
         '''
         Infer the valid configurations represented by the current model
         NOTE: we need this function to "crawl" from the outputs to the actual
@@ -238,16 +237,10 @@ class SinglePortSolver(multiprocessing.Process):
 
         connection_map = self.lib_model.library.connection_map
         spec_map = self.lib_model.library.spec_out_map
-        #uname_map = self.lib_model.library.all_contracts_by_uname
-        # vals = [model[v].as_long() for v in self.lib_model.level_index.values()]
-        # depth = max(vals)
 
 
-        reject_list = []
-
-
-        configurations = {}
-        seen = set()
+        #configurations = {}
+        processing = []
 
         all_contracts_in_model = {x
                                   for x, m in self.lib_model.use_flags.items()
@@ -256,57 +249,30 @@ class SinglePortSolver(multiprocessing.Process):
 
         #start from the outputs, and go backward to map all the possible configs
 
-        for spec_out in output_port_names:
-            configurations[spec_out] = {x: [] for x in spec_map[spec_out] if x in all_contracts_in_model}
+        # for spec_out in output_port_names:
+        #     configurations[spec_out] = {x: [] for x in spec_map[spec_out] if x in all_contracts_in_model}
 
-            rej_port_conf = []
-            for x in configurations[spec_out]:
-                #x is a contract
-
-                rej_single_p = []
-
-                #how many instances of this contract are in the model?
-                x_inst = {c for c in all_contracts_in_model
-                          if c.base_name == x.base_name}
-
-                # append current contract and its siblings
-                all_cs = self.library.contracts_by_name(x.base_name)
-                use_f = Or([self.lib_model.use_flags[q] == 1
-                            for q in all_cs], self.context)
-
-                # rej_single_p.append(Or([self.lib_model.use_flags[q] == 1
-                #                     for q in all_cs], self.context))
-
-                if len(x_inst) > 1:
-                    m_inst = [self.lib_model.use_flags[c] for c in x_inst]
-                    use_f = And(use_f, Sum(m_inst) <= len(x_inst), self.context)
-
-                rej_single_p.append(use_f)
-
-                for c in x_inst:
-                    seen.add(c)
+        configurations = {x: [] for spec_out in output_port_names for x in spec_map[spec_out] if x in all_contracts_in_model}
 
 
-                self.__find_configurations_for_contract(seen, x,
-                                                        all_contracts_in_model,
-                                                        connection_map,
-                                                        configurations[spec_out][x], rej_single_p)
+        seen = set()
+        for x in configurations:
+        #x is a contract
+
+            seen.add(x)
+            used = {x}
+                    #from each port we create levels navigating backwards
+            self.__find_configurations_for_contract(seen, used, x, all_contracts_in_model,
+                                                            connection_map,
+                                                            configurations[x])
 
 
-                rej_port_conf.append(And(rej_single_p, self.context))
-
-            reject_list.append(Or(rej_port_conf, self.context))
-
-        reject_formula = And(reject_list, self.context)
-        reject_formula = Not(reject_formula)
-        reject_f = simplify(reject_formula)
         LOG.debug(all_contracts_in_model - seen)
-        return seen, reject_f
+        return seen, configurations
 
 
-    def __find_configurations_for_contract(self, seen, contract,
-                                           all_contracts, connection_map, upper_list,
-                                           reject_list):
+    def __find_configurations_for_contract(self, seen, used, contract,
+                                           all_contracts, connection_map, upper_list):
         '''
         fill possible configurations dict up to a certain depth
         :param depth:
@@ -318,64 +284,164 @@ class SinglePortSolver(multiprocessing.Process):
 
 
         for conf in connection_map[contract]:
-            if conf <= all_contracts:
+            if conf <= (all_contracts - used):
 
                 conf_dict = {}
-                rej_list = []
+
                 for c in conf:
+                    seen.add(c)
+                    c_list = []
+                    self.__find_configurations_for_contract(seen, used | {c}, c,
+                                                            all_contracts,
+                                                            connection_map,
+                                                            c_list)
 
-                    if c not in seen:
+                    conf_dict[c] = c_list
 
-                        c_list = []
-                        rej_clist = []
 
-                        # how many instances of this contract are in the model?
-                        c_inst = {p for p in all_contracts
-                                  if p.base_name == c.base_name}
-
-                        for p in c_inst:
-                            seen.add(p)
-
-                        #append current contract and its siblings
-                        all_cs = self.library.contracts_by_name(c.base_name)
-
-                        # rej_list.append(Or([self.lib_model.use_flags[q] == 1
-                        #                         for q in all_cs], self.context))
-
-                        use_f = Or([self.lib_model.use_flags[q] == 1
-                                    for q in all_cs], self.context)
-
-                        if len(c_inst) > 1:
-                            m_inst = [self.lib_model.use_flags[p] for p in c_inst]
-                            use_f = And(use_f, Sum(m_inst) <= len(c_inst), self.context)
-
-                        rej_list.append(use_f)
-
-                        self.__find_configurations_for_contract(seen, c,
-                                                                all_contracts,
-                                                                connection_map,
-                                                                c_list, rej_clist)
-
-                        conf_dict[c] = c_list
-
-                        if len(rej_clist) > 0:
-                            rej_list.append(Or(rej_clist, self.context))
-
-                if len(rej_list) > 0:
-                    reject_list.append(And(rej_list, self.context))
                 if len(conf_dict) > 0:
                     upper_list.append(conf_dict)
 
+        return
+
+    def generate_reject_formula(self, used_contracts):
+
+        '''
+        generate compact reject formula
+
+        :param seen_contracts:
+        :return:
+        '''
+
+
+        seen = set()
+        constraints = []
+
+        #process ports
+
+
+        for x in used_contracts:
+
+            if x not in seen:
+
+                x_inst = {c for c in used_contracts
+                          if c.base_name == x.base_name}
+
+                # append current contract and its siblings
+                all_cs = self.library.contracts_by_name(x.base_name)
+                use_f = Or([self.lib_model.use_flags[q] == 1
+                            for q in all_cs], self.context)
+
+                # rej_single_p.append(Or([self.lib_model.use_flags[q] == 1
+                #                     for q in all_cs], self.context))
+
+                if len(x_inst) > 0:
+                    m_inst = [self.lib_model.use_flags[c] for c in all_cs]
+                    use_f = And(use_f, Sum(m_inst) <= len(x_inst), self.context)
+
+                constraints.append(use_f)
+
+                for c in x_inst:
+                    seen.add(c)
+
+
+                #process missing configs
+
+
+                for c in x_inst:
+                    #c_inner = []
+                    all_configs = self.library.depending_on[c]
+                    for conf in all_configs:
+                        inner = []
+                        diff = conf - used_contracts
+                        if len(diff) > 0:
+
+                            for s in diff:
+                                #s_inst = {c for c in used_contracts
+                                #          if c.base_name == s.base_name}
+                                #all_s = self.library.contracts_by_name(s.base_name)
+                                #use_s = Or([self.lib_model.use_flags[q] == 0
+                                 #           for q in all_s], self.context)
+
+                                #if len(s_inst) > 0:
+                                #    m_inst = [self.lib_model.use_flags[c] for c in all_s]
+                                #    use_s = And(use_s, Sum(m_inst) != len(s_inst), self.context)
+
+                                #LOG.debug(conf)
+                                inner.append(self.lib_model.use_flags[s] == 0)
+
+                        if len(inner) > 0:
+                            constraints.append(Or(inner, self.context))
+
+
+                    all_spec_configs = self.library.spec_depending_on[c]
+                    for conf in all_spec_configs:
+                        inner = []
+                        diff = conf - used_contracts
+                        if len(diff) > 0:
+
+                            for s in diff:
+                                # s_inst = {c for c in used_contracts
+                                #          if c.base_name == s.base_name}
+                                # all_s = self.library.contracts_by_name(s.base_name)
+                                # use_s = Or([self.lib_model.use_flags[q] == 0
+                                #           for q in all_s], self.context)
+
+                                # if len(s_inst) > 0:
+                                #    m_inst = [self.lib_model.use_flags[c] for c in all_s]
+                                #    use_s = And(use_s, Sum(m_inst) != len(s_inst), self.context)
+
+                                # LOG.debug(conf)
+                                inner.append(self.lib_model.use_flags[s] == 0)
+
+                        if len(inner) > 0:
+                            constraints.append(Or(inner, self.context))
+                    #aints.append(And(c_inner, self.context))
+
+                    # if len(inner) > 0:
+                    #     inner_f = Not(Or(inner, self.context), self.context)
+                    #     constraints.append(inner_f)
+
+
+                    #and spec
+                    # all_spec_configs = self.library.spec_depending_on[c]
+                    # for sconf in all_spec_configs:
+                    #     for conf in sconf:
+                    #         if not conf <= used_contracts:
+                    #             LOG.debug(conf)
+                    #             inner.append(And(self.lib_model.use_flags[q] == 1 for q in conf), self.context)
+                    #
+                    # if len(inner) > 0:
+                    #     inner_f = Not(Or(inner, self.context), self.context)
+                    #     constraints.append(inner_f)
+
+        # #spec process
+        # seen = set()
+        # top = []
+        # for port in self.spec_port_names:
+        #     for x in self.library.spec_out_map[port]:
+        #
+        #         if x not in seen:
+        #
+        #             all_cs = self.library.contracts_by_name(x.base_name)
+        #             use_f = Or([self.lib_model.use_flags[q] == model[self.lib_model.use_flags[q]].as_long()
+        #                         for q in all_cs], self.context)
+        #
+        #             # rej_single_p.append(Or([self.lib_model.use_flags[q] == 1
+        #             #                     for q in all_cs], self.context))
+        #
+        #             if len(x_inst) > 1:
+        #                 m_inst = [self.lib_model.use_flags[c] for c in x_inst]
+        #                 use_f = And(use_f, Sum(m_inst) <= len(x_inst), self.context)
+        #
+        #             constraints.append(use_f)
 
 
 
+        rej_ = Not(And(constraints, self.context), self.context)
+        rej = simplify(rej_)
 
-
-
-
-
-
-
+        return rej
 
 
 

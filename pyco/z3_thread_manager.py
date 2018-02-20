@@ -23,14 +23,14 @@ class ModelVerificationManager(object):
     manages refinement threads
     '''
 
-    def __init__(self, z3_interface, output_port_names, semaphore):
+    def __init__(self, solver_interface, output_port_names, semaphore):
         '''
         set up solver and thread status
         '''
 
-        self.solver = z3_interface.solver
-        self.z3_interface = z3_interface
-        self.spec = self.z3_interface.spec
+        self.solver = solver_interface.solver
+        self.solver_interface = solver_interface
+        self.spec = self.solver_interface.spec
         self.spec_out_dict = self.spec.output_ports_dict
         self.semaphore = semaphore
         self.found_refinement = multiprocessing.Event()
@@ -82,7 +82,7 @@ class ModelVerificationManager(object):
         while True:
             try:
                 # with self.z3_lock:
-                model = self.z3_interface.propose_candidate()
+                model = self.solver_interface.propose_candidate()
                 LOG.debug(model)
                     # LOG.debug(time.time()-tim)
                     # tim = time.time()
@@ -105,18 +105,25 @@ class ModelVerificationManager(object):
 
                     self.thread_pool = self.thread_pool - set([t for t in self.thread_pool if t.ident == pid])
 
-                #new refinement checker
-                thread = RefinementChecker(model, self.output_port_names, self, self.found_refinement, self.found_refinement)
-                #go
-                thread.start()
-                # with self.pool_lock:
-                self.model_dict[thread.ident] = model
-                self.thread_pool.add(thread)
+                (relevant, _) = self.solver_interface._infer_relevant_contracts(model, self.output_port_names)
+                reject_f = self.solver_interface.generate_reject_formula(relevant)
+
+                # #new refinement checker
+                # thread = RefinementChecker(model, self.output_port_names, relevant, self, self.found_refinement, self.found_refinement)
+                # #go
+                # thread.start()
+                # # with self.pool_lock:
+                # self.model_dict[thread.ident] = model
+                # self.thread_pool.add(thread)
 
                 #now reject the model, to get a new candidate
+                LOG.debug(reject_f)
+                self.solver.add(reject_f)
+                #TODO: remove the following
+                self.semaphore.release()
                 # with self.z3_lock:
                     #v2 works
-                self.z3_interface.reject_candidate(model, self.output_port_names)
+                #self.solver_interface.reject_candidate(model, self.output_port_names)
                     # self.solver.add(self.z3_interface.reject_candidate(model, self.output_port_names))
                     #LOG.debug('done')
 
@@ -157,10 +164,10 @@ class ModelVerificationManager(object):
         self.model_map = model_map[pid]
 
         #rebuild composition
-        spec = self.z3_interface.specification_list[0]
+        spec = self.solver_interface.specification_list[0]
         # with self.z3_lock:
         self.composition, self.connected_spec, self.contract_inst = \
-                self.z3_interface.build_composition_from_model(self.model, spec, self.output_port_names, self.model_map)
+                self.solver_interface.build_composition_from_model(self.model, spec, self.output_port_names, self.model_map)
         #wait for all the threads to stop
 
 
@@ -175,7 +182,7 @@ class RefinementChecker(multiprocessing.Process):
     this thread executes a refinement checks and dies
     '''
 
-    def __init__(self, model, output_port_names, manager, found_event, terminate_event):
+    def __init__(self, model, output_port_names, relevant_contracts, manager, found_event, terminate_event):
         '''
         instantiate
         '''
@@ -187,6 +194,7 @@ class RefinementChecker(multiprocessing.Process):
         self.terminate_event = terminate_event
 
         self.output_port_names = output_port_names
+        self.relevant_contracts = relevant_contracts
 
         #self.result_queue = multiprocessing.Queue()
 

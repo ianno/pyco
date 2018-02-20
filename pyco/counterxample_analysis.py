@@ -405,7 +405,8 @@ def process_model(spec_list, output_port_names, relevant_spec_ports,
     # LOG.debug(output_port_names)
 
     #models, spec_models = manager._infer_relevant_ports_from_model(model, output_port_names)
-    (relevant, reject_f) = manager._infer_relevant_contracts_and_reject_formula(model, output_port_names)
+    (relevant, _) = manager._infer_relevant_contracts(model, output_port_names)
+    reject_f = manager.generate_reject_formula(relevant)
 
     LOG.debug(relevant)
     LOG.debug(reject_f)

@@ -357,17 +357,6 @@ class SinglePortSolver(multiprocessing.Process):
                         if len(diff) > 0:
 
                             for s in diff:
-                                #s_inst = {c for c in used_contracts
-                                #          if c.base_name == s.base_name}
-                                #all_s = self.library.contracts_by_name(s.base_name)
-                                #use_s = Or([self.lib_model.use_flags[q] == 0
-                                 #           for q in all_s], self.context)
-
-                                #if len(s_inst) > 0:
-                                #    m_inst = [self.lib_model.use_flags[c] for c in all_s]
-                                #    use_s = And(use_s, Sum(m_inst) != len(s_inst), self.context)
-
-                                #LOG.debug(conf)
                                 inner.append(self.lib_model.use_flags[s] == 0)
 
                         if len(inner) > 0:
@@ -396,46 +385,6 @@ class SinglePortSolver(multiprocessing.Process):
 
                         if len(inner) > 0:
                             constraints.append(Or(inner, self.context))
-                    #aints.append(And(c_inner, self.context))
-
-                    # if len(inner) > 0:
-                    #     inner_f = Not(Or(inner, self.context), self.context)
-                    #     constraints.append(inner_f)
-
-
-                    #and spec
-                    # all_spec_configs = self.library.spec_depending_on[c]
-                    # for sconf in all_spec_configs:
-                    #     for conf in sconf:
-                    #         if not conf <= used_contracts:
-                    #             LOG.debug(conf)
-                    #             inner.append(And(self.lib_model.use_flags[q] == 1 for q in conf), self.context)
-                    #
-                    # if len(inner) > 0:
-                    #     inner_f = Not(Or(inner, self.context), self.context)
-                    #     constraints.append(inner_f)
-
-        # #spec process
-        # seen = set()
-        # top = []
-        # for port in self.spec_port_names:
-        #     for x in self.library.spec_out_map[port]:
-        #
-        #         if x not in seen:
-        #
-        #             all_cs = self.library.contracts_by_name(x.base_name)
-        #             use_f = Or([self.lib_model.use_flags[q] == model[self.lib_model.use_flags[q]].as_long()
-        #                         for q in all_cs], self.context)
-        #
-        #             # rej_single_p.append(Or([self.lib_model.use_flags[q] == 1
-        #             #                     for q in all_cs], self.context))
-        #
-        #             if len(x_inst) > 1:
-        #                 m_inst = [self.lib_model.use_flags[c] for c in x_inst]
-        #                 use_f = And(use_f, Sum(m_inst) <= len(x_inst), self.context)
-        #
-        #             constraints.append(use_f)
-
 
 
         rej_ = Not(And(constraints, self.context), self.context)

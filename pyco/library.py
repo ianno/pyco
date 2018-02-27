@@ -331,6 +331,22 @@ class ContractLibrary(object):
         else:
             return False
 
+    def check_connectivity(self, input, output):
+        '''
+        returns true if input can be connected to output
+        :param port_a:
+        :param port_b:
+        :return:
+        '''
+
+        itype = input.contract.port_type[input.base_name]
+        otype = output.contract.port_type[output.base_name]
+
+        return self.__check_match(itype, otype)
+
+
+
+
     def preprocess_with_spec(self, spec):
         """
         Augment the connectivity map including info from ports of the specififcation

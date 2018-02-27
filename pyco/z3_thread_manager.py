@@ -14,7 +14,7 @@ from pyco import LOG
 from counterxample_analysis import counterexample_analysis, parallel_solve
 import time
 
-MAX_THREADS = 8
+MAX_THREADS = 1
 
 #NotSynthesizableError = z3_interface.NotSynthesizableError
 
@@ -108,19 +108,18 @@ class ModelVerificationManager(object):
                 (relevant, _) = self.solver_interface._infer_relevant_contracts(model, self.output_port_names)
                 reject_f = self.solver_interface.generate_reject_formula(relevant)
 
-                # #new refinement checker
-                # thread = RefinementChecker(model, self.output_port_names, relevant, self, self.found_refinement, self.found_refinement)
-                # #go
-                # thread.start()
-                # # with self.pool_lock:
-                # self.model_dict[thread.ident] = model
-                # self.thread_pool.add(thread)
+                #new refinement checker
+                thread = RefinementChecker(model, self.output_port_names, relevant, self, self.found_refinement, self.found_refinement)
+                #go
+                thread.start()
+                # with self.pool_lock:
+                self.model_dict[thread.ident] = model
+                self.thread_pool.add(thread)
 
                 #now reject the model, to get a new candidate
                 LOG.debug(reject_f)
                 self.solver.add(reject_f)
-                #TODO: remove the following
-                self.semaphore.release()
+
                 # with self.z3_lock:
                     #v2 works
                 #self.solver_interface.reject_candidate(model, self.output_port_names)
@@ -187,7 +186,7 @@ class RefinementChecker(multiprocessing.Process):
         instantiate
         '''
         self.model = model
-        self.z3_interface = manager.z3_interface
+        self.solver_interface = manager.solver_interface
         self.found_event = found_event
         self.manager = manager
         self.z3_lock = manager.z3_lock
@@ -245,8 +244,8 @@ class RefinementChecker(multiprocessing.Process):
         #                             self.model, self.z3_interface, self.pid, self.found_event,
         #                    self.manager.result_queue, self.terminate_event)
         state = \
-            counterexample_analysis(self.z3_interface.specification_list, self.output_port_names,
-                                    self.model, self.z3_interface, self.pid, self.found_event,
+            counterexample_analysis(self.solver_interface.specification_list, self.output_port_names,
+                                    self.model, self.relevant_contracts, self.solver_interface, self.pid, self.found_event,
                                     self.manager.result_queue, self.terminate_event)
 
         if not state:

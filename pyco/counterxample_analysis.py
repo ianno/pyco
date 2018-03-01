@@ -1227,6 +1227,32 @@ def build_formula_for_all_specs(connected_spec, spec_list, composition):
 
 #TODO: case in which preamble is None
 
+def get_all_candidates(trace, var_map, current_pool=None):
+    ''' return a formula indicating all candidates from a trace'''
+    var_assign = trace_analysis(trace, var_map)
+
+    v_assign = []
+
+    for p in var_assign:
+        p_opt = []
+
+        if current_pool is not None and p not in current_pool:
+            continue
+
+        for v_p in var_assign[p]:
+            if current_pool is not None and v_p not in current_pool[p]:
+                continue
+            p_opt.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
+
+        if len(p_opt) > 0:
+            temp = reduce(lambda x, y: Disjunction(x, y, merge_literals=False), p_opt)
+            v_assign.append(temp)
+
+    if len(v_assign) > 0:
+        candidate_connection = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), v_assign)
+
+    return candidate_connection
+
 def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, var_map, input_variables, terminate_evt):
     """
     verify refinement formula according to preamble
@@ -1239,9 +1265,12 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, var_m
 
     candidate = None
     l_passed = False
-    all_cex = None
+    all_cex = TrueFormula()
     cex_list = []
     all_candidates = None
+    current_cex = None
+    all_candidates = None
+
 
 
     if preamble is None:
@@ -1279,28 +1308,17 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, var_m
 
                 left = Conjunction(preamble, left_sides, merge_literals=False)
                 if all_candidates is not None:
-                    #LOG.debug(len(cex_list))
-                    #LOG.debug(all_candidates)
-                    # formula = build_formula_for_multiple_inputs(preamble, all_candidates, neg_formula, left_sides, cex_list, monitored_variables)
-
                     left = Conjunction(left, Negation(all_candidates), merge_literals=False)
 
-                    # left1 = Conjunction(left_sides, Negation(all_candidates), merge_literals=False)
-                    # test = verify_tautology(Negation(left), return_trace=False)
-                    # assert not test
-
-                    # left = Conjunction(left, all_cex, merge_literals=False)
+                if current_cex is not None:
+                    LOG.debug(current_cex)
+                    left = Conjunction(left, current_cex, merge_literals=False)
 
 
-                formula = Implication(left, neg_formula, merge_literals=False)
-
-
-                # LOG.debug(preamble)
-                # LOG.debug(formula.generate())
-                l_passed, trace = verify_tautology(formula, return_trace=True)
+                l_passed, trace = verify_candidate(left, neg_formula)
 
                 LOG.debug(l_passed)
-                # LOG.debug(trace)
+                #LOG.debug(trace)
                 print('.'),
                 # LOG.debug(formula.generate())
 
@@ -1316,169 +1334,145 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, var_m
                     # LOG.debug('bad candidate')
                     return False, candidate,preamble, None
 
-                else:
-                    #we learn the sequence for the input variables
-                    var_assign = trace_analysis(trace, var_map)
 
-                    #build constraints from var assignment
-                    v_assign = []
-
-                    # LOG.debug(trace)
-                    # # LOG.debug(monitored_variables)
-                    # for p in monitored_variables:
-                    #     LOG.debug(p.unique_name)
-                    # LOG.debug(var_assign)
-
-                    for p in var_assign:
-                        for v_p in var_assign[p]:
-                            v_assign.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
-                            break
-
-                    candidate_connection = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), v_assign)
-
-                    # LOG.debug(candidate_connection)
-
+                    # left = Conjunction(preamble, left_sides, merge_literals=False)
                     # if all_candidates is not None:
-                    #     test = Implication(all_candidates, candidate_connection, merge_literals=False)
+                    #     left = Conjunction(left, Negation(all_candidates), merge_literals=False)
                     #
-                    #     l_passed = verify_tautology(test, return_trace=False)
+                    # l_passed, trace = verify_candidate(left, neg_formula)
                     #
-                    #     assert not l_passed
-
-                    # if all_candidates is None:
-                    #     all_candidates = candidate_connection
+                    # if l_passed:
+                    #     #if this passes, it means that we are done. This is NOT a solution.
+                    #     # we could find an assignment that makes the formula false,
+                    #     # or the formula is always false for any possible connection
+                    #     # LOG.debug('bad candidate')
+                    #     return False, candidate,preamble, None
                     # else:
-                    #     all_candidates = Disjunction(all_candidates, candidate_connection, merge_literals=False)
+                    #     LOG.debug('reset CEX')
+                    #     current_cex = None
 
 
-                    #now check if candidate is a good solution in general:
+                # LOG.debug(candidate_connection)
+                #
+                # if all_candidates is None:
+                #     all_candidates = candidate_connection
+                # else:
+                #     all_candidates = Disjunction(all_candidates, candidate_connection, merge_literals=False)
+                #
+                #     continue
 
-                    #test for all specs:
-                    # for ref_formula in ref_formulas:
-                    # if all_cex is not None:
-                    #     candidate_connection = Conjunction(candidate_connection, Negation(all_cex), merge_literals=False)
+                all_local_candidates = None
+                #current_pool = None
+                while True:
 
-                    candidate = Implication(candidate_connection, conj_specs, merge_literals=False)
+                    candidate_connection = get_all_candidates(trace, var_map)
+                    vanilla_candidate = candidate_connection
 
-                    l_passed, trace = verify_tautology(candidate, return_trace=True)
-                    # for ref_formula in ref_formulas:
-                    #     candidate = Implication(candidate_connection, ref_formula, merge_literals=False)
-                    #
-                    #     l_passed, trace = verify_tautology(candidate, return_trace=True)
-                    #
-                    #     if terminate_evt.is_set():
-                    #         return False, None, None, None
-                    #
-                    #     if not l_passed:
-                    #         break
+                    if all_local_candidates is not None:
+                        check = Implication(candidate_connection, all_local_candidates, merge_literals=False)
+                        checked = verify_tautology(check, return_trace=False)
+
+                        try:
+                            assert checked
+                        except AssertionError as e:
+                            #print e
+                            LOG.debug(l_passed)
+                            LOG.debug(trace)
+                            LOG.debug(candidate_connection)
+                            LOG.debug(all_local_candidates)
+                            raise
+
+                        all_local_candidates = Conjunction(all_local_candidates, Negation(candidate_connection),
+                                                           merge_literals=False)
+                    else:
+                        all_local_candidates = candidate_connection
+
+
+                    if all_candidates is None:
+                        all_candidates = vanilla_candidate
+                    else:
+                        all_candidates = Disjunction(all_candidates, vanilla_candidate, merge_literals=False)
+
+
+                    if current_cex is not None:
+                        candidate = Conjunction(all_local_candidates, current_cex, merge_literals=False)
+                    else:
+                        candidate = all_local_candidates
+
+
+                    l_passed, trace = verify_candidate(candidate, conj_specs)
+
 
                     if terminate_evt.is_set():
                         return False, None, None, None
-                    # LOG.debug(l_passed)
-                    # LOG.debug(trace)
-                    # if not l_passed:
-                    #     new_preamble = Conjunction(preamble, Negation(candidate_connection), merge_literals=False)
-                    # else:
-                    #     new_preamble = preamble
-                    # new_preamble = preamble
 
 
-                    var_assign = trace_analysis(trace, var_map)
+                    if l_passed:
+                        # make sure it passes even without cex
+                        # LOG.debug(current_cex)
 
-                    # build constraints from var assignment
-                    v_assign = []
-
-                    for p in var_assign:
-                        p_opt = []
-                        for v_p in var_assign[p]:
-                            p_opt.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
-
-                        if len(p_opt) > 0:
-                            temp = reduce(lambda x, y: Disjunction(x, y, merge_literals=False), p_opt)
-                            v_assign.append(temp)
-
-                    if len(v_assign) > 0:
-                        candidate = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), v_assign)
-
-                        LOG.debug(candidate)
-
-                        if all_candidates is None:
-                            all_candidates = candidate
+                        l_passed, trace = verify_candidate(vanilla_candidate, conj_specs)
+                        if not l_passed:
+                            # we cannot go further with these candidates and cex
+                            LOG.debug('BREAK')
+                            break
                         else:
-                            # verify candidate
-                            test = Implication(all_candidates, candidate, merge_literals=False)
-                            l_passed = verify_tautology(test, return_trace=False)
-
-                            assert not l_passed
-
-                            all_candidates = Disjunction(all_candidates, candidate, merge_literals=False)
-
-
-                    # if l_passed:
-                        # LOG.debug('FOUND!')
-                    # LOG.debug(preamble.generate())
-                    # LOG.debug(updated_preamble.generate())
-                    # LOG.debug(candidate.generate())
-                    #
-                    # for p in monitored_variables:
-                    #     LOG.debug(p.base_name)
-                    #     LOG.debug(p.unique_name)
-                    #     LOG.debug('--')
-                    #     for v in monitored_variables[p]['ports']:
-                    #         LOG.debug('.')
-                    #         LOG.debug(v.base_name)
-                    #         LOG.debug(v.unique_name)
-                    #     LOG.debug('++')
-
-                    if not l_passed:
+                            # LOG.debug('no input formula')
+                            return l_passed, None, None, {}
+                    else:
                         #derive the input sequence anyway, as it can be used for other specs
                         input_formula, i = derive_inputs_from_trace(trace, input_variables)
 
-                        # if len(next_counters) > 0:
-                        #     val = next_counters[-1]
-                        #     next_counters.append(val + i)
-                        # else:
-                        #     next_counters.append(i)
+                        assert input_formula is not None
 
-                        if input_formula is not None:
-                            # LOG.debug(input_formula.generate())
+                        #LOG.debug(input_formula)
 
-                            #if components are non-deterministic,
-                            # it can happen that the same counterexample is shown over and over.
-                            # we need to make sure we learn something new.
-                            if all_cex is None:
-                                all_cex = input_formula
-                                cex_list.append(input_formula)
-                            else:
-
-                                #next_cex = Disjunction(all_cex, input_formula, merge_literals=False)
-
-                                # check = Implication(input_formula, all_cex, merge_literals=False)
-                                # checked = verify_tautology(check, return_trace=False)
-                                #
-                                # if checked:
-                                if False:
-                                    LOG.debug('same learned input sequence... done with this candidate')
-                                    # LOG.debug('check for non-deterministic solutions')
-
-                                    LOG.debug("wait")
-
-                                    #not a good solution
-                                    #return l_passed, None, None, {}
-                                else:
-                                    LOG.debug('good cex')
-                                    all_cex = Disjunction(all_cex, input_formula, merge_literals=False)
-                                    cex_list.append(input_formula)
-                                    #preamble = Conjunction(preamble, input_formula, merge_literals=False)
-                        # else:
-                        #     new_preamble = preamble
+                        #if components are non-deterministic,
+                        # it can happen that the same counterexample is shown over and over.
+                        # we need to make sure we learn something new.
+                        if current_cex is None:
+                            current_cex = input_formula
                         else:
 
-                            # LOG.debug('no input formula')
-                            return l_passed, None, None, {}
+                            # check = Implication(input_formula, current_cex, merge_literals=False)
+                            # checked = verify_tautology(check, return_trace=False)
+                            #
+                            # assert checked
+
+                            current_cex = input_formula
+
+                        #loop to reduce current candidate
+
+                        #loop_candidate = get_all_candidates(trace, var_map)
+
+                        left = Conjunction(vanilla_candidate, left_sides, merge_literals=False)
+                        if all_candidates is not None:
+                            left = Conjunction(left, Negation(all_candidates), merge_literals=False)
+
+
+                        #all_local_candidates = Conjunction(all_local_candidates, Negation(loop_candidate),
+                         #                                  merge_literals=False)
+
+
+                        if current_cex is not None:
+                            left = Conjunction(left, current_cex, merge_literals=False)
+
+                        l_passed, ctrace = verify_candidate(left, neg_formula)
+
+                        if l_passed:
+                            all_candidates = Disjunction(all_candidates, vanilla_candidate, merge_literals=False)
+                            LOG.debug('down BREAK')
+                            l_passed = False
+                            break
+
+
 
         LOG.debug("FOUND")
         LOG.debug(l_passed)
+        LOG.debug(candidate)
+        l_passed, trace = verify_candidate(candidate, conj_specs)
+        LOG.debug(l_passed)
+
         return l_passed, candidate, preamble
 
 
@@ -1486,6 +1480,15 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, var_m
     # return (l_passed, trace, checked_variables, monitored, model_map, contracts, composition,
     #         spec_contract, last_iteration)
 
+
+def verify_candidate(candidate, spec):
+    '''verify whether a candidate is a good one'''
+
+    _candidate = Implication(candidate, spec, merge_literals=False)
+
+    l_passed, trace = verify_tautology(_candidate, return_trace=True)
+
+    return l_passed, trace
 
 def derive_inputs_from_trace(trace, input_variables):
     """

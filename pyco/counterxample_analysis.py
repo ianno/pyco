@@ -296,7 +296,7 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
     if terminate_evt.is_set():
         return False, composition, connected_spec, contracts, model_map
 
-    (compositions, spec_contract, ref_formulas,
+    (composition, spec_contract, ref_formulas,
      neg_formula, preamble, left_sides, var_map) = process_model(spec_list, output_port_names,
                                                      model, relevant_contracts, manager)
 
@@ -315,7 +315,7 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
 
 
     #performs first step of learning loo?p
-    passed, candidate, new_preamble, var_assign = exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides,
+    passed, candidate, new_preamble = exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, neg_formula, preamble, left_sides,
                                                                         var_map, input_variables, terminate_evt)
     # LOG.debug(passed)
     # while not passed:
@@ -400,7 +400,7 @@ def extract_model_connections(spec_contract, relevant_contracts, library):
         for iport in ci.input_ports_dict.values():
             var_map[iport] = set()
 
-            for co in relevant_contracts:
+            for co in relevant_contracts - {ci}:
                 for oport in co.output_ports_dict.values():
 
                     if library.check_connectivity(iport, oport):
@@ -450,28 +450,32 @@ def process_model(spec_list, output_port_names,
     var_map = extract_model_connections(spec_contract, relevant_contracts, library)
 
     #composition names
-    mappings = {s.unique_name: CompositionMapping(relevant_contracts | {working_specs[s.unique_name]}) for s in spec_list}
-
+    #mappings = {s.unique_name: CompositionMapping(relevant_contracts | {working_specs[s.unique_name]}) for s in spec_list}
+    mapping = CompositionMapping(relevant_contracts | {spec_contract})
     for c in relevant_contracts:
         for p in c.ports_dict.values():
-            for m in mappings.values():
-                m.add(p, '%s_%s' % (c.unique_name, p.base_name))
+            mapping.add(p, '%s_%s' % (c.unique_name, p.base_name))
 
     #now build preamble and related formulas
-    compositions = {s.unique_name: working_specs[s.unique_name].compose(relevant_contracts, composition_mapping=mappings[s.unique_name])
-                    for s in spec_list}
+    # compositions = {s.unique_name: working_specs[s.unique_name].compose(relevant_contracts, composition_mapping=mappings[s.unique_name])
+    #                 for s in spec_list}
 
-    #make compositions port names uniform
-    for c1 in compositions.values():
-        for c2 in compositions.values():
-            for p_name in c1.ports_dict:
-                c1.connect_to_port(c1.ports_dict[p_name], c2.ports_dict[p_name])
+    # #make compositions port names uniform
+    # for c1 in compositions.values():
+    #     for c2 in compositions.values():
+    #         for p_name in c1.ports_dict:
+    #             c1.connect_to_port(c1.ports_dict[p_name], c2.ports_dict[p_name])
+
+
+    root = relevant_contracts.pop()
+    composition = root.compose(relevant_contracts, composition_mapping=mapping)
+    relevant_contracts.add(root)
 
     #TODO: can we simplify this?
-    ref_formulas = [build_formulas_for_other_spec(s, compositions[s.unique_name]) for s in
-                    spec_list]
+    ref_formulas = [build_formulas_for_other_spec(s, composition) for s in
+                    working_specs.values()]
     # ref_formula = build_formula_for_all_specs(spec_contract, spec_list, composition)
-    neg_formula = build_neg_formula_for_all_specs(spec_list, compositions)
+    neg_formula = build_neg_formula_for_all_specs(working_specs.values(), composition)
 
     # neg_formula = Negation(reduce(lambda x, y: Conjunction(x, y, merge_literals=False), ref_formulas))
 
@@ -496,10 +500,9 @@ def process_model(spec_list, output_port_names,
         preamble = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), formulas)
 
 
-        for c in compositions.values():
-            left_sides = Conjunction(left_sides, c.guarantee_formula, merge_literals=False)
+        left_sides = Conjunction(left_sides, composition.guarantee_formula, merge_literals=False)
 
-        for s in spec_list:
+        for s in working_specs.values():
             left_sides = Conjunction(left_sides, s.assume_formula, merge_literals=False)
             break
 
@@ -510,499 +513,9 @@ def process_model(spec_list, output_port_names,
     #     for p in c.ports_dict.values():
     #         var_name_map[p.unique_name] = p
 
-    return compositions, spec_contract, ref_formulas, neg_formula, preamble, left_sides, var_map
+    return composition, spec_contract, ref_formulas, neg_formula, preamble, left_sides, var_map
 
 
-    #
-    #
-    # # start with spec port
-    # # TODO: maybe remove these checks
-    # for mod in spec_port_models:
-    #     if model[mod].as_long() != -1:
-    #
-    #         name = str(mod)
-    #
-    #         if name in output_port_names:
-    #             spec_port = spec_contract.ports_dict[name]
-    #             orig_spec_port = manager.spec_contract.ports_dict[name]
-    #             # s_type = spec_contract.type_dict[spec_port]
-    #
-    #             # spec_port_type_class = spec_contract.out_type_map[s_type]
-    #
-    #             index = model[mod].as_long()
-    #             i_mod = manager.lib_model.models[index]
-    #             level = manager.lib_model.model_levels[i_mod.get_id()]
-    #             orig_port = manager.lib_model.port_by_index(index)
-    #
-    #             other_contract_orig = orig_port.contract
-    #             other_contract = contract_map[(level, other_contract_orig)]
-    #
-    #             port = other_contract.ports_dict[orig_port.base_name]
-    #
-    #             # check if this port has already a match in checked_variables
-    #
-    #             # create monitored set
-    #             if (-1, orig_spec_port, spec_port.base_name) not in monitored_variables:
-    #                 monitored_variables[(-1, orig_spec_port, spec_port.base_name)] = set()
-    #
-    #             p_type = other_contract_orig.port_type[port.base_name]
-    #
-    #             # collect all ports with same type
-    #             port_type_class = {x for x in other_contract_orig.out_type_map[p_type]}
-    #
-    #             # port_type_class = port_type_class | {port.base_name}
-    #
-    #
-    #             assert len(port_type_class) > 0
-    #
-    #             #if size is 1, connect directly
-    #             if len(port_type_class) == 1:
-    #
-    #                 # spec_contract.connect_to_port(spec_port, port)
-    #                 p0_name = port_type_class.pop()
-    #                 p0 = other_contract.ports_dict[p0_name]
-    #                 p0_orig = other_contract_orig.ports_dict[p0_name]
-    #
-    #                 # update model map
-    #                 model_map[mod.get_id()] = manager.lib_model.index[p0_orig][level]
-    #
-    #                 # we do not monitor this variable anymore
-    #                 monitored_variables.pop((-1, orig_spec_port, spec_port.base_name))
-    #
-    #                 # connect
-    #                 spec_contract.connect_to_port(spec_port, p0)
-    #
-    #             #else add variables in monitored list
-    #             else:
-    #
-    #                 pivots = []
-    #                 for pivot_name in port_type_class:
-    #
-    #                     pivot = other_contract.ports_dict[pivot_name]
-    #                     p_orig = other_contract_orig.ports_dict[pivot_name]
-    #
-    #                     # if pivot in other_contract.relevant_ports:
-    #
-    #                     other_composition_name = '%s_%d_%s' % (other_contract.unique_name, level,
-    #                                                            pivot_name)
-    #
-    #                     # add to monitored
-    #                     monitored_variables[(-1, orig_spec_port,
-    #                                          spec_port.base_name)].add((level, p_orig,
-    #                                                                     other_composition_name))
-    #
-    #                     inner = Globally(Equivalence(spec_port.literal, pivot.literal, merge_literals=False))
-    #
-    #                     # for o_name in port_type_class - {pivot_name}:
-    #                     #     op = other_contract.ports_dict[o_name]
-    #                     #
-    #                     #     temp = Negation(Globally(Equivalence(spec_port.literal, op.literal, merge_literals=False)))
-    #                     #     inner = Conjunction(inner, temp, merge_literals=False)
-    #
-    #                     pivots.append(inner)
-    #                 if len(pivots) > 0:
-    #                     formula = reduce((lambda x, y: Disjunction(x, y, merge_literals=False)), pivots)
-    #                     formulas.append(formula)
-    #
-    #                 # preamble = Globally(Equivalence(spec_port.literal, p0.literal, merge_literals=False))
-    #                 #
-    #                 # other_composition_name = '%s_%d_%s' % (other_contract.unique_name, level,
-    #                 #                                        p0_name)
-    #                 # #add to monitored
-    #                 # monitored_variables[(-1, orig_spec_port,
-    #                 #                      spec_port.base_name)].add((level, p0_orig,
-    #                 #                                                 other_composition_name))
-    #                 #
-    #                 # for p_name in port_type_class:
-    #                 #     p = other_contract.ports_dict[p_name]
-    #                 #     orig_port = other_contract_orig.ports_dict[p_name]
-    #                 #
-    #                 #     preamble = Disjunction(preamble, Globally(Equivalence(spec_port.literal, p.literal,
-    #                 #                                             merge_literals=False)),
-    #                 #                           merge_literals=False)
-    #                 #
-    #                 #     other_composition_name = '%s_%d_%s' % (other_contract.unique_name, level,
-    #                 #                                            p_name)
-    #                 #     # add to monitored
-    #                 #     monitored_variables[(-1, orig_spec_port,
-    #                 #                      spec_port.base_name)].add((level, orig_port,
-    #                 #                                                 other_composition_name))
-    #                 #
-    #                 # formulas.append(preamble)
-    #
-    #
-    # # connections among candidates
-    # processed_ports = set()
-    # for p_model in models | spec_models:
-    #     if model[p_model] is not None:
-    #         level, old_contract = manager.lib_model.contract_by_model(p_model)
-    #         current_contract = contract_map[(level, old_contract)]
-    #         old_port = manager.lib_model.port_by_model(p_model)
-    #         current_port = current_contract.ports_dict[old_port.base_name]
-    #         other_index = model[p_model].as_long()
-    #
-    #         current_p_composition_name = '%s_%d_%s' % (current_contract.unique_name, level,
-    #                                            current_port.base_name)
-    #
-    #         if (level, old_port, current_p_composition_name) not in monitored_variables:
-    #             monitored_variables[(level, old_port, current_p_composition_name)] = set()
-    #
-    #         # if (level, old_port) not in checked_variables:
-    #         #     checked_variables[(level, old_port)] = set()
-    #
-    #         if other_index < manager.lib_model.specs_at:
-    #
-    #             other_mod = manager.lib_model.models[other_index]
-    #             other_level = manager.lib_model.model_levels[other_mod.get_id()]
-    #
-    #             other_port_orig = manager.lib_model.port_by_index(other_index)
-    #
-    #             other_contract_orig = other_port_orig.contract
-    #             other_contract = contract_map[(other_level, other_port_orig.contract)]
-    #
-    #             other_port = other_contract.ports_dict[other_port_orig.base_name]
-    #
-    #             p_type = other_contract_orig.port_type[other_port.base_name]
-    #
-    #             # collect all ports with same type
-    #             port_type_class = {x for x in other_contract_orig.out_type_map[p_type]}
-    #
-    #             # #remove ports already processed
-    #             # if len(checked_variables[(level, old_port)]) > 0:
-    #             #     port_type_class = port_type_class & checked_variables[(level, old_port)]
-    #
-    #
-    #             #make sure initial port is always there
-    #             # port_type_class = port_type_class | {other_port.base_name}
-    #             assert len(port_type_class) > 0
-    #             # LOG.debug(port_type_class)
-    #             if len(port_type_class) == 1:
-    #
-    #                 p0_name = port_type_class.pop()
-    #                 p0 = other_contract.ports_dict[p0_name]
-    #                 p0_orig = other_contract_orig.ports_dict[p0_name]
-    #
-    #                 #not monitored anymore
-    #                 monitored_variables.pop((level, old_port, current_p_composition_name))
-    #
-    #                 # update model map
-    #                 model_map[p_model.get_id()] = manager.lib_model.index[p0_orig][level]
-    #
-    #                 #connect
-    #                 for m in mappings.values():
-    #                     m.connect(current_port, p0,
-    #                                     current_p_composition_name)
-    #
-    #                 # LOG.debug(current_contract.unique_name)
-    #                 # LOG.debug(other_contract.unique_name)
-    #                 # LOG.debug(current_port.unique_name)
-    #                 # LOG.debug(p0.unique_name)
-    #                 processed_ports.add(current_port)
-    #                 processed_ports.add(p0)
-    #
-    #
-    #             else:
-    #
-    #                 if current_port not in processed_ports:
-    #                     for m in mappings.values():
-    #                         m.add(current_port,
-    #                                 current_p_composition_name)
-    #
-    #                     processed_ports.add(current_port)
-    #
-    #
-    #                 pivots = []
-    #                 for pivot_name in port_type_class:
-    #
-    #                     pivot = other_contract.ports_dict[pivot_name]
-    #                     p_orig = other_contract_orig.ports_dict[pivot_name]
-    #
-    #                     # if pivot in other_contract.relevant_ports:
-    #                     other_composition_name = '%s_%d_%s' % (other_contract.unique_name, other_level,
-    #                                                            pivot_name)
-    #
-    #                     # add to monitored
-    #                     monitored_variables[(level, old_port,
-    #                                      current_p_composition_name)].add((other_level, p_orig,
-    #                                                                        other_composition_name))
-    #
-    #                     if pivot not in processed_ports:
-    #                         for m in mappings.values():
-    #                             m.add(pivot, other_composition_name)
-    #
-    #                         processed_ports.add(pivot)
-    #
-    #
-    #                     inner = Globally(Equivalence(current_port.literal, pivot.literal, merge_literals=False))
-    #
-    #                     # for o_name in port_type_class - {pivot_name}:
-    #                     #     op = other_contract.ports_dict[o_name]
-    #                     #
-    #                     #     temp = Negation(Globally(Equivalence(current_port.literal, op.literal, merge_literals=False)))
-    #                     #     inner = Conjunction(inner, temp, merge_literals=False)
-    #
-    #                     pivots.append(inner)
-    #
-    #                 if len(pivots) > 0:
-    #                     formula = reduce((lambda x, y: Disjunction(x, y, merge_literals=False)), pivots)
-    #                     formulas.append(formula)
-    #
-    #
-    #
-    #
-    #                 # for p_name in port_type_class:
-    #                 #     p = other_contract.ports_dict[p_name]
-    #                 #     p_orig = other_contract_orig.ports_dict[p_name]
-    #                 #
-    #                 #     preamble = Disjunction(preamble, Globally(Equivalence(current_port.literal, p.literal,
-    #                 #                                                         merge_literals=False)),
-    #                 #                           merge_literals=False)
-    #                 #
-    #                 #     other_composition_name = '%s_%d_%s' % (other_contract.unique_name, other_level,
-    #                 #                                            p_name)
-    #                 #     # add to monitored
-    #                 #     monitored_variables[(level, old_port,
-    #                 #                      current_p_composition_name)].add((level, p_orig,
-    #                 #                                                        other_composition_name))
-    #                 #
-    #                 #     if p not in processed_ports:
-    #                 #         mapping.add(p, other_composition_name)
-    #                 #         processed_ports.add(p)
-    #                 #
-    #                 # formulas.append(preamble)
-    #
-    #
-    #
-    #             # LOG.debug(current_contract.unique_name)
-    #             # LOG.debug(other_contract.unique_name)
-    #             # LOG.debug(current_port.unique_name)
-    #             # LOG.debug(other_port.unique_name)
-    #
-    #         else:
-    #             spec_port = spec_contract.ports_dict[manager.lib_model.spec_by_index_map[other_index]]
-    #
-    #             p_type = unconnected_spec.port_type[spec_port.base_name]
-    #
-    #             # collect all ports with same type
-    #             port_type_class = {x for x in unconnected_spec.in_type_map[p_type]}
-    #
-    #             # #remove ports already processed
-    #             # if len( checked_variables[(level, old_port)]) > 0:
-    #             #     port_type_class = port_type_class & checked_variables[(level, old_port)]
-    #
-    #             # remove initial port, in case it's there
-    #             assert len(port_type_class) > 0
-    #
-    #             if len(port_type_class) == 1:
-    #
-    #                 p0_name = spec_port.base_name
-    #                 p0 = spec_port
-    #                 # p0_orig = manager.spec_contract.ports_dict[p0_name]
-    #
-    #                 # update model map
-    #                 model_map[p_model.get_id()] = manager.lib_model.spec_map[p0_name]
-    #
-    #                 #not monitored anymore
-    #                 monitored_variables.pop((level, old_port, current_p_composition_name))
-    #
-    #                 #connect
-    #                 spec_contract.connect_to_port(p0, current_port)
-    #
-    #             else:
-    #
-    #
-    #                 pivots = []
-    #                 for pivot_name in port_type_class:
-    #                     pivot = spec_contract.ports_dict[pivot_name]
-    #                     p_orig = unconnected_spec.ports_dict[pivot_name]
-    #
-    #                     #if pivot in relevant_spec_ports:
-    #                     # add to monitored
-    #                     monitored_variables[(level, old_port,
-    #                                      current_p_composition_name)].add((-1, p_orig,
-    #                                                                        pivot_name))
-    #
-    #
-    #                     inner = Globally(Equivalence(current_port.literal, pivot.literal, merge_literals=False))
-    #
-    #                     # for o_name in port_type_class - {pivot_name}:
-    #                     #     op = spec_contract.ports_dict[o_name]
-    #                     #
-    #                     #     temp = Negation(Globally(Equivalence(current_port.literal, op.literal, merge_literals=False)))
-    #                     #     inner = Conjunction(inner, temp, merge_literals=False)
-    #
-    #                     pivots.append(inner)
-    #                     # LOG.debug(inner.generate())
-    #
-    #                 if len(pivots) > 0:
-    #                     formula = reduce((lambda x, y: Disjunction(x, y, merge_literals=False)), pivots)
-    #                     formulas.append(formula)
-    #
-    #
-    #                 # preamble = Globally(Equivalence(current_port.literal, p0.literal, merge_literals=False))
-    #                 #
-    #                 # #add to monitored
-    #                 # monitored_variables[(level, old_port, current_p_composition_name)].add((-1, p0_orig,
-    #                 #                                                        p0_name))
-    #                 #
-    #                 # for p_name in port_type_class:
-    #                 #     p = spec_contract.ports_dict[p_name]
-    #                 #     p_orig = manager.spec_contract.ports_dict[p_name]
-    #                 #
-    #                 #     preamble = Disjunction(preamble, Globally(Equivalence(current_port.literal, p.literal,
-    #                 #                                                         merge_literals=False)),
-    #                 #                           merge_literals=False)
-    #                 #
-    #                 #     # add to monitored
-    #                 #     monitored_variables[(level, old_port, current_p_composition_name)].add((-1, p_orig,
-    #                 #                                                        p_name))
-    #                 #
-    #                 # formulas.append(preamble)
-    #
-    #             if not spec_port.is_input:
-    #                 assert False
-    #
-    #
-    # # add all the remaining names to new composition
-    # for (level, old_contract) in contract_map.keys():
-    #     for old_port in old_contract.ports_dict.values():
-    #         current_contract = contract_map[(level, old_contract)]
-    #         current_port = current_contract.ports_dict[old_port.base_name]
-    #         if current_port not in processed_ports:
-    #             for m in mappings.values():
-    #                 m.add(current_port, '%s_%d_%s' % (current_contract.unique_name,
-    #                                                     level, current_port.base_name))
-    #
-    #             processed_ports.add(current_port)
-    #
-    # # for contract in contracts:
-    # #    LOG.debug(contract)
-    # # LOG.debug(working_spec)
-    # # LOG.debug(spec_contract)
-    #
-    # # if not complete_model:
-    # #    c_set = self.filter_candidate_contracts_for_composition(contracts, spec_contract)
-    #
-    # # compose
-    # #root = contracts.pop()
-    #
-    # # c_set.add(root.copy())
-    #
-    # compositions = {s.unique_name: working_specs[s.unique_name].compose(relevant_contracts, composition_mapping=mappings[s.unique_name])
-    #                 for s in spec_list}
-    #
-    # #make compositions port names uniform
-    # for c1 in compositions.values():
-    #     for c2 in compositions.values():
-    #         for p_name in c1.ports_dict:
-    #             c1.connect_to_port(c1.ports_dict[p_name], c2.ports_dict[p_name])
-    #
-    #
-    # # get refinement formula
-    # # verifier = NuxmvRefinementStrategy(composition)
-    # # ref_formula = verifier.get_refinement_formula(spec_contract)
-    # # LOG.debug(spec_contract)
-    # # LOG.debug(ref_formula.generate())
-    #
-    #
-    # ref_formulas = [build_formulas_for_other_spec(spec_contract, s, compositions[s.unique_name]) for s in spec_list]
-    # # ref_formula = build_formula_for_all_specs(spec_contract, spec_list, composition)
-    # neg_formula = build_neg_formula_for_all_specs(spec_contract, spec_list, compositions)
-    #
-    # # neg_formula = Negation(reduce(lambda x, y: Conjunction(x, y, merge_literals=False), ref_formulas))
-    #
-    # left_sides = TrueFormula()
-    #
-    # if len(formulas) > 0:
-    #
-    #     preamble = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), formulas)
-    #
-    #     # formula = Implication(formula, ref_formula, merge_literals=False)
-    #     # LOG.debug(preamble.generate())
-    #
-    #     # ref_a = Negation(composition.assume_formula)
-    #     # ref_a1 = Conjunction(preamble, spec_contract.assume_formula, merge_literals=False)
-    #     # impl2 = Implication(ref_a1, ref_a, merge_literals=False)
-    #     #
-    #     # ref = Negation(spec_contract.guarantee_formula)
-    #     #
-    #     # ref = Implication(composition.guarantee_formula, ref, merge_literals=False)
-    #
-    #
-    #     # ref1 = spec_contract.guarantee_formula
-    #     # ref1 = Negation(Implication(composition.guarantee_formula, ref1, merge_literals=False))
-    #
-    #     # ref = Disjunction(ref, ref1, merge_literals=False)
-    #
-    #     for c in compositions.values():
-    #         left_sides = Conjunction(left_sides, c.guarantee_formula, merge_literals=False)
-    #
-    #     for s in spec_list:
-    #         left_sides = Conjunction(left_sides, s.assume_formula, merge_literals=False)
-    #         break
-    #
-    #
-    #     # preamble = Conjunction(preamble, composition.guarantee_formula, merge_literals=False)
-    #     # preamble = Conjunction(preamble, spec_contract.assume_formula, merge_literals=False)
-    #
-    #
-    #     # for spec in spec_list:
-    #     #     preamble = Conjunction(preamble, spec.assume_formula, merge_literals=False)
-    #
-    #     # ref1 = Negation(ref_formula)
-    #     #
-    #     # impl = Implication(ref, ref1, merge_literals=False)
-    #     #
-    #     # # cc = Conjunction(impl, impl2, merge_literals=False)
-    #     #
-    #     # l_passed, trace = verify_tautology(impl, return_trace=True)
-    #
-    #
-    # else:
-    #     preamble = None
-    #
-    # # for c in compositions.values():
-    # #     LOG.debug(c)
-    #
-    # # LOG.debug(spec_contract)
-    #
-    #
-    #
-    # # LOG.debug(preamble)
-    # # process monitored vars names
-    # monitored = {}
-    # base_composition = compositions.values()[0]
-    #
-    # # from graphviz_converter import GraphizConverter
-    # # graphviz_conv = GraphizConverter(spec_contract, base_composition, contracts | set([working_specs.values()[0]]))
-    # # graphviz_conv.generate_graphviz()
-    # # graphviz_conv.view()
-    #
-    # for (level, orig_port, name), v_set in monitored_variables.items():
-    #
-    #     #keep the following order. it matters because of working spec
-    #     if name in spec_contract.ports_dict:
-    #         p = spec_contract.ports_dict[name]
-    #     else:
-    #         p = base_composition.ports_dict[name]
-    #
-    #
-    #     # LOG.debug(p.unique_name)
-    #     monitored[p] = {}
-    #     monitored[p]['orig'] = (level, orig_port)
-    #     monitored[p]['ports'] = {}
-    #
-    #     for (v_level, v_orig_port, v_name) in v_set:
-    #         if v_name in base_composition.ports_dict:
-    #             v_p = base_composition.ports_dict[v_name]
-    #         else:
-    #             v_p = spec_contract.ports_dict[v_name]
-    #
-    #         monitored[p]['ports'][v_p] = (v_level, v_orig_port)
-    #
-    # # LOG.debug(monitored)
-    #
-    # return contracts, compositions, spec_contract, ref_formulas, neg_formula, preamble, left_sides, monitored, model_map
 
 
 def build_model_map(connected_spec, output_port_names,  manager, var_assign):
@@ -1063,7 +576,7 @@ def build_formulas_for_other_spec(spec_contract, composition):
     return ref_formula
 
 
-def build_neg_formula_for_all_specs(spec_list, compositions):
+def build_neg_formula_for_all_specs(spec_list, composition):
 
     spec_map = []
 
@@ -1071,8 +584,8 @@ def build_neg_formula_for_all_specs(spec_list, compositions):
     specs_gnt = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), [s.guarantee_formula for s in spec_list])
 
     g_check = specs_gnt
-    a_check = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), [compositions[s.unique_name].assume_formula for s in spec_list])
-
+    # a_check = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), [compositions[s.unique_name].assume_formula for s in spec_list])
+    a_check = composition.assume_formula
 
     return Negation(Conjunction(a_check, g_check, merge_literals=False))
     # neg_ref = Negation(ref_formula)
@@ -1097,134 +610,6 @@ def build_formula_for_all_specs(connected_spec, spec_list, composition):
     return Conjunction(a_check, g_check, merge_literals=False)
 
 
-# def build_formula_for_multiple_inputs(preamble, all_candidates, neg_formula, left_sides, counterexamples, monitored_vars):
-#     """
-#     Build a single formula by replicating the model for each counterexample
-#     and constraining the combinations
-#     :param formula:
-#     :param counterexamples:
-#     :return:
-#     """
-#
-#     # new_preamble = preamble
-#     # new_neg_formula = neg_formula
-#     if counterexamples is None:
-#         temp = Conjunction(preamble, left_sides, merge_literals=False)
-#         formula = Implication(temp, neg_formula, merge_literals=False)
-#         return formula
-#     else:
-#         first = counterexamples[0]
-#
-#         # new_preamble = Conjunction(preamble, first, merge_literals=False)
-#         cex = first
-#
-#         # LOG.debug(cex)
-#         formula = Implication(cex, neg_formula, merge_literals=False)
-#
-#         left_sides_formula = left_sides
-#
-#
-#         preamble_cls = {}
-#         for p in monitored_vars:
-#             old_vars = monitored_vars[p]['ports']
-#
-#             if p not in preamble_cls:
-#                 preamble_cls[p] = {}
-#
-#             for ov in old_vars:
-#
-#                 if ov not in preamble_cls[p]:
-#                     preamble_cls[p][ov] = set()
-#
-#                 temp = Equivalence(p.literal, ov.literal, merge_literals=False)
-#                 temp = Globally(temp)
-#                 preamble_cls[p][ov].add(temp)
-#
-#         for c in counterexamples[1:]:
-#             new_neg = neg_formula.generate()
-#             new_neg = LTL_PARSER.parse(new_neg)
-#             #now the unique names of the original formula are the base_names of the new
-#
-#             new_vars = dict(new_neg.get_literal_items())
-#
-#             new_c = c.generate()
-#             new_c = LTL_PARSER.parse(new_c)
-#
-#             # LOG.debug(new_c)
-#
-#             new_c_vars = dict(new_c.get_literal_items())
-#
-#             for name, var in new_c_vars.items():
-#                 var.merge(new_vars[name])
-#
-#
-#             new_left = left_sides.generate()
-#             new_left = LTL_PARSER.parse(new_left)
-#
-#             new_left_vars = dict(new_left.get_literal_items())
-#
-#             for name, var in new_left_vars.items():
-#                 var.merge(new_vars[name])
-#
-#             # LOG.debug(new_vars)
-#             # LOG.debug(preamble)
-#
-#             for p in monitored_vars:
-#                 old_vars = monitored_vars[p]['ports']
-#
-#                 if p.unique_name in new_vars:
-#                     for ov in old_vars:
-#                         if ov.unique_name in new_vars:
-#                             temp1 = Equivalence(new_vars[p.unique_name], new_vars[ov.unique_name], merge_literals=False)
-#                             temp1 = Globally(temp1)
-#                             preamble_cls[p][ov].add(temp1)
-#
-#                             # imp = Implication(temp, temp1, merge_literals=False)
-#                             #
-#                             # conditions.appe   nd(imp)
-#
-#
-#
-#             temp = Implication(new_c, new_neg, merge_literals=False)
-#             formula = Conjunction(formula, temp, merge_literals=False)
-#
-#             left_sides_formula = Conjunction(left_sides_formula, new_left, merge_literals=False)
-#
-#             # LOG.debug(temp)
-#             # LOG.debug(left_sides_formula)
-#
-#             # if len(conditions) > 0:
-#             #     cond = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), conditions)
-#             #     #LOG.debug(cond)
-#             #     new_neg_formula = Conjunction(new_neg_formula, cond, merge_literals=False)
-#
-#         init = None
-#         # LOG.debug(preamble_cls)
-#         for p_dict in preamble_cls.values():
-#             p_formulas = []
-#             for c_set in p_dict.values():
-#                 f = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), c_set)
-#                 p_formulas.append(f)
-#
-#             f = reduce(lambda x, y: Disjunction(x, y, merge_literals=False), p_formulas)
-#
-#             if init is None:
-#                 init = f
-#             else:
-#                 init = Conjunction(init, f, merge_literals=False)
-#
-#         assert (init is not None)
-#         # LOG.debug(init)
-#         temp = Conjunction(init, left_sides_formula, merge_literals=False)
-#         temp = Conjunction(temp, Negation(all_candidates), merge_literals=False)
-#         formula = Implication(temp, formula, merge_literals=False)
-#
-#
-#         # LOG.debug(formula)
-#         # formula = Implication(new_preamble, new_neg_formula, merge_literals=False)
-#         return formula
-
-
 #TODO: case in which preamble is None
 
 def get_all_candidates(trace, var_map, current_pool=None):
@@ -1233,14 +618,19 @@ def get_all_candidates(trace, var_map, current_pool=None):
 
     v_assign = []
 
+    num = 1
+
     for p in var_assign:
         p_opt = []
 
         if current_pool is not None and p not in current_pool:
             continue
 
+        num = num * len(var_assign[p])
         for v_p in var_assign[p]:
             if current_pool is not None and v_p not in current_pool[p]:
+                #remove
+                num = num / len(var_assign[p])
                 continue
             p_opt.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
 
@@ -1251,9 +641,9 @@ def get_all_candidates(trace, var_map, current_pool=None):
     if len(v_assign) > 0:
         candidate_connection = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), v_assign)
 
-    return candidate_connection
+    return candidate_connection, num
 
-def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, var_map, input_variables, terminate_evt):
+def exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, neg_formula, preamble, left_sides, var_map, input_variables, terminate_evt):
     """
     verify refinement formula according to preamble
     :param ref_formula:
@@ -1267,11 +657,22 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, var_m
     l_passed = False
     all_cex = TrueFormula()
     cex_list = []
-    all_candidates = None
+    tested_candidates = None
     current_cex = None
     all_candidates = None
 
 
+    total = 1
+    for p in var_map:
+        total *= len(var_map[p])
+
+    LOG.debug("TOTAL: %d candidates" % total)
+    num_left = total
+
+    all_spec_assumptions = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), [x.assume_formula for x in spec_list])
+    c_assumptions = composition.assume_formula
+
+    all_assumptions = Conjunction(all_spec_assumptions, c_assumptions, merge_literals=False)
 
     if preamble is None:
         #no extra connections, we try directly if the composition works
@@ -1284,7 +685,7 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, var_m
                 break
         LOG.debug("no preamble")
         LOG.debug(l_passed)
-        return l_passed, None, None, {}
+        return l_passed, None, None
     else:
 
         conj_specs = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), ref_formulas)
@@ -1293,177 +694,272 @@ def exists_forall_learner(ref_formulas, neg_formula, preamble, left_sides, var_m
         # LOG.debug(preamble)
         # LOG.debug(conj_specs)
 
-        while not l_passed:
-            # check again if terminate is set
+
+        while True:
             if terminate_evt.is_set():
-                return False, None, None, None
+                return False, None, None
 
-            # if candidate is None:
-            #     # nope, not found
-            #     # LOG.debug('nope')
-            #     return False, None, None, None
+            left = Conjunction(preamble, left_sides, merge_literals=False)
+            if tested_candidates is not None:
+                left = Conjunction(left, Negation(tested_candidates), merge_literals=False)
+
+            if current_cex is not None:
+                #LOG.debug(current_cex)
+                left = Conjunction(left, current_cex, merge_literals=False)
+
+            l_passed, trace = verify_candidate(left, neg_formula)
+
+            print('.'),
+
+            if l_passed:
+                #if this passes, it means that we are done. This is NOT a solution.
+                # we could find an assignment that makes the formula false,
+                # or the formula is always false for any possible connection
+                LOG.debug('bad candidate')
+                return False, candidate,preamble
+
             else:
-                # LOG.debug(preamble)
-                # LOG.debug(left_sides)
+                candidate_connection, _ = get_all_candidates(trace, var_map)
 
-                left = Conjunction(preamble, left_sides, merge_literals=False)
-                if all_candidates is not None:
-                    left = Conjunction(left, Negation(all_candidates), merge_literals=False)
+                left = candidate_connection
+
+                # left = Conjunction(candidate_connection, left_sides, merge_literals=False)
+                # left = Conjunction(candidate_connection, all_assumptions, merge_literals=False)
+                # left = Conjunction(left, spec_contract.guarantee_formula, merge_literals=False)
+                # left = Conjunction(left, composition.guarantee_formula, merge_literals=False)
+                if tested_candidates is not None:
+                    left = Conjunction(left, Negation(tested_candidates), merge_literals=False)
 
                 if current_cex is not None:
-                    LOG.debug(current_cex)
                     left = Conjunction(left, current_cex, merge_literals=False)
 
-
-                l_passed, trace = verify_candidate(left, neg_formula)
-
-                LOG.debug(l_passed)
-                #LOG.debug(trace)
-                print('.'),
-                # LOG.debug(formula.generate())
-
-                    # diff = parse_counterexample(trace, monitored)
-
+                # check for termination
                 if terminate_evt.is_set():
-                    return False, None, None, None
+                    return False, None, None
+                l_passed, trace = verify_candidate(left, conj_specs)
+
+
+                tested_c, num = get_all_candidates(trace, var_map)
+                #LOG.debug('remove %d candidates' % num)
+                #num_left = num_left - num
+                #LOG.debug('Candidates left = %d ' % num_left)
+                #assert num_left >= 0
+
+                # update tested candidates
+                if tested_candidates is None:
+                    tested_candidates = tested_c
+                else:
+                    tested_candidates = Disjunction(tested_candidates, tested_c, merge_literals=False)
+
 
                 if l_passed:
-                    #if this passes, it means that we are done. This is NOT a solution.
-                    # we could find an assignment that makes the formula false,
-                    # or the formula is always false for any possible connection
-                    # LOG.debug('bad candidate')
-                    return False, candidate,preamble, None
+                    #make sure it's right verify if it's a global solution
 
-
-                    # left = Conjunction(preamble, left_sides, merge_literals=False)
-                    # if all_candidates is not None:
-                    #     left = Conjunction(left, Negation(all_candidates), merge_literals=False)
-                    #
-                    # l_passed, trace = verify_candidate(left, neg_formula)
-                    #
-                    # if l_passed:
-                    #     #if this passes, it means that we are done. This is NOT a solution.
-                    #     # we could find an assignment that makes the formula false,
-                    #     # or the formula is always false for any possible connection
-                    #     # LOG.debug('bad candidate')
-                    #     return False, candidate,preamble, None
-                    # else:
-                    #     LOG.debug('reset CEX')
-                    #     current_cex = None
-
-
-                # LOG.debug(candidate_connection)
-                #
-                # if all_candidates is None:
-                #     all_candidates = candidate_connection
-                # else:
-                #     all_candidates = Disjunction(all_candidates, candidate_connection, merge_literals=False)
-                #
-                #     continue
-
-                all_local_candidates = None
-                #current_pool = None
-                while True:
-
-                    candidate_connection = get_all_candidates(trace, var_map)
-                    vanilla_candidate = candidate_connection
-
-                    if all_local_candidates is not None:
-                        check = Implication(candidate_connection, all_local_candidates, merge_literals=False)
-                        checked = verify_tautology(check, return_trace=False)
-
-                        try:
-                            assert checked
-                        except AssertionError as e:
-                            #print e
-                            LOG.debug(l_passed)
-                            LOG.debug(trace)
-                            LOG.debug(candidate_connection)
-                            LOG.debug(all_local_candidates)
-                            raise
-
-                        all_local_candidates = Conjunction(all_local_candidates, Negation(candidate_connection),
-                                                           merge_literals=False)
-                    else:
-                        all_local_candidates = candidate_connection
-
-
-                    if all_candidates is None:
-                        all_candidates = vanilla_candidate
-                    else:
-                        all_candidates = Disjunction(all_candidates, vanilla_candidate, merge_literals=False)
-
-
-                    if current_cex is not None:
-                        candidate = Conjunction(all_local_candidates, current_cex, merge_literals=False)
-                    else:
-                        candidate = all_local_candidates
-
-
-                    l_passed, trace = verify_candidate(candidate, conj_specs)
-
-
+                    # check for termination
                     if terminate_evt.is_set():
-                        return False, None, None, None
+                        return False, None, None
+                    LOG.debug("GOOD. let's double check")
+                    local_pass, _ = verify_candidate(candidate_connection, conj_specs)
 
-
-                    if l_passed:
-                        # make sure it passes even without cex
-                        # LOG.debug(current_cex)
-
-                        l_passed, trace = verify_candidate(vanilla_candidate, conj_specs)
-                        if not l_passed:
-                            # we cannot go further with these candidates and cex
-                            LOG.debug('BREAK')
-                            break
-                        else:
-                            # LOG.debug('no input formula')
-                            return l_passed, None, None, {}
+                    if local_pass:
+                        #success
+                        candidate = candidate_connection
+                        break
                     else:
-                        #derive the input sequence anyway, as it can be used for other specs
-                        input_formula, i = derive_inputs_from_trace(trace, input_variables)
+                        #we need a new counterexample, but now tested_candidates will remove this set of solutions
+                        LOG.debug("nah")
+                        LOG.debug('reset CEX')
+                        current_cex = None
+                else:
+                    #update counterexample
+                    LOG.debug('update CEX')
+                    LOG.debug(current_cex)
+                    # LOG.debug(trace)
+                    input_formula, _ = derive_inputs_from_trace(trace, input_variables)
+                    assert input_formula is not None
+                    LOG.debug(input_formula)
 
-                        assert input_formula is not None
-
-                        #LOG.debug(input_formula)
-
-                        #if components are non-deterministic,
-                        # it can happen that the same counterexample is shown over and over.
-                        # we need to make sure we learn something new.
-                        if current_cex is None:
-                            current_cex = input_formula
-                        else:
-
-                            # check = Implication(input_formula, current_cex, merge_literals=False)
-                            # checked = verify_tautology(check, return_trace=False)
-                            #
-                            # assert checked
-
-                            current_cex = input_formula
-
-                        #loop to reduce current candidate
-
-                        #loop_candidate = get_all_candidates(trace, var_map)
-
-                        left = Conjunction(vanilla_candidate, left_sides, merge_literals=False)
-                        if all_candidates is not None:
-                            left = Conjunction(left, Negation(all_candidates), merge_literals=False)
+                    # if current_cex is not None:
+                    #     check = Implication(input_formula, current_cex, merge_literals=False)
+                    #     checked = verify_tautology(check, return_trace=False)
+                    #
+                    #     assert checked
+                    current_cex = input_formula
 
 
-                        #all_local_candidates = Conjunction(all_local_candidates, Negation(loop_candidate),
-                         #                                  merge_literals=False)
 
 
-                        if current_cex is not None:
-                            left = Conjunction(left, current_cex, merge_literals=False)
-
-                        l_passed, ctrace = verify_candidate(left, neg_formula)
-
-                        if l_passed:
-                            all_candidates = Disjunction(all_candidates, vanilla_candidate, merge_literals=False)
-                            LOG.debug('down BREAK')
-                            l_passed = False
-                            break
+        # while not l_passed:
+        #     # check again if terminate is set
+        #     if terminate_evt.is_set():
+        #         return False, None, None, None
+        #
+        #     # if candidate is None:
+        #     #     # nope, not found
+        #     #     # LOG.debug('nope')
+        #     #     return False, None, None, None
+        #     else:
+        #         # LOG.debug(preamble)
+        #         # LOG.debug(left_sides)
+        #
+        #         left = Conjunction(preamble, left_sides, merge_literals=False)
+        #         if all_candidates is not None:
+        #             left = Conjunction(left, Negation(all_candidates), merge_literals=False)
+        #
+        #         if current_cex is not None:
+        #             LOG.debug(current_cex)
+        #             left = Conjunction(left, current_cex, merge_literals=False)
+        #
+        #
+        #         l_passed, trace = verify_candidate(left, neg_formula)
+        #
+        #         LOG.debug(l_passed)
+        #         #LOG.debug(trace)
+        #         print('.'),
+        #         # LOG.debug(formula.generate())
+        #
+        #             # diff = parse_counterexample(trace, monitored)
+        #
+        #         if terminate_evt.is_set():
+        #             return False, None, None, None
+        #
+        #         if l_passed:
+        #             #if this passes, it means that we are done. This is NOT a solution.
+        #             # we could find an assignment that makes the formula false,
+        #             # or the formula is always false for any possible connection
+        #             # LOG.debug('bad candidate')
+        #             return False, candidate,preamble, None
+        #
+        #
+        #             # left = Conjunction(preamble, left_sides, merge_literals=False)
+        #             # if all_candidates is not None:
+        #             #     left = Conjunction(left, Negation(all_candidates), merge_literals=False)
+        #             #
+        #             # l_passed, trace = verify_candidate(left, neg_formula)
+        #             #
+        #             # if l_passed:
+        #             #     #if this passes, it means that we are done. This is NOT a solution.
+        #             #     # we could find an assignment that makes the formula false,
+        #             #     # or the formula is always false for any possible connection
+        #             #     # LOG.debug('bad candidate')
+        #             #     return False, candidate,preamble, None
+        #             # else:
+        #             #     LOG.debug('reset CEX')
+        #             #     current_cex = None
+        #
+        #
+        #         # LOG.debug(candidate_connection)
+        #         #
+        #         # if all_candidates is None:
+        #         #     all_candidates = candidate_connection
+        #         # else:
+        #         #     all_candidates = Disjunction(all_candidates, candidate_connection, merge_literals=False)
+        #         #
+        #         #     continue
+        #
+        #         all_local_candidates = None
+        #         #current_pool = None
+        #         while True:
+        #
+        #             candidate_connection = get_all_candidates(trace, var_map)
+        #             vanilla_candidate = candidate_connection
+        #
+        #             if all_local_candidates is not None:
+        #                 check = Implication(candidate_connection, all_local_candidates, merge_literals=False)
+        #                 checked = verify_tautology(check, return_trace=False)
+        #
+        #                 try:
+        #                     assert checked
+        #                 except AssertionError as e:
+        #                     #print e
+        #                     LOG.debug(l_passed)
+        #                     LOG.debug(trace)
+        #                     LOG.debug(candidate_connection)
+        #                     LOG.debug(all_local_candidates)
+        #                     raise
+        #
+        #                 all_local_candidates = Conjunction(all_local_candidates, Negation(candidate_connection),
+        #                                                    merge_literals=False)
+        #             else:
+        #                 all_local_candidates = candidate_connection
+        #
+        #
+        #             if all_candidates is None:
+        #                 all_candidates = vanilla_candidate
+        #             else:
+        #                 all_candidates = Disjunction(all_candidates, vanilla_candidate, merge_literals=False)
+        #
+        #
+        #             if current_cex is not None:
+        #                 candidate = Conjunction(all_local_candidates, current_cex, merge_literals=False)
+        #             else:
+        #                 candidate = all_local_candidates
+        #
+        #
+        #             l_passed, trace = verify_candidate(candidate, conj_specs)
+        #
+        #
+        #             if terminate_evt.is_set():
+        #                 return False, None, None, None
+        #
+        #
+        #             if l_passed:
+        #                 # make sure it passes even without cex
+        #                 # LOG.debug(current_cex)
+        #
+        #                 l_passed, trace = verify_candidate(vanilla_candidate, conj_specs)
+        #                 if not l_passed:
+        #                     # we cannot go further with these candidates and cex
+        #                     LOG.debug('BREAK')
+        #                     break
+        #                 else:
+        #                     # LOG.debug('no input formula')
+        #                     return l_passed, None, None, {}
+        #             else:
+        #                 #derive the input sequence anyway, as it can be used for other specs
+        #                 input_formula, i = derive_inputs_from_trace(trace, input_variables)
+        #
+        #                 assert input_formula is not None
+        #
+        #                 #LOG.debug(input_formula)
+        #
+        #                 #if components are non-deterministic,
+        #                 # it can happen that the same counterexample is shown over and over.
+        #                 # we need to make sure we learn something new.
+        #                 if current_cex is None:
+        #                     current_cex = input_formula
+        #                 else:
+        #
+        #                     # check = Implication(input_formula, current_cex, merge_literals=False)
+        #                     # checked = verify_tautology(check, return_trace=False)
+        #                     #
+        #                     # assert checked
+        #
+        #                     current_cex = input_formula
+        #
+        #                 #loop to reduce current candidate
+        #
+        #                 #loop_candidate = get_all_candidates(trace, var_map)
+        #
+        #                 left = Conjunction(vanilla_candidate, left_sides, merge_literals=False)
+        #                 if all_candidates is not None:
+        #                     left = Conjunction(left, Negation(all_candidates), merge_literals=False)
+        #
+        #
+        #                 #all_local_candidates = Conjunction(all_local_candidates, Negation(loop_candidate),
+        #                  #                                  merge_literals=False)
+        #
+        #
+        #                 if current_cex is not None:
+        #                     left = Conjunction(left, current_cex, merge_literals=False)
+        #
+        #                 l_passed, ctrace = verify_candidate(left, neg_formula)
+        #
+        #                 if l_passed:
+        #                     all_candidates = Disjunction(all_candidates, vanilla_candidate, merge_literals=False)
+        #                     LOG.debug('down BREAK')
+        #                     l_passed = False
+        #                     break
 
 
 

@@ -10,7 +10,8 @@ from pyco import LOG
 from pyco.contract import CompositionMapping
 from pycolite.formula import (Globally, Equivalence, Disjunction, Implication,
                               Negation, Conjunction, Next, TrueFormula, FalseFormula,
-                                Constant, Eventually, Until)
+                                Constant, Eventually, Until, Le as Lt, Literal)
+from pycolite.types import FrozenInt
 from pycolite.nuxmv import NuxmvRefinementStrategy, verify_tautology
 from pycolite.parser.parser import LTL_PARSER
 from multiprocessing import *
@@ -297,7 +298,7 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
         return False, composition, connected_spec, contracts, model_map
 
     (composition, spec_contract, ref_formulas,
-     neg_formula, preamble, left_sides, var_map) = process_model(spec_list, output_port_names,
+     neg_formula, preamble, left_sides, var_map, lev_map) = process_model(spec_list, output_port_names,
                                                      model, relevant_contracts, manager)
 
     input_variables = set([p for p in spec_contract.input_ports_dict.values()])
@@ -316,7 +317,7 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
 
     #performs first step of learning loo?p
     passed, candidate, new_preamble = exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, neg_formula, preamble, left_sides,
-                                                                        var_map, input_variables, terminate_evt)
+                                                                        var_map, lev_map, input_variables, terminate_evt)
     # LOG.debug(passed)
     # while not passed:
     #     #check again if terminate is set
@@ -384,9 +385,14 @@ def extract_model_connections(spec_contract, relevant_contracts, library):
 
     var_map = {}
 
+    #create contract level variables(use contract names)
+    lev_map = {}
+
     #let's start with the spec
     for s_port in spec_contract.output_ports_dict.values():
         var_map[s_port] = set()
+        #only output for spec
+        # lev_map[s_port] = Literal(s_port.contract.unique_name, l_type=FrozenInt())
 
         for c in relevant_contracts:
             for oport in c.output_ports_dict.values():
@@ -399,6 +405,7 @@ def extract_model_connections(spec_contract, relevant_contracts, library):
     for ci in relevant_contracts:
         for iport in ci.input_ports_dict.values():
             var_map[iport] = set()
+            lev_map[iport] = Literal(iport.contract.unique_name, l_type=FrozenInt())
 
             for co in relevant_contracts - {ci}:
                 for oport in co.output_ports_dict.values():
@@ -412,10 +419,19 @@ def extract_model_connections(spec_contract, relevant_contracts, library):
                 if library.check_connectivity(iport, s_port):
                     var_map[iport].add(s_port)
 
+        #only for levels
+        for oport in ci.output_ports_dict.values():
+            lev_map[oport] = Literal(oport.contract.unique_name, l_type=FrozenInt())
 
+    #merge all the lev vars for ports in the same contract
+    l = lev_map.values()
+    for v in l:
+        for v1 in l:
+            if v.base_name == v1.base_name:
+                v.merge(v1)
 
     #LOG.debug(var_map)
-    return var_map
+    return var_map, lev_map
 
 
 def process_model(spec_list, output_port_names,
@@ -447,10 +463,13 @@ def process_model(spec_list, output_port_names,
 
 
 
-    var_map = extract_model_connections(spec_contract, relevant_contracts, library)
+    var_map, lev_map = extract_model_connections(spec_contract, relevant_contracts, library)
+
+
 
     #composition names
     #mappings = {s.unique_name: CompositionMapping(relevant_contracts | {working_specs[s.unique_name]}) for s in spec_list}
+
     mapping = CompositionMapping(relevant_contracts | {spec_contract})
     for c in relevant_contracts:
         for p in c.ports_dict.values():
@@ -483,13 +502,26 @@ def process_model(spec_list, output_port_names,
     for port in var_map:
         p_map = []
 
-        for p in var_map[port]:
-            inner = Globally(Equivalence(port.literal, p.literal, merge_literals=False))
-            p_map.append(inner)
+        if port in port.contract.relevant_ports:
+            for p in var_map[port]:
+                if p in p.contract.relevant_ports:
+                    inner = Globally(Equivalence(port.literal, p.literal, merge_literals=False))
 
-        if len(p_map) > 0:
-            formula = reduce((lambda x, y: Disjunction(x, y, merge_literals=False)), p_map)
-            formulas.append(formula)
+                    if port.contract in relevant_contracts:
+                        if p.contract in relevant_contracts:
+                            #add level vars
+                            lev_c = Lt(lev_map[p], lev_map[port])
+                        else:
+                            #it's the spec
+                            lev_c = Equivalence(lev_map[port], Constant(0))
+
+                        inner = Conjunction(inner, lev_c, merge_literals=False)
+
+                    p_map.append(inner)
+
+            if len(p_map) > 0:
+                formula = reduce((lambda x, y: Disjunction(x, y, merge_literals=False)), p_map)
+                formulas.append(formula)
 
 
     left_sides = TrueFormula()
@@ -513,7 +545,7 @@ def process_model(spec_list, output_port_names,
     #     for p in c.ports_dict.values():
     #         var_name_map[p.unique_name] = p
 
-    return composition, spec_contract, ref_formulas, neg_formula, preamble, left_sides, var_map
+    return composition, spec_contract, ref_formulas, neg_formula, preamble, left_sides, var_map, lev_map
 
 
 
@@ -610,11 +642,30 @@ def build_formula_for_all_specs(connected_spec, spec_list, composition):
     return Conjunction(a_check, g_check, merge_literals=False)
 
 
-#TODO: case in which preamble is None
+def _check_levels(in_p, out_p, lev_map, lev_vars):
+    '''
+    makes the nect function cleaner
+    :param in_p:
+    :param out_p:
+    :param lev_map:
+    :return:
+    '''
 
-def get_all_candidates(trace, var_map, current_pool=None):
+    if lev_map is None:
+        return True
+
+    if not (out_p in lev_map and in_p in lev_map):
+        return True
+
+    if int(lev_vars[out_p.contract.unique_name]) < int(lev_vars[in_p.contract.unique_name]):
+        return True
+
+
+    return False
+
+def get_all_candidates(trace, var_map, lev_map=None, current_pool=None):
     ''' return a formula indicating all candidates from a trace'''
-    var_assign = trace_analysis(trace, var_map)
+    var_assign, lev_vars = trace_analysis(trace, var_map, lev_map)
 
     v_assign = []
 
@@ -626,12 +677,21 @@ def get_all_candidates(trace, var_map, current_pool=None):
         if current_pool is not None and p not in current_pool:
             continue
 
+        if p not in p.contract.relevant_ports:
+            continue
+
         num = num * len(var_assign[p])
         for v_p in var_assign[p]:
             if current_pool is not None and v_p not in current_pool[p]:
                 #remove
                 num = num / len(var_assign[p])
                 continue
+            if not _check_levels(p, v_p, lev_map, lev_vars):
+                continue
+
+            if v_p not in v_p.contract.relevant_ports:
+                continue
+
             p_opt.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
 
         if len(p_opt) > 0:
@@ -643,7 +703,8 @@ def get_all_candidates(trace, var_map, current_pool=None):
 
     return candidate_connection, num
 
-def exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, neg_formula, preamble, left_sides, var_map, input_variables, terminate_evt):
+def exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, neg_formula, preamble, left_sides,
+                          var_map, lev_map, input_variables, terminate_evt):
     """
     verify refinement formula according to preamble
     :param ref_formula:
@@ -722,6 +783,7 @@ def exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, n
                 candidate_connection, _ = get_all_candidates(trace, var_map)
 
                 left = candidate_connection
+                #left = Conjunction(preamble, candidate_connection, merge_literals=False)
 
                 # left = Conjunction(candidate_connection, left_sides, merge_literals=False)
                 # left = Conjunction(candidate_connection, all_assumptions, merge_literals=False)
@@ -745,6 +807,7 @@ def exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, n
                 #LOG.debug('Candidates left = %d ' % num_left)
                 #assert num_left >= 0
 
+                # LOG.debug(tested_c)
                 # update tested candidates
                 if tested_candidates is None:
                     tested_candidates = tested_c
@@ -772,12 +835,12 @@ def exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, n
                         current_cex = None
                 else:
                     #update counterexample
-                    LOG.debug('update CEX')
-                    LOG.debug(current_cex)
+                    # LOG.debug('update CEX')
+                    # LOG.debug(current_cex)
                     # LOG.debug(trace)
                     input_formula, _ = derive_inputs_from_trace(trace, input_variables)
                     assert input_formula is not None
-                    LOG.debug(input_formula)
+                    # LOG.debug(input_formula)
 
                     # if current_cex is not None:
                     #     check = Implication(input_formula, current_cex, merge_literals=False)
@@ -1114,7 +1177,7 @@ def derive_inputs_from_trace(trace, input_variables):
 
     return formula, i
 
-def trace_analysis(trace, var_map):
+def trace_analysis(trace, var_map, lev_map=None):
     """
     Analyize the counterexample trace to infer wrong connections
     :param monitored_vars:
@@ -1131,6 +1194,13 @@ def trace_analysis(trace, var_map):
 
     c_vars = {}
     var_assign = {}
+    lev_vars = {}
+
+    if lev_map is None:
+        lev_map = {}
+
+    lev_set = {v.unique_name for v in lev_map.values()}
+    lev_inverse_map = {v.unique_name: v.base_name for v in lev_map.values()}
 
     # LOG.debug(trace)
     # LOG.debug(monitored_vars)
@@ -1231,6 +1301,10 @@ def trace_analysis(trace, var_map):
 
                 c_vars[line_elems[0]] = val
 
+            elif line_elems[0] in lev_set:
+                bname = lev_inverse_map[line_elems[0]]
+                lev_vars[bname] = line_elems[1]
+
     # for c in var_assign:
     #     LOG.debug('**')
     #     LOG.debug(c.base_name)
@@ -1254,7 +1328,7 @@ def trace_analysis(trace, var_map):
     #         ret_assign[(orig_level, orig_port)].add((origv_level, origv_port))
     #         break
 
-    return var_assign
+    return var_assign, lev_vars
 
 
 def assemble_checked_vars(trace_diff, monitored_vars, checked_vars):

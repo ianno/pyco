@@ -193,7 +193,7 @@ class Z3Interface(object):
         # self.solver.add(constraints)
         return And(constraints)
 
-    def solve_for_outputs(self, outputs):
+    def solve_for_outputs(self, outputs, context):
         '''
         Solve the synthesis problem only for the 'outputs' set spec ports
         :param outputs:
@@ -207,11 +207,11 @@ class Z3Interface(object):
             options = [self.lib_model.use_flags[c] == 1
                             for c in self.library.spec_out_map[port]]
 
-            constraints.append(Or(options))
+            constraints.append(Or(options, context))
 
         #LOG.debug(constraints)
         # self.solver.add(constraints)
-        return And(constraints)
+        return And(constraints, context)
 
 
 
@@ -305,7 +305,7 @@ class Z3Interface(object):
             #solve for port
             self.base_solver.push()
 
-            self.base_solver.add(self.solve_for_outputs(cluster))
+            # self.base_solver.add(self.solve_for_outputs(cluster))
 
             context = Context()
             assertions = self.base_solver.assertions()

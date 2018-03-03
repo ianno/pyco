@@ -62,6 +62,7 @@ class SinglePortSolver(multiprocessing.Process):
 
 
         self.solver = Solver(ctx=self.context)
+        self.solver.add(self.z3_interface.solve_for_outputs(spec_port_names, context))
         # self.solver = Then('simplify', 'bit-blast', 'split-clause',
         #                    'qfbv', 'sat', ctx=self.context).solver()
 
@@ -362,7 +363,7 @@ class SinglePortSolver(multiprocessing.Process):
                         if len(inner) > 0:
                             constraints.append(Or(inner, self.context))
 
-
+                    #The following is useful
                     all_spec_configs = self.library.spec_depending_on[c]
                     for conf in all_spec_configs:
                         inner = []
@@ -384,7 +385,7 @@ class SinglePortSolver(multiprocessing.Process):
                                 inner.append(self.lib_model.use_flags[s] == 0)
 
                         if len(inner) > 0:
-                            constraints.append(Or(inner, self.context))
+                            constraints.append(And(inner, self.context))
 
 
         rej_ = Not(And(constraints, self.context), self.context)

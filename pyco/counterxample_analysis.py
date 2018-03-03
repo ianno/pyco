@@ -283,10 +283,6 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
     composition = None
     var_assign = {}
 
-    rel_spec_ports = set()
-    for spec in spec_list:
-        rel_spec_ports |= spec.relevant_ports
-
     print('*'),
     # spec = spec_list[0]
     # (contracts, composition, connected_spec,
@@ -297,7 +293,8 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
     if terminate_evt.is_set():
         return False, composition, connected_spec, contracts, model_map
 
-    (composition, spec_contract, ref_formulas,
+    (composition, spec_contract, rel_spec_ports,
+     ref_formulas, all_specs_formula,
      neg_formula, preamble, left_sides, var_map, lev_map) = process_model(spec_list, output_port_names,
                                                      model, relevant_contracts, manager)
 
@@ -316,7 +313,7 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
 
 
     #performs first step of learning loo?p
-    passed, candidate, new_preamble = exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, neg_formula, preamble, left_sides,
+    passed, candidate, new_preamble = exists_forall_learner(composition, spec_contract, rel_spec_ports, ref_formulas, all_specs_formula, neg_formula, preamble, left_sides,
                                                                         var_map, lev_map, input_variables, terminate_evt)
     # LOG.debug(passed)
     # while not passed:
@@ -338,8 +335,9 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
 
     # preamble = new_preamble
     # LOG.debug('spec done')
+    LOG.debug(model)
 
-
+    LOG.debug(candidate)
 
     #if we are here we passed
     #we need to build model map
@@ -462,6 +460,14 @@ def process_model(spec_list, output_port_names,
             spec_contract.connect_to_port(spec_contract.ports_dict[name], port)
 
 
+    rel_spec_ports = set()
+    for spec in working_specs.values():
+        rel_spec_ports |= spec.relevant_ports
+
+    p_names = {p.unique_name for p in rel_spec_ports}
+
+    rel_spec_ports = {port for port in spec_contract.ports_dict.values() if port.unique_name in p_names}
+
 
     var_map, lev_map = extract_model_connections(spec_contract, relevant_contracts, library)
 
@@ -493,6 +499,12 @@ def process_model(spec_list, output_port_names,
     #TODO: can we simplify this?
     ref_formulas = [build_formulas_for_other_spec(s, composition) for s in
                     working_specs.values()]
+    all_specs_formula = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), ref_formulas)
+    # temp = all_specs_formula.get_literal_items()
+    # temp = {literal.unique_name for _, literal in temp}
+    # relevant_allspecs_ports = {port for port in spec_contract.ports_dict.values() if port.unique_name in temp}
+
+
     # ref_formula = build_formula_for_all_specs(spec_contract, spec_list, composition)
     neg_formula = build_neg_formula_for_all_specs(working_specs.values(), composition)
 
@@ -502,9 +514,9 @@ def process_model(spec_list, output_port_names,
     for port in var_map:
         p_map = []
 
-        if port in port.contract.relevant_ports:
+        if port in port.contract.relevant_ports | rel_spec_ports:
             for p in var_map[port]:
-                if p in p.contract.relevant_ports:
+                if p in p.contract.relevant_ports | rel_spec_ports:
                     inner = Globally(Equivalence(port.literal, p.literal, merge_literals=False))
 
                     if port.contract in relevant_contracts:
@@ -545,7 +557,8 @@ def process_model(spec_list, output_port_names,
     #     for p in c.ports_dict.values():
     #         var_name_map[p.unique_name] = p
 
-    return composition, spec_contract, ref_formulas, neg_formula, preamble, left_sides, var_map, lev_map
+    return (composition, spec_contract, rel_spec_ports, ref_formulas, all_specs_formula,
+            neg_formula, preamble, left_sides, var_map, lev_map)
 
 
 
@@ -663,7 +676,7 @@ def _check_levels(in_p, out_p, lev_map, lev_vars):
 
     return False
 
-def get_all_candidates(trace, var_map, lev_map=None, current_pool=None):
+def get_all_candidates(trace, var_map, relevant_allspecs_ports, lev_map=None, current_pool=None):
     ''' return a formula indicating all candidates from a trace'''
     var_assign, lev_vars = trace_analysis(trace, var_map, lev_map)
 
@@ -677,7 +690,7 @@ def get_all_candidates(trace, var_map, lev_map=None, current_pool=None):
         if current_pool is not None and p not in current_pool:
             continue
 
-        if p not in p.contract.relevant_ports:
+        if p not in p.contract.relevant_ports | relevant_allspecs_ports:
             continue
 
         num = num * len(var_assign[p])
@@ -689,7 +702,7 @@ def get_all_candidates(trace, var_map, lev_map=None, current_pool=None):
             if not _check_levels(p, v_p, lev_map, lev_vars):
                 continue
 
-            if v_p not in v_p.contract.relevant_ports:
+            if v_p not in v_p.contract.relevant_ports | relevant_allspecs_ports:
                 continue
 
             p_opt.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
@@ -703,7 +716,7 @@ def get_all_candidates(trace, var_map, lev_map=None, current_pool=None):
 
     return candidate_connection, num
 
-def exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, neg_formula, preamble, left_sides,
+def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, ref_formulas, all_specs_formula, neg_formula, preamble, left_sides,
                           var_map, lev_map, input_variables, terminate_evt):
     """
     verify refinement formula according to preamble
@@ -730,10 +743,10 @@ def exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, n
     LOG.debug("TOTAL: %d candidates" % total)
     num_left = total
 
-    all_spec_assumptions = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), [x.assume_formula for x in spec_list])
-    c_assumptions = composition.assume_formula
-
-    all_assumptions = Conjunction(all_spec_assumptions, c_assumptions, merge_literals=False)
+    # all_spec_assumptions = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), [x.assume_formula for x in spec_list])
+    # c_assumptions = composition.assume_formula
+    #
+    # all_assumptions = Conjunction(all_spec_assumptions, c_assumptions, merge_literals=False)
 
     if preamble is None:
         #no extra connections, we try directly if the composition works
@@ -749,7 +762,9 @@ def exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, n
         return l_passed, None, None
     else:
 
-        conj_specs = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), ref_formulas)
+        # conj_specs = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), ref_formulas)
+
+
         # neg_ref = Negation(conj_specs)
 
         # LOG.debug(preamble)
@@ -780,7 +795,7 @@ def exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, n
                 return False, candidate,preamble
 
             else:
-                candidate_connection, _ = get_all_candidates(trace, var_map)
+                candidate_connection, _ = get_all_candidates(trace, var_map, relevant_allspecs_ports)
 
                 left = candidate_connection
                 #left = Conjunction(preamble, candidate_connection, merge_literals=False)
@@ -798,10 +813,9 @@ def exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, n
                 # check for termination
                 if terminate_evt.is_set():
                     return False, None, None
-                l_passed, trace = verify_candidate(left, conj_specs)
+                l_passed, trace = verify_candidate(left, all_specs_formula)
 
 
-                tested_c, num = get_all_candidates(trace, var_map)
                 #LOG.debug('remove %d candidates' % num)
                 #num_left = num_left - num
                 #LOG.debug('Candidates left = %d ' % num_left)
@@ -809,11 +823,6 @@ def exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, n
 
                 # LOG.debug(tested_c)
                 # update tested candidates
-                if tested_candidates is None:
-                    tested_candidates = tested_c
-                else:
-                    tested_candidates = Disjunction(tested_candidates, tested_c, merge_literals=False)
-
 
                 if l_passed:
                     #make sure it's right verify if it's a global solution
@@ -822,7 +831,7 @@ def exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, n
                     if terminate_evt.is_set():
                         return False, None, None
                     LOG.debug("GOOD. let's double check")
-                    local_pass, _ = verify_candidate(candidate_connection, conj_specs)
+                    local_pass, trace = verify_candidate(candidate_connection, all_specs_formula)
 
                     if local_pass:
                         #success
@@ -832,8 +841,23 @@ def exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, n
                         #we need a new counterexample, but now tested_candidates will remove this set of solutions
                         LOG.debug("nah")
                         LOG.debug('reset CEX')
-                        current_cex = None
+                        input_formula, _ = derive_inputs_from_trace(trace, input_variables)
+                        current_cex = input_formula
+
+                        least_c, num = get_all_candidates(trace, var_map, relevant_allspecs_ports)
+                        if tested_candidates is None:
+                            tested_candidates = least_c
+                        else:
+                            tested_candidates = Disjunction(tested_candidates, least_c, merge_literals=False)
+
                 else:
+                    #TODO verify_candidate should return None if trace non valid or if it passed
+                    tested_c, num = get_all_candidates(trace, var_map, relevant_allspecs_ports)
+                    if tested_candidates is None:
+                        tested_candidates = tested_c
+                    else:
+                        tested_candidates = Disjunction(tested_candidates, tested_c, merge_literals=False)
+
                     #update counterexample
                     # LOG.debug('update CEX')
                     # LOG.debug(current_cex)
@@ -1029,7 +1053,7 @@ def exists_forall_learner(composition, spec_contract, spec_list, ref_formulas, n
         LOG.debug("FOUND")
         LOG.debug(l_passed)
         LOG.debug(candidate)
-        l_passed, trace = verify_candidate(candidate, conj_specs)
+        l_passed, trace = verify_candidate(candidate, all_specs_formula)
         LOG.debug(l_passed)
 
         return l_passed, candidate, preamble

@@ -548,7 +548,7 @@ def process_model(spec_list, output_port_names,
 
         for s in working_specs.values():
             left_sides = Conjunction(left_sides, s.assume_formula, merge_literals=False)
-            break
+            #break
 
 
     # #name map
@@ -635,24 +635,24 @@ def build_neg_formula_for_all_specs(spec_list, composition):
     return Negation(Conjunction(a_check, g_check, merge_literals=False))
     # neg_ref = Negation(ref_formula)
 
-def build_formula_for_all_specs(connected_spec, spec_list, composition):
-
-    spec_map = []
-
-    for spec_contract in spec_list:
-        for p_name in connected_spec.ports_dict:
-            # spec_map.append(Equivalence(spec_contract.ports_dict[p_name].literal, connected_spec.ports_dict[p_name].literal, merge_literals=False))
-
-            connected_spec.connect_to_port(connected_spec.ports_dict[p_name], spec_contract.ports_dict[p_name])
-
-    #specs_asm = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), [s.assume_formula for s in spec_list])
-    specs_gnt = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), [s.guarantee_formula for s in spec_list])
-
-    g_check = Implication(composition.guarantee_formula, specs_gnt, merge_literals=False)
-    a_check = Implication(spec_list[0].assume_formula, composition.assume_formula, merge_literals=False)
-
-
-    return Conjunction(a_check, g_check, merge_literals=False)
+# def build_formula_for_all_specs(connected_spec, spec_list, composition):
+#
+#     spec_map = []
+#
+#     for spec_contract in spec_list:
+#         for p_name in connected_spec.ports_dict:
+#             # spec_map.append(Equivalence(spec_contract.ports_dict[p_name].literal, connected_spec.ports_dict[p_name].literal, merge_literals=False))
+#
+#             connected_spec.connect_to_port(connected_spec.ports_dict[p_name], spec_contract.ports_dict[p_name])
+#
+#     #specs_asm = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), [s.assume_formula for s in spec_list])
+#     specs_gnt = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), [s.guarantee_formula for s in spec_list])
+#
+#     g_check = Implication(composition.guarantee_formula, specs_gnt, merge_literals=False)
+#     a_check = Implication(spec_list[0].assume_formula, composition.assume_formula, merge_literals=False)
+#
+#
+#     return Conjunction(a_check, g_check, merge_literals=False)
 
 
 def _check_levels(in_p, out_p, lev_map, lev_vars):
@@ -679,25 +679,32 @@ def _check_levels(in_p, out_p, lev_map, lev_vars):
 def get_all_candidates(trace, var_map, relevant_allspecs_ports, lev_map=None, current_pool=None):
     ''' return a formula indicating all candidates from a trace'''
     var_assign, lev_vars = trace_analysis(trace, var_map, lev_map)
-
+    #LOG.debug(var_assign)
     v_assign = []
 
     num = 1
+    candidate_connection = None
+    te_be_removed = set()
 
     for p in var_assign:
         p_opt = []
 
         if current_pool is not None and p not in current_pool:
+            te_be_removed.add(p)
             continue
 
         if p not in p.contract.relevant_ports | relevant_allspecs_ports:
             continue
 
         num = num * len(var_assign[p])
+        inner_remove = set()
         for v_p in var_assign[p]:
             if current_pool is not None and v_p not in current_pool[p]:
                 #remove
+                # TODO: this is wrong, it doesn't have to divide now, but just remove one
                 num = num / len(var_assign[p])
+                inner_remove.add(v_p)
+                #var_assign[p].remove(v_p)
                 continue
             if not _check_levels(p, v_p, lev_map, lev_vars):
                 continue
@@ -708,13 +715,55 @@ def get_all_candidates(trace, var_map, relevant_allspecs_ports, lev_map=None, cu
             p_opt.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
 
         if len(p_opt) > 0:
-            temp = reduce(lambda x, y: Disjunction(x, y, merge_literals=False), p_opt)
+            temp = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), p_opt)
             v_assign.append(temp)
+
+        for x in inner_remove:
+            var_assign[p].remove(x)
+    if len(v_assign) > 0:
+        candidate_connection = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), v_assign)
+
+    for x in te_be_removed:
+        var_assign.pop(x)
+
+    return candidate_connection, var_assign, num
+
+def pick_one_candidate(trace, var_map, relevant_allspecs_ports, lev_map=None, current_pool=None):
+    ''' return a formula indicating all candidates from a trace'''
+    var_assign, lev_vars = trace_analysis(trace, var_map, lev_map)
+
+    v_assign = []
+    candidate_connection = None
+
+    for p in var_assign:
+        p_opt = []
+
+        # LOG.debug('1')
+        if p not in p.contract.relevant_ports | relevant_allspecs_ports:
+            continue
+        # LOG.debug('2')
+
+        for v_p in var_assign[p]:
+
+            # LOG.debug('1.1')
+            if not _check_levels(p, v_p, lev_map, lev_vars):
+                continue
+
+            # LOG.debug('1.2')
+            if v_p not in v_p.contract.relevant_ports | relevant_allspecs_ports:
+                continue
+
+            # LOG.debug('1.3')
+            v_assign.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
+
+            break
+
 
     if len(v_assign) > 0:
         candidate_connection = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), v_assign)
 
-    return candidate_connection, num
+
+    return candidate_connection, var_assign
 
 def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, ref_formulas, all_specs_formula, neg_formula, preamble, left_sides,
                           var_map, lev_map, input_variables, terminate_evt):
@@ -739,6 +788,14 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
     total = 1
     for p in var_map:
         total *= len(var_map[p])
+
+    current_pool = {}
+
+    for port in var_map:
+        current_pool[port] = set()
+
+        for p in var_map[port]:
+            current_pool[port].add(p)
 
     LOG.debug("TOTAL: %d candidates" % total)
     num_left = total
@@ -767,7 +824,7 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
 
         # neg_ref = Negation(conj_specs)
 
-        # LOG.debug(preamble)
+        LOG.debug(preamble)
         # LOG.debug(conj_specs)
 
 
@@ -775,6 +832,7 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
             if terminate_evt.is_set():
                 return False, None, None
 
+            # left = preamble
             left = Conjunction(preamble, left_sides, merge_literals=False)
             if tested_candidates is not None:
                 left = Conjunction(left, Negation(tested_candidates), merge_literals=False)
@@ -784,6 +842,7 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                 left = Conjunction(left, current_cex, merge_literals=False)
 
             l_passed, trace = verify_candidate(left, neg_formula)
+            #l_passed, trace = verify_candidate(left, Negation(all_specs_formula))
 
             print('.'),
 
@@ -792,15 +851,24 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                 # we could find an assignment that makes the formula false,
                 # or the formula is always false for any possible connection
                 LOG.debug('bad candidate')
-                return False, candidate,preamble
+                return False, None ,None
 
             else:
-                candidate_connection, _ = get_all_candidates(trace, var_map, relevant_allspecs_ports)
+
+                candidate_connection, _, _ = get_all_candidates(trace, var_map,
+                                                             relevant_allspecs_ports, current_pool=current_pool)
+
+                LOG.debug(candidate_connection)
+                # LOG.debug(trace)
+                # LOG.debug(preamble)
+                # LOG.debug(candidate_connection)
+                # check, _ = verify_candidate(candidate_connection, preamble)
+                # assert check
 
                 left = candidate_connection
-                #left = Conjunction(preamble, candidate_connection, merge_literals=False)
+                # left = Conjunction(preamble, candidate_connection, merge_literals=False)
 
-                # left = Conjunction(candidate_connection, left_sides, merge_literals=False)
+                #left = Conjunction(candidate_connection, left_sides, merge_literals=False)
                 # left = Conjunction(candidate_connection, all_assumptions, merge_literals=False)
                 # left = Conjunction(left, spec_contract.guarantee_formula, merge_literals=False)
                 # left = Conjunction(left, composition.guarantee_formula, merge_literals=False)
@@ -814,12 +882,6 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                 if terminate_evt.is_set():
                     return False, None, None
                 l_passed, trace = verify_candidate(left, all_specs_formula)
-
-
-                #LOG.debug('remove %d candidates' % num)
-                #num_left = num_left - num
-                #LOG.debug('Candidates left = %d ' % num_left)
-                #assert num_left >= 0
 
                 # LOG.debug(tested_c)
                 # update tested candidates
@@ -843,8 +905,12 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                         LOG.debug('reset CEX')
                         input_formula, _ = derive_inputs_from_trace(trace, input_variables)
                         current_cex = input_formula
+                        LOG.debug(input_formula)
 
-                        least_c, num = get_all_candidates(trace, var_map, relevant_allspecs_ports)
+                        least_c, _, num = get_all_candidates(trace, var_map,
+                                                          relevant_allspecs_ports)
+                        num_left = num_left - num
+                        LOG.debug('remove %d candidates, candidates left = %d ' % (num, num_left))
                         if tested_candidates is None:
                             tested_candidates = least_c
                         else:
@@ -852,7 +918,16 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
 
                 else:
                     #TODO verify_candidate should return None if trace non valid or if it passed
-                    tested_c, num = get_all_candidates(trace, var_map, relevant_allspecs_ports)
+                    tested_c, _, num = get_all_candidates(trace, var_map,
+                                                       relevant_allspecs_ports)
+                    # LOG.debug('remove %d candidates' % num)
+                    num_left = num_left - num
+                    LOG.debug('remove %d candidates, candidates left = %d ' % (num, num_left))
+                    # assert num_left >= 0
+                    LOG.debug(tested_c)
+                    # LOG.debug(trace)
+                    # check, _ = verify_candidate(tested_c, candidate_connection)
+                    # assert check
                     if tested_candidates is None:
                         tested_candidates = tested_c
                     else:
@@ -872,6 +947,9 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                     #
                     #     assert checked
                     current_cex = input_formula
+
+                    LOG.debug(input_formula)
+
 
 
 

@@ -518,198 +518,194 @@ class SinglePortSolver(multiprocessing.Process):
         return dep
 
 
-    def build_composition_from_model(self, model, spec, output_port_names, model_index_map=None):
+    def build_composition_from_model(self, model, output_port_names, relevant_contracts, var_assign):
         '''
         builds a contract composition out of a model
         :param output_port_name:
         '''
 
-        if model_index_map is None:
-            model_index_map = {}
 
-        # LOG.debug(model_index_map)
-
-        # contracts = set()
-        spec_contract = spec.copy()
+        spec = self.spec
         working_spec = spec.copy()
 
-        # LOG.debug(spec_contract)
+        processed_ports = set()
+        used_contracts = set()
 
-        # find all contracts from model
-        # a set will help us remove duplicates
-        # contracts = set()
-
-        #now we need to collect all the components connected in chain to the spec output we are considering
-        # we start with the model connected to the out
-        spec_port_models = [self.spec_out_dict[name] for name in output_port_names]
-
-        # LOG.debug(model)
-        # LOG.debug(output_port_name)
-
-        models, spec_models = self._infer_relevant_ports_from_model(model, output_port_names)
-        #
-        # LOG.debug(models)
-        # LOG.debug(spec_models)
-
-        # now we get all the contracts related to the models.
-        # by construction fetching only the outputs, we have the full set of contracts
-        _, contract_map = self.lib_model.contract_copies_by_models(models)
-        #
-        # LOG.debug(model)
-        # LOG.debug(model_map)
-        # LOG.debug(contract_map)
-
-        contracts = set(contract_map.values())
-        # contracts.add(working_spec)
-        # extended_contracts = dict(list(contracts) + [spec_contract])
-
-        # start composition
-        # c_set = contracts
-        # c_set.add(contracts.values()[0])
-        mapping = CompositionMapping(contracts| set([working_spec]))
+        mapping = CompositionMapping(relevant_contracts| {working_spec})
 
         temp_spec_used = False
+
+        #TODO move it at the end
         #process working spec
-        for port in working_spec.ports_dict.values():
-            name = port.base_name
+        # for port in working_spec.ports_dict.values():
+        #     name = port.base_name
+        #
+        #     if name not in output_port_names:
+        #         if port.is_output:
+        #             temp_spec_used = True
+        #         spec.connect_to_port(spec.ports_dict[name], port)
 
-            if name not in output_port_names:
-                if port.is_output:
-                    temp_spec_used = True
-                spec_contract.connect_to_port(spec_contract.ports_dict[name], port)
+        # start with spec
+        for bname, port in spec.output_ports_dict.items():
+            for c in relevant_contracts:
+                done = False
+                for obname, oport in c.output_ports_dict.items():
+                    ouname = oport.unique_name
 
-        # start with spec port
-        # TODO: maybe remove these checks
-        for mod in spec_port_models:
-            if model[mod].as_long() != -1:
-                if mod.get_id() not in self.dummy_model_set:
-                    #there might be dummie ports
-
-                    name = str(mod)
-                    spec_port = spec_contract.ports_dict[name]
-
-                    if mod.get_id() in model_index_map:
-                        index = model_index_map[mod.get_id()]
+                    if bname in var_assign:
+                        if ouname in var_assign[bname]:
+                            spec.connect_to_port(port, oport)
+                            done = True
+                            used_contracts.add(c)
+                            break
                     else:
-                        index = model[mod].as_long()
-                    i_mod = self.lib_model.models[index]
-                    level = self.lib_model.model_levels[i_mod.get_id()]
-                    orig_port = self.lib_model.port_by_index(index)
+                        #pick any other port
+                        if c in self.library.spec_out_map[bname]:
+                            if self.library.check_connectivity(port, oport):
+                                spec.connect_to_port(port, oport)
+                                done = True
+                                used_contracts.add(c)
+                                break
 
-                    other_contract_orig = orig_port.contract
-                    other_contract = contract_map[(level, other_contract_orig)]
+                if done:
+                    break
 
-                    port = other_contract.ports_dict[orig_port.base_name]
-
-                    spec_contract.connect_to_port(spec_port, port)
 
         # connections among candidates
-        processed_ports = set()
-        for p_model in models | spec_models:
-            if model[p_model] is not None:
-                level, old_contract = self.lib_model.contract_by_model(p_model)
-                current_contract = contract_map[(level, old_contract)]
-                old_port = self.lib_model.port_by_model(p_model)
-                current_port = current_contract.ports_dict[old_port.base_name]
+        for c1 in relevant_contracts:
 
-                if p_model.get_id() in model_index_map:
-                    other_index = model_index_map[p_model.get_id()]
-                else:
-                    other_index = model[p_model].as_long()
+            for n1, p1 in c1.input_ports_dict.items():
+                u1 = p1.unique_name
+                done = False
+                for c2 in relevant_contracts:
 
-                if other_index < self.lib_model.specs_at:
+                    done = False
+                    if u1 in var_assign:
+                        for n2, p2 in c2.output_ports_dict.items():
+                            u2 = p2.unique_name
 
-                    other_mod = self.lib_model.models[other_index]
-                    other_level = self.lib_model.model_levels[other_mod.get_id()]
+                            if u2 in var_assign[u1]:
+                                mapping.connect(p1, p2,
+                                                '%s_%s' % (c1.unique_name,
+                                                           p1.base_name))
+                                done = True
+                                processed_ports.add(p1)
+                                processed_ports.add(p2)
+                                used_contracts.add(c2)
+                                break
 
-                    other_port_orig = self.lib_model.port_by_index(other_index)
-
-                    oi = model[p_model].as_long()
-                    om = self.lib_model.models[oi]
-                    ol = self.lib_model.model_levels[om.get_id()]
-
-                    # LOG.debug(other_level)
-                    # LOG.debug(other_port_orig.base_name)
-                    # LOG.debug(ol)
-                    # LOG.debug(self.lib_model.port_by_index(oi).base_name)
-
-
-                    # LOG.debug(other_index)
-                    # LOG.debug(other_port_orig.base_name)
-
-                    other_contract = contract_map[(other_level, other_port_orig.contract)]
-
-                    other_port = other_contract.ports_dict[other_port_orig.base_name]
-
-                    # LOG.debug(other_port.base_name)
-                    mapping.connect(current_port, other_port,
-                                    '%s_%d_%s' % (current_contract.unique_name, level,
-                                               current_port.base_name))
-
-                    # LOG.debug(current_contract.unique_name)
-                    # LOG.debug(other_contract.unique_name)
-                    # LOG.debug(current_port.unique_name)
-                    # LOG.debug(other_port.unique_name)
-                    processed_ports.add(current_port)
-                    processed_ports.add(other_port)
-
-                else:
-                    spec_port = spec_contract.ports_dict[self.lib_model.spec_by_index_map[other_index]]
-
-                    if spec_port.is_input:
-                        spec_contract.connect_to_port(spec_port, current_port)
                     else:
-                        working_spec.connect_to_port(working_spec.ports_dict[spec_port.base_name], current_port)
+                        for conf in self.library.connection_map[c1]:
+                            if c2 in conf:
+                                for n2, p2 in c2.output_ports_dict.items():
+                                    u2 = p2.unique_name
+                                    if self.library.check_connectivity(p1, p2):
+                                        mapping.connect(p1, p2,
+                                                        '%s_%s' % (c1.unique_name,
+                                                                   n1))
+                                        done = True
+                                        processed_ports.add(p1)
+                                        processed_ports.add(p2)
+                                        used_contracts.add(c2)
+                                        break
+                                if done:
+                                    break
+                    if done:
+                        break
 
+                #spec
+                if not done:
+                    for n2, p2 in spec.input_ports_dict.items():
 
-        # add all the remaining names to new composition
-        for (level, old_contract) in contract_map.keys():
-            for old_port in old_contract.ports_dict.values():
-                current_contract = contract_map[(level, old_contract)]
-                current_port = current_contract.ports_dict[old_port.base_name]
-                if current_port not in processed_ports:
-                    mapping.add(current_port, '%s_%d_%s' % (current_contract.unique_name, level,
-                                                         current_port.base_name))
-                    processed_ports.add(current_port)
+                        if n2 in var_assign[u1]:
+                            spec.connect_to_port(p2, p1)
+                            processed_ports.add(p1)
+                            processed_ports.add(p2)
+                            break
 
-        # for contract in contracts:
-        #    LOG.debug(contract)
-        # LOG.debug(working_spec)
-        # LOG.debug(spec_contract)
+        relevant_contracts = used_contracts
+        for c in relevant_contracts:
+            for p in c.ports_dict.values():
+                if p not in processed_ports:
+                    mapping.add(p, '%s_%s' % (c.unique_name,
+                                                         p.base_name))
+                    processed_ports.add(p)
 
-        # if not complete_model:
-        #    c_set = self.filter_candidate_contracts_for_composition(contracts, spec_contract)
-
-        # compose
-        #root = contracts.pop()
-
-        # c_set.add(root.copy())
-
+        #     if model[p_model] is not None:
+        #         level, old_contract = self.lib_model.contract_by_model(p_model)
+        #         current_contract = contract_map[(level, old_contract)]
+        #         old_port = self.lib_model.port_by_model(p_model)
+        #         current_port = current_contract.ports_dict[old_port.base_name]
+        #
+        #         if p_model.get_id() in model_index_map:
+        #             other_index = model_index_map[p_model.get_id()]
+        #         else:
+        #             other_index = model[p_model].as_long()
+        #
+        #         if other_index < self.lib_model.specs_at:
+        #
+        #             other_mod = self.lib_model.models[other_index]
+        #             other_level = self.lib_model.model_levels[other_mod.get_id()]
+        #
+        #             other_port_orig = self.lib_model.port_by_index(other_index)
+        #
+        #             oi = model[p_model].as_long()
+        #             om = self.lib_model.models[oi]
+        #             ol = self.lib_model.model_levels[om.get_id()]
+        #
+        #             # LOG.debug(other_level)
+        #             # LOG.debug(other_port_orig.base_name)
+        #             # LOG.debug(ol)
+        #             # LOG.debug(self.lib_model.port_by_index(oi).base_name)
+        #
+        #
+        #             # LOG.debug(other_index)
+        #             # LOG.debug(other_port_orig.base_name)
+        #
+        #             other_contract = contract_map[(other_level, other_port_orig.contract)]
+        #
+        #             other_port = other_contract.ports_dict[other_port_orig.base_name]
+        #
+        #             # LOG.debug(other_port.base_name)
+        #             mapping.connect(current_port, other_port,
+        #                             '%s_%d_%s' % (current_contract.unique_name, level,
+        #                                        current_port.base_name))
+        #
+        #             processed_ports.add(current_port)
+        #             processed_ports.add(other_port)
+        #
+        #
+        # # add all the remaining names to new composition
+        # for (level, old_contract) in contract_map.keys():
+        #     for old_port in old_contract.ports_dict.values():
+        #         current_contract = contract_map[(level, old_contract)]
+        #         current_port = current_contract.ports_dict[old_port.base_name]
+        #         if current_port not in processed_ports:
+        #             mapping.add(current_port, '%s_%d_%s' % (current_contract.unique_name, level,
+        #                                                  current_port.base_name))
+        #             processed_ports.add(current_port)
+        #
+        # # for contract in contracts:
+        # #    LOG.debug(contract)
+        # # LOG.debug(working_spec)
+        # # LOG.debug(spec_contract)
+        #
+        # # if not complete_model:
+        # #    c_set = self.filter_candidate_contracts_for_composition(contracts, spec_contract)
+        #
+        # # compose
+        # #root = contracts.pop()
+        #
+        # # c_set.add(root.copy())
+        #
         if temp_spec_used:
-            composition = working_spec.compose(contracts, composition_mapping=mapping)
+            composition = working_spec.compose(relevant_contracts, composition_mapping=mapping)
         else:
-            root = contracts.pop()
-            composition = root.compose(contracts, composition_mapping=mapping)
-            contracts.add(root)
+            root = relevant_contracts.pop()
+            composition = root.compose(relevant_contracts, composition_mapping=mapping)
+            relevant_contracts.add(root)
 
-        # LOG.debug('-----------')
-        # LOG.debug(model)
-        # LOG.debug(working_spec)
-        # for contract in contracts:
-        #    LOG.debug(contract)
-        #
-        # LOG.debug(composition)
-        # LOG.debug(spec_contract)
-        #
-        #
-        #
-        # from graphviz_converter import GraphizConverter
-        # graphviz_conv = GraphizConverter(spec_contract, composition, contracts | set([working_spec]))
-        # graphviz_conv.generate_graphviz()
-        # graphviz_conv.view()
-
-        # LOG.debug('done')
-        return composition, spec_contract, contracts
+        return composition, spec, relevant_contracts
 
 
 

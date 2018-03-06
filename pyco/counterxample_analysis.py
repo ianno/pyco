@@ -282,9 +282,10 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
     first_spec = None
     composition = None
     var_assign = {}
+    original_spec = manager.spec
 
     print('*'),
-    # spec = spec_list[0]
+    #spec_list[0] = original_spec.copy()
     # (contracts, composition, connected_spec,
     #  ref_formula, preamble, monitored, model_map) = process_model(spec, output_port_names, rel_spec_ports,
     #                                                               model, manager)
@@ -313,7 +314,7 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
 
 
     #performs first step of learning loo?p
-    passed, candidate, new_preamble = exists_forall_learner(composition, spec_contract, rel_spec_ports, ref_formulas, all_specs_formula, neg_formula, preamble, left_sides,
+    passed, candidate, var_assign = exists_forall_learner(composition, spec_contract, rel_spec_ports, ref_formulas, all_specs_formula, neg_formula, preamble, left_sides,
                                                                         var_map, lev_map, input_variables, terminate_evt)
     # LOG.debug(passed)
     # while not passed:
@@ -333,17 +334,32 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
 
             # passed, candidate, new_preamble, var_assign = exists_forall_learner(ref_formula, new_preamble, monitored, input_variables)
 
+
+    # convert names in spec to original spec
+    for name, port in spec_contract.ports_dict.items():
+        uname = port.unique_name
+        orig_port = original_spec.ports_dict[name]
+
+        if uname in var_assign:
+            var_assign[orig_port.base_name] = var_assign[uname]
+            var_assign.pop(uname)
+        else:
+            for name in var_assign:
+                if uname == var_assign[name]:
+                    var_assign[name] = orig_port.base_name
+
+
     # preamble = new_preamble
     # LOG.debug('spec done')
     LOG.debug(model)
-
+    LOG.debug(var_assign)
     LOG.debug(candidate)
 
     #if we are here we passed
     #we need to build model map
     # LOG.debug('found')
 
-    model_map = build_model_map(connected_spec, output_port_names,  manager, var_assign)
+    # model_map = build_model_map(connected_spec, output_port_names,  manager, var_assign)
 
     # checked_vars = assemble_checked_vars(var_assign, monitored, checked_variables)
     # 
@@ -366,7 +382,7 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
 
     if passed:
         LOG.debug('done')
-        result_queue.put((pid, frozenset(model_map.items())))
+        result_queue.put((pid, frozenset(var_assign.items())))
         found_event.set()
         terminate_evt.set()
 
@@ -734,6 +750,7 @@ def pick_one_candidate(trace, var_map, relevant_allspecs_ports, lev_map=None, cu
 
     v_assign = []
     candidate_connection = None
+    new_var_assign = {}
 
     for p in var_assign:
         p_opt = []
@@ -742,7 +759,7 @@ def pick_one_candidate(trace, var_map, relevant_allspecs_ports, lev_map=None, cu
         if p not in p.contract.relevant_ports | relevant_allspecs_ports:
             continue
         # LOG.debug('2')
-
+        #new_var_assign[p] = set()
         for v_p in var_assign[p]:
 
             # LOG.debug('1.1')
@@ -755,7 +772,7 @@ def pick_one_candidate(trace, var_map, relevant_allspecs_ports, lev_map=None, cu
 
             # LOG.debug('1.3')
             v_assign.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
-
+            new_var_assign[p.unique_name] = v_p.unique_name
             break
 
 
@@ -763,7 +780,7 @@ def pick_one_candidate(trace, var_map, relevant_allspecs_ports, lev_map=None, cu
         candidate_connection = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), v_assign)
 
 
-    return candidate_connection, var_assign
+    return candidate_connection, new_var_assign
 
 def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, ref_formulas, all_specs_formula, neg_formula, preamble, left_sides,
                           var_map, lev_map, input_variables, terminate_evt):
@@ -855,7 +872,7 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
 
             else:
 
-                candidate_connection, _, _ = get_all_candidates(trace, var_map,
+                candidate_connection, var_assign = pick_one_candidate(trace, var_map,
                                                              relevant_allspecs_ports, current_pool=current_pool)
 
                 # LOG.debug(candidate_connection)
@@ -892,46 +909,66 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                     # check for termination
                     if terminate_evt.is_set():
                         return False, None, None
-                    LOG.debug("GOOD. let's double check")
-                    local_pass, trace = verify_candidate(candidate_connection, all_specs_formula)
+                    #LOG.debug("GOOD. let's double check")
+                    local_pass, local_trace = verify_candidate(candidate_connection, all_specs_formula)
 
                     if local_pass:
                         #success
-                        candidate = candidate_connection
-                        break
+                        # LOG.debug("Great.Now let's pick only one ")
+                        # candidate_connection, _, = pick_one_candidate(trace, var_map,
+                        #                                               relevant_allspecs_ports,
+                        #                                               current_pool=current_pool)
+                        #
+                        #
+                        # local_pass, local_trace = verify_candidate(candidate_connection, all_specs_formula)
+
+
+                        if local_pass:
+                            #done
+                            LOG.debug('found single one')
+                            candidate = candidate_connection
+                            break
+                        else:
+                            # we need a new counterexample, but now tested_candidates will remove this set of solutions
+                            #LOG.debug("nah2")
+                            if tested_candidates is None:
+                                tested_candidates = candidate_connection
+                            else:
+                                tested_candidates = Disjunction(tested_candidates, candidate_connection, merge_literals=False)
+
                     else:
                         #we need a new counterexample, but now tested_candidates will remove this set of solutions
-                        LOG.debug("nah")
-                        LOG.debug('reset CEX')
-                        input_formula, _ = derive_inputs_from_trace(trace, input_variables)
+                        #LOG.debug("nah")
+                        #LOG.debug('reset CEX')
+                        input_formula, _ = derive_inputs_from_trace(local_trace, input_variables)
                         current_cex = input_formula
-                        LOG.debug(input_formula)
+                        #LOG.debug(input_formula)
 
-                        least_c, _, num = get_all_candidates(trace, var_map,
+                        least_c, _, num = get_all_candidates(local_trace, var_map,
                                                           relevant_allspecs_ports)
                         num_left = num_left - num
-                        LOG.debug('remove %d candidates, candidates left = %d ' % (num, num_left))
+                        #LOG.debug('remove %d candidates, candidates left = %d ' % (num, num_left))
                         if tested_candidates is None:
-                            tested_candidates = least_c
+                            tested_candidates = candidate_connection
                         else:
-                            tested_candidates = Disjunction(tested_candidates, least_c, merge_literals=False)
+                            tested_candidates = Disjunction(tested_candidates, candidate_connection, merge_literals=False)
 
                 else:
                     #TODO verify_candidate should return None if trace non valid or if it passed
                     tested_c, _, num = get_all_candidates(trace, var_map,
                                                        relevant_allspecs_ports)
                     # LOG.debug('remove %d candidates' % num)
-                    num_left = num_left - num
-                    LOG.debug('remove %d candidates, candidates left = %d ' % (num, num_left))
+                    #num_left = num_left - num
+                    #LOG.debug('remove %d candidates, candidates left = %d ' % (num, num_left))
                     # assert num_left >= 0
                     # LOG.debug(tested_c)
                     # LOG.debug(trace)
                     # check, _ = verify_candidate(tested_c, candidate_connection)
                     # assert check
                     if tested_candidates is None:
-                        tested_candidates = tested_c
+                        tested_candidates = candidate_connection
                     else:
-                        tested_candidates = Disjunction(tested_candidates, tested_c, merge_literals=False)
+                        tested_candidates = Disjunction(tested_candidates, candidate_connection, merge_literals=False)
 
                     #update counterexample
                     # LOG.debug('update CEX')
@@ -948,193 +985,20 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                     #     assert checked
                     current_cex = input_formula
 
-                    LOG.debug(input_formula)
-
-
-
-
-
-        # while not l_passed:
-        #     # check again if terminate is set
-        #     if terminate_evt.is_set():
-        #         return False, None, None, None
-        #
-        #     # if candidate is None:
-        #     #     # nope, not found
-        #     #     # LOG.debug('nope')
-        #     #     return False, None, None, None
-        #     else:
-        #         # LOG.debug(preamble)
-        #         # LOG.debug(left_sides)
-        #
-        #         left = Conjunction(preamble, left_sides, merge_literals=False)
-        #         if all_candidates is not None:
-        #             left = Conjunction(left, Negation(all_candidates), merge_literals=False)
-        #
-        #         if current_cex is not None:
-        #             LOG.debug(current_cex)
-        #             left = Conjunction(left, current_cex, merge_literals=False)
-        #
-        #
-        #         l_passed, trace = verify_candidate(left, neg_formula)
-        #
-        #         LOG.debug(l_passed)
-        #         #LOG.debug(trace)
-        #         print('.'),
-        #         # LOG.debug(formula.generate())
-        #
-        #             # diff = parse_counterexample(trace, monitored)
-        #
-        #         if terminate_evt.is_set():
-        #             return False, None, None, None
-        #
-        #         if l_passed:
-        #             #if this passes, it means that we are done. This is NOT a solution.
-        #             # we could find an assignment that makes the formula false,
-        #             # or the formula is always false for any possible connection
-        #             # LOG.debug('bad candidate')
-        #             return False, candidate,preamble, None
-        #
-        #
-        #             # left = Conjunction(preamble, left_sides, merge_literals=False)
-        #             # if all_candidates is not None:
-        #             #     left = Conjunction(left, Negation(all_candidates), merge_literals=False)
-        #             #
-        #             # l_passed, trace = verify_candidate(left, neg_formula)
-        #             #
-        #             # if l_passed:
-        #             #     #if this passes, it means that we are done. This is NOT a solution.
-        #             #     # we could find an assignment that makes the formula false,
-        #             #     # or the formula is always false for any possible connection
-        #             #     # LOG.debug('bad candidate')
-        #             #     return False, candidate,preamble, None
-        #             # else:
-        #             #     LOG.debug('reset CEX')
-        #             #     current_cex = None
-        #
-        #
-        #         # LOG.debug(candidate_connection)
-        #         #
-        #         # if all_candidates is None:
-        #         #     all_candidates = candidate_connection
-        #         # else:
-        #         #     all_candidates = Disjunction(all_candidates, candidate_connection, merge_literals=False)
-        #         #
-        #         #     continue
-        #
-        #         all_local_candidates = None
-        #         #current_pool = None
-        #         while True:
-        #
-        #             candidate_connection = get_all_candidates(trace, var_map)
-        #             vanilla_candidate = candidate_connection
-        #
-        #             if all_local_candidates is not None:
-        #                 check = Implication(candidate_connection, all_local_candidates, merge_literals=False)
-        #                 checked = verify_tautology(check, return_trace=False)
-        #
-        #                 try:
-        #                     assert checked
-        #                 except AssertionError as e:
-        #                     #print e
-        #                     LOG.debug(l_passed)
-        #                     LOG.debug(trace)
-        #                     LOG.debug(candidate_connection)
-        #                     LOG.debug(all_local_candidates)
-        #                     raise
-        #
-        #                 all_local_candidates = Conjunction(all_local_candidates, Negation(candidate_connection),
-        #                                                    merge_literals=False)
-        #             else:
-        #                 all_local_candidates = candidate_connection
-        #
-        #
-        #             if all_candidates is None:
-        #                 all_candidates = vanilla_candidate
-        #             else:
-        #                 all_candidates = Disjunction(all_candidates, vanilla_candidate, merge_literals=False)
-        #
-        #
-        #             if current_cex is not None:
-        #                 candidate = Conjunction(all_local_candidates, current_cex, merge_literals=False)
-        #             else:
-        #                 candidate = all_local_candidates
-        #
-        #
-        #             l_passed, trace = verify_candidate(candidate, conj_specs)
-        #
-        #
-        #             if terminate_evt.is_set():
-        #                 return False, None, None, None
-        #
-        #
-        #             if l_passed:
-        #                 # make sure it passes even without cex
-        #                 # LOG.debug(current_cex)
-        #
-        #                 l_passed, trace = verify_candidate(vanilla_candidate, conj_specs)
-        #                 if not l_passed:
-        #                     # we cannot go further with these candidates and cex
-        #                     LOG.debug('BREAK')
-        #                     break
-        #                 else:
-        #                     # LOG.debug('no input formula')
-        #                     return l_passed, None, None, {}
-        #             else:
-        #                 #derive the input sequence anyway, as it can be used for other specs
-        #                 input_formula, i = derive_inputs_from_trace(trace, input_variables)
-        #
-        #                 assert input_formula is not None
-        #
-        #                 #LOG.debug(input_formula)
-        #
-        #                 #if components are non-deterministic,
-        #                 # it can happen that the same counterexample is shown over and over.
-        #                 # we need to make sure we learn something new.
-        #                 if current_cex is None:
-        #                     current_cex = input_formula
-        #                 else:
-        #
-        #                     # check = Implication(input_formula, current_cex, merge_literals=False)
-        #                     # checked = verify_tautology(check, return_trace=False)
-        #                     #
-        #                     # assert checked
-        #
-        #                     current_cex = input_formula
-        #
-        #                 #loop to reduce current candidate
-        #
-        #                 #loop_candidate = get_all_candidates(trace, var_map)
-        #
-        #                 left = Conjunction(vanilla_candidate, left_sides, merge_literals=False)
-        #                 if all_candidates is not None:
-        #                     left = Conjunction(left, Negation(all_candidates), merge_literals=False)
-        #
-        #
-        #                 #all_local_candidates = Conjunction(all_local_candidates, Negation(loop_candidate),
-        #                  #                                  merge_literals=False)
-        #
-        #
-        #                 if current_cex is not None:
-        #                     left = Conjunction(left, current_cex, merge_literals=False)
-        #
-        #                 l_passed, ctrace = verify_candidate(left, neg_formula)
-        #
-        #                 if l_passed:
-        #                     all_candidates = Disjunction(all_candidates, vanilla_candidate, merge_literals=False)
-        #                     LOG.debug('down BREAK')
-        #                     l_passed = False
-        #                     break
-
-
+                    #LOG.debug(input_formula)
 
         LOG.debug("FOUND")
         LOG.debug(l_passed)
         LOG.debug(candidate)
-        l_passed, trace = verify_candidate(candidate, all_specs_formula)
+        # pick one
+        # candidate_connection, _, = pick_one_candidate(local_trace, var_map,
+        #                                                 relevant_allspecs_ports, current_pool=current_pool)
+        #
+        # LOG.debug(candidate)
+        l_passed, trace = verify_candidate(candidate_connection, all_specs_formula)
         LOG.debug(l_passed)
 
-        return l_passed, candidate, preamble
+        return l_passed, candidate, var_assign
 
 
 

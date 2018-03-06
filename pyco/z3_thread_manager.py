@@ -53,6 +53,7 @@ class ModelVerificationManager(object):
 
         self.model_dict = {}
         self.output_port_names = output_port_names
+        self.relevant_contracts_pid = {}
 
     def set_successful_candidate(self, model, composition, connected_spec, contract_inst):
         '''
@@ -107,13 +108,13 @@ class ModelVerificationManager(object):
 
                 (relevant, _) = self.solver_interface._infer_relevant_contracts(model, self.output_port_names)
                 reject_f = self.solver_interface.generate_reject_formula(relevant)
-
                 #new refinement checker
                 thread = RefinementChecker(model, self.output_port_names, relevant, self, self.found_refinement, self.found_refinement)
                 #go
                 thread.start()
                 # with self.pool_lock:
                 self.model_dict[thread.ident] = model
+                self.relevant_contracts_pid[thread.ident] = relevant
                 self.thread_pool.add(thread)
 
                 #now reject the model, to get a new candidate
@@ -149,24 +150,25 @@ class ModelVerificationManager(object):
         if self.found_refinement.is_set():
             LOG.debug("get solution")
             pids = []
-            model_map = {}
+            var_assign_pid = {}
             while not self.result_queue.empty():
                 pid, model_map_items = self.result_queue.get()
                 pids.append(pid)
-                model_map[pid] = {k: v for (k, v) in model_map_items}
+                var_assign_pid[pid] = {k: v for (k, v) in model_map_items}
 
             pid = min(pids)
         else:
             raise pyco.z3_interface.NotSynthesizableError()
 
         self.model = self.model_dict[pid]
-        self.model_map = model_map[pid]
+        self.var_assign = var_assign_pid[pid]
+        self.relevant_contracts = self.relevant_contracts_pid[pid]
 
         #rebuild composition
-        spec = self.solver_interface.specification_list[0]
         # with self.z3_lock:
         self.composition, self.connected_spec, self.contract_inst = \
-                self.solver_interface.build_composition_from_model(self.model, spec, self.output_port_names, self.model_map)
+                self.solver_interface.build_composition_from_model(self.model, self.output_port_names,
+                                                                   self.relevant_contracts, self.var_assign)
         #wait for all the threads to stop
 
 

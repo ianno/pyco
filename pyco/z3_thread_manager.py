@@ -118,7 +118,7 @@ class ModelVerificationManager(object):
 
                 #now reject the model, to get a new candidate
                 LOG.debug(reject_f)
-                self.solver.add(reject_f)
+                self.solver_interface.add_assertions(reject_f)
 
                 # with self.z3_lock:
                     #v2 works

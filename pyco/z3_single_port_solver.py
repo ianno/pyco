@@ -61,13 +61,12 @@ class SinglePortSolver(multiprocessing.Process):
         optimize = minimize_components
 
 
-        self.solver = Solver(ctx=self.context)
-        self.solver.add(self.z3_interface.solve_for_outputs(spec_port_names, context))
+        #self.solver = Solver(ctx=self.context)
         # self.solver = Then('simplify', 'bit-blast', 'split-clause',
         #                    'qfbv', 'sat', ctx=self.context).solver()
 
         # self.solver = Then('simplify', 'smt', ctx=self.context).solver()
-        # self.solver = Tactic('qflia', ctx=self.context).solver()#Solver(ctx=self.context)
+        self.solver = Tactic('qflia', ctx=self.context).solver()#Solver(ctx=self.context)
 
         if optimize:
             self.solver = Optimize(ctx=self.context)
@@ -75,6 +74,7 @@ class SinglePortSolver(multiprocessing.Process):
 
         #LOG.debug(self.assertions)
         self.solver.add(self.assertions)
+        self.solver.add(self.z3_interface.solve_for_outputs(spec_port_names, context))
 
 
         if minimize_components:
@@ -88,6 +88,25 @@ class SinglePortSolver(multiprocessing.Process):
 
         super(SinglePortSolver, self).__init__()
 
+
+    def add_assertions(self, assertions):
+        '''
+        add constraints to solver
+        :param assertions:
+        :return:
+        '''
+
+        # self.solver.add(assertions)
+        # return
+
+        #to avoid incremental solving, we recreate a new solver each time
+        old_assrt = self.solver.assertions()
+
+        self.solver = Tactic('qflia', ctx=self.context).solver()
+
+        self.solver.add(old_assrt)
+        self.solver.add(assertions)
+        return
 
     def run(self):
 

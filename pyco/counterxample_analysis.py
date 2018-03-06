@@ -824,7 +824,7 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
 
         # neg_ref = Negation(conj_specs)
 
-        LOG.debug(preamble)
+        # LOG.debug(preamble)
         # LOG.debug(conj_specs)
 
 
@@ -858,7 +858,7 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                 candidate_connection, _, _ = get_all_candidates(trace, var_map,
                                                              relevant_allspecs_ports, current_pool=current_pool)
 
-                LOG.debug(candidate_connection)
+                # LOG.debug(candidate_connection)
                 # LOG.debug(trace)
                 # LOG.debug(preamble)
                 # LOG.debug(candidate_connection)
@@ -924,7 +924,7 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                     num_left = num_left - num
                     LOG.debug('remove %d candidates, candidates left = %d ' % (num, num_left))
                     # assert num_left >= 0
-                    LOG.debug(tested_c)
+                    # LOG.debug(tested_c)
                     # LOG.debug(trace)
                     # check, _ = verify_candidate(tested_c, candidate_connection)
                     # assert check

@@ -61,12 +61,12 @@ class SinglePortSolver(multiprocessing.Process):
         optimize = minimize_components
 
 
-        #self.solver = Solver(ctx=self.context)
+        self.solver = Solver(ctx=self.context)
         # self.solver = Then('simplify', 'bit-blast', 'split-clause',
         #                    'qfbv', 'sat', ctx=self.context).solver()
 
         # self.solver = Then('simplify', 'smt', ctx=self.context).solver()
-        self.solver = Tactic('qflia', ctx=self.context).solver()#Solver(ctx=self.context)
+        # self.solver = Tactic('qflia', ctx=self.context).solver()#Solver(ctx=self.context)
 
         if optimize:
             self.solver = Optimize(ctx=self.context)
@@ -96,17 +96,17 @@ class SinglePortSolver(multiprocessing.Process):
         :return:
         '''
 
-        # self.solver.add(assertions)
-        # return
-
-        #to avoid incremental solving, we recreate a new solver each time
-        old_assrt = self.solver.assertions()
-
-        self.solver = Tactic('qflia', ctx=self.context).solver()
-
-        self.solver.add(old_assrt)
         self.solver.add(assertions)
         return
+
+        # #to avoid incremental solving, we recreate a new solver each time
+        # old_assrt = self.solver.assertions()
+        #
+        # self.solver = Tactic('qflia', ctx=self.context).solver()
+        #
+        # self.solver.add(old_assrt)
+        # self.solver.add(assertions)
+        # return
 
     def run(self):
 
@@ -308,7 +308,7 @@ class SinglePortSolver(multiprocessing.Process):
 
                 conf_dict = {}
 
-                for c in conf:
+                for c in conf - seen:
                     seen.add(c)
                     c_list = []
                     self.__find_configurations_for_contract(seen, used | {c}, c,

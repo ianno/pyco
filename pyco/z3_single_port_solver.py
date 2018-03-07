@@ -287,7 +287,7 @@ class SinglePortSolver(multiprocessing.Process):
                                                             configurations[x])
 
 
-        LOG.debug(all_contracts_in_model - seen)
+        # LOG.debug(all_contracts_in_model - seen)
         return seen, configurations
 
 
@@ -546,7 +546,8 @@ class SinglePortSolver(multiprocessing.Process):
         #         spec.connect_to_port(spec.ports_dict[name], port)
 
         # start with spec
-        for bname, port in spec.output_ports_dict.items():
+        for bname in output_port_names:
+            port = spec.ports_dict[bname]
             for c in relevant_contracts:
                 done = False
                 for obname, oport in c.output_ports_dict.items():

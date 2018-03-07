@@ -389,7 +389,7 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
     return passed
 
 
-def extract_model_connections(spec_contract, relevant_contracts, library):
+def extract_model_connections(spec_contract, relevant_contracts, output_port_names, library):
     '''
     Extract possible connections form model
     :return:
@@ -403,7 +403,8 @@ def extract_model_connections(spec_contract, relevant_contracts, library):
     lev_map = {}
 
     #let's start with the spec
-    for s_port in spec_contract.output_ports_dict.values():
+    for name in output_port_names:
+        s_port = spec_contract.ports_dict[name]
         var_map[s_port] = set()
         #only output for spec
         # lev_map[s_port] = Literal(s_port.contract.unique_name, l_type=FrozenInt())
@@ -449,7 +450,7 @@ def extract_model_connections(spec_contract, relevant_contracts, library):
 
 
 def process_model(spec_list, output_port_names,
-                   model, relevant_contracts, manager):
+                  model, relevant_contracts, manager):
     '''
     Build a SMV model and checks if there is any possible alternative set of connections to satisfy the spec.
     We first need to create additional formulas to express flexible connections.
@@ -464,20 +465,45 @@ def process_model(spec_list, output_port_names,
     unconnected_spec = spec_list[0]
     spec_contract = unconnected_spec.copy()
     working_specs = {s.unique_name: s.copy() for s in spec_list}
+    spec_dict = {s.unique_name: s for s in spec_list}
+
+    partial_spec = False
+    if len(output_port_names) != len(spec_contract.output_ports_dict):
+        partial_spec = True
 
     # composition mapping to define new names
     # mapping = CompositionMapping(contracts| set([working_spec]))
 
-    #process working specs
-    for ws in working_specs.values():
+    #uniform specs
+    for ws in spec_dict.values():
         for port in ws.ports_dict.values():
             name = port.base_name
 
             spec_contract.connect_to_port(spec_contract.ports_dict[name], port)
 
+    #if partial_spec:
+    # process working spec
+    for ws in working_specs.values():
+        for port in ws.ports_dict.values():
+            name = port.base_name
+
+            if name not in output_port_names:
+                spec_contract.connect_to_port(spec_contract.ports_dict[name], port)
+
+
+    #build single contract for working specs
+    all_guarantees = reduce(lambda x,y: Conjunction(x, y, merge_literals=False),
+                            [ws.guarantee_formula for ws in working_specs.values()])
+    all_assumptions = reduce(lambda x,y: Conjunction(x, y, merge_literals=False),
+                             [ws.assume_formula for ws in working_specs.values()])
+
+    w_spec = working_specs.values()[0]
+    w_spec.assume_formula = all_assumptions
+    w_spec.guarantee_formula = all_guarantees
+
 
     rel_spec_ports = set()
-    for spec in working_specs.values():
+    for spec in spec_dict.values():
         rel_spec_ports |= spec.relevant_ports
 
     p_names = {p.unique_name for p in rel_spec_ports}
@@ -485,14 +511,15 @@ def process_model(spec_list, output_port_names,
     rel_spec_ports = {port for port in spec_contract.ports_dict.values() if port.unique_name in p_names}
 
 
-    var_map, lev_map = extract_model_connections(spec_contract, relevant_contracts, library)
+    var_map, lev_map = extract_model_connections(spec_contract, relevant_contracts,
+                                                 output_port_names, library)
 
 
 
     #composition names
     #mappings = {s.unique_name: CompositionMapping(relevant_contracts | {working_specs[s.unique_name]}) for s in spec_list}
 
-    mapping = CompositionMapping(relevant_contracts | {spec_contract})
+    mapping = CompositionMapping(relevant_contracts | {w_spec})
     for c in relevant_contracts:
         for p in c.ports_dict.values():
             mapping.add(p, '%s_%s' % (c.unique_name, p.base_name))
@@ -508,13 +535,13 @@ def process_model(spec_list, output_port_names,
     #             c1.connect_to_port(c1.ports_dict[p_name], c2.ports_dict[p_name])
 
 
-    root = relevant_contracts.pop()
-    composition = root.compose(relevant_contracts, composition_mapping=mapping)
-    relevant_contracts.add(root)
+    #root = relevant_contracts.pop()
+    composition = w_spec.compose(relevant_contracts, composition_mapping=mapping)
+    #relevant_contracts.add(root)
 
     #TODO: can we simplify this?
     ref_formulas = [build_formulas_for_other_spec(s, composition) for s in
-                    working_specs.values()]
+                    spec_dict.values()]
     all_specs_formula = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), ref_formulas)
     # temp = all_specs_formula.get_literal_items()
     # temp = {literal.unique_name for _, literal in temp}
@@ -522,7 +549,7 @@ def process_model(spec_list, output_port_names,
 
 
     # ref_formula = build_formula_for_all_specs(spec_contract, spec_list, composition)
-    neg_formula = build_neg_formula_for_all_specs(working_specs.values(), composition)
+    neg_formula = build_neg_formula_for_all_specs(spec_dict.values(), composition)
 
     # neg_formula = Negation(reduce(lambda x, y: Conjunction(x, y, merge_literals=False), ref_formulas))
 
@@ -562,7 +589,7 @@ def process_model(spec_list, output_port_names,
 
         left_sides = Conjunction(left_sides, composition.guarantee_formula, merge_literals=False)
 
-        for s in working_specs.values():
+        for s in spec_dict.values():
             left_sides = Conjunction(left_sides, s.assume_formula, merge_literals=False)
             #break
 
@@ -814,7 +841,7 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
         for p in var_map[port]:
             current_pool[port].add(p)
 
-    LOG.debug("TOTAL: %d candidates" % total)
+    #LOG.debug("TOTAL: %d candidates" % total)
     num_left = total
 
     # all_spec_assumptions = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), [x.assume_formula for x in spec_list])
@@ -867,7 +894,7 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                 #if this passes, it means that we are done. This is NOT a solution.
                 # we could find an assignment that makes the formula false,
                 # or the formula is always false for any possible connection
-                LOG.debug('bad candidate')
+                # LOG.debug('bad candidate')
                 return False, None ,None
 
             else:

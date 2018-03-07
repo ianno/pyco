@@ -571,9 +571,12 @@ class SinglePortSolver(multiprocessing.Process):
                 if done:
                     break
 
+        stack = {x for x in used_contracts}
 
         # connections among candidates
-        for c1 in relevant_contracts:
+        while len(stack) > 0:
+            c1 = stack.pop()
+            used_contracts.add(c1)
 
             for n1, p1 in c1.input_ports_dict.items():
                 u1 = p1.unique_name
@@ -592,7 +595,8 @@ class SinglePortSolver(multiprocessing.Process):
                                 done = True
                                 processed_ports.add(p1)
                                 processed_ports.add(p2)
-                                used_contracts.add(c2)
+                                if c2 not in used_contracts:
+                                    stack.add(c2)
                                 break
 
                     else:
@@ -607,7 +611,8 @@ class SinglePortSolver(multiprocessing.Process):
                                         done = True
                                         processed_ports.add(p1)
                                         processed_ports.add(p2)
-                                        used_contracts.add(c2)
+                                        if c2 not in used_contracts:
+                                            stack.add(c2)
                                         break
                                 if done:
                                     break

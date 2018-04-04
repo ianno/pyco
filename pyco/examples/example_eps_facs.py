@@ -132,10 +132,10 @@ class StdGenerator(Contract):
     '''
     closes the contactor if everything is ok
     '''
-    INPUT_PORTS = [('fail', ActiveGeneratorT)]
-    OUTPUT_PORTS = [('c', ACGenContactorT)]
-    ASSUMPTIONS = '!fail & G(fail -> X fail)'
-    GUARANTEES = 'G(fail -> ! c) & G(!fail -> c)'
+    INPUT_PORTS = [('fail_std', ActiveGeneratorT)]
+    OUTPUT_PORTS = [('c_std', ACGenContactorT)]
+    ASSUMPTIONS = '!fail_std & G(fail_std -> X fail_std)'
+    GUARANTEES = 'G(fail_std -> ! c_std) & G(!fail_std -> c_std)'
 
 class SlowGenerator(Contract):
     '''
@@ -227,20 +227,20 @@ class DCTwoSideTie(Contract):
     '''
     DC tie
     '''
-    INPUT_PORTS = [('fail1', RectifierT), ('fail2', RectifierT)]
-    OUTPUT_PORTS = [('c1', DCBackContactorT), ('c2', DCBackContactorT)]
-    ASSUMPTIONS = '!fail1 & !fail2'
-    GUARANTEES = '''G((!fail1 & !fail2) -> (!c1 & !c2)) &
-                    G((fail1 | fail2) -> (c1 & c2))'''
+    INPUT_PORTS = [('fail1_dc', RectifierT), ('fail2_dc', RectifierT)]
+    OUTPUT_PORTS = [('c1_dc', DCBackContactorT), ('c2_dc', DCBackContactorT)]
+    ASSUMPTIONS = '!fail1_dc & !fail2_dc'
+    GUARANTEES = '''G((!fail1_dc & !fail2_dc) -> (!c1_dc & !c2_dc)) &
+                    G((fail1_dc | fail2_dc) -> (c1_dc & c2_dc))'''
 
 class DCLoadContactor(Contract):
     '''
     Always closed if everything is fine
     '''
-    INPUT_PORTS = [('fail1', RectifierT), ('fail2', RectifierT)]
-    OUTPUT_PORTS = [('c', DCLoadContactorT)]
-    ASSUMPTIONS = '!fail1 & !fail2'# & G(!(fail1 & fail2))'
-    GUARANTEES = '''G(c)'''
+    INPUT_PORTS = [('fail1_load', RectifierT), ('fail2_load', RectifierT)]
+    OUTPUT_PORTS = [('c_load', DCLoadContactorT)]
+    ASSUMPTIONS = '!fail1_load & !fail2_load'# & G(!(fail1 & fail2))'
+    GUARANTEES = '''G(c_load)'''
 
 
 #now add specs
@@ -423,6 +423,14 @@ class GenIsolation1D(Contract):
                      !fail_r1 & G(fail_r1 -> Xfail_r1) &
                      !fail_r2 & G(fail_r2 -> Xfail_r2)'''
     GUARANTEES = 'c1 & G(fail1 -> X!c1)'
+                 # '& G(fail2 -> X!c2)' \
+                 # '& G(fail3 -> X!c3)' \
+                 # '& c4 & G(fail4 -> X!c4)' \
+                 # '& G(!(c2 & c3))' \
+                 # '& G((!fail1 & !fail4) -> F(!(c5 & c6)))' \
+                 # '& G((!fail1 & !fail2 & ! fail3 & !fail4) -> F(!c2 & !c3 & !c5 & !c6))' \
+                 # '& G(!(fail_r1 & fail_r2) -> c10)' \
+                 # '& G(!(fail_r1 & fail_r2) -> c9)'
 
     # INPUT_PORTS = []
     # OUTPUT_PORTS = [('a', ACGenContactorT), ('b', ACGenContactorT),

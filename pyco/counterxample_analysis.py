@@ -314,8 +314,11 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
 
 
     #performs first step of learning loo?p
-    passed, candidate, var_assign = exists_forall_learner(composition, spec_contract, rel_spec_ports, ref_formulas, all_specs_formula, neg_formula, preamble, left_sides,
-                                                                        var_map, lev_map, input_variables, terminate_evt)
+    passed, candidate, var_assign = exists_forall_learner(composition, spec_contract, rel_spec_ports,
+                                                          ref_formulas, all_specs_formula,
+                                                          neg_formula, preamble, left_sides,
+                                                        var_map, lev_map, input_variables,
+                                                          terminate_evt, manager)
     # LOG.debug(passed)
     # while not passed:
     #     #check again if terminate is set
@@ -449,6 +452,77 @@ def extract_model_connections(spec_contract, relevant_contracts, output_port_nam
     return var_map, lev_map
 
 
+def process_distinct_lib_ports(port1, port2, var_map):
+    '''
+    add a constraints to guarantee two ports are not connected to the same input
+    :param component:
+    :return:
+    '''
+
+
+    constraints = [TrueFormula()]
+
+    if port1 in var_map and port2 in var_map:
+        map1 = var_map[port1]
+        map2 = var_map[port2]
+
+        for conn in map1:
+            inner = [FalseFormula()]
+            left = Globally(Equivalence(port1.literal, conn.literal, merge_literals=False))
+            for conn2 in map2 - {conn}:
+                temp = Globally(Equivalence(port2.literal, conn2.literal, merge_literals=False))
+                inner.append(temp)
+
+            inner = reduce(lambda x,y: Disjunction(x, y, merge_literals=False), inner)
+
+            constraints.append(Implication(left, inner, merge_literals=False))
+
+
+    return reduce(lambda x,y: Conjunction(x, y, merge_literals=False), constraints)
+
+def process_distinct_spec_ports(port1_name, port2_name, spec_contract, var_map):
+    '''
+    add a constraints to guarantee two ports are not connected to the same input
+    :param component:
+    :return:
+    '''
+
+    port1 = spec_contract.ports_dict[port1_name]
+    port2 = spec_contract.ports_dict[port2_name]
+
+    constraints = [TrueFormula()]
+    if port1.is_output and port2.is_output:
+        if port1 in var_map and port2 in var_map:
+            map1 = var_map[port1]
+            map2 = var_map[port2]
+            for conn in map1:
+                inner = [FalseFormula()]
+                left = Globally(Equivalence(port1.literal, conn.literal, merge_literals=False))
+                for conn2 in map2 - {conn}:
+                    temp = Globally(Equivalence(port2.literal, conn2.literal, merge_literals=False))
+                    inner.append(temp)
+
+                inner = reduce(lambda x,y: Disjunction(x, y, merge_literals=False), inner)
+
+                constraints.append(Implication(left, inner, merge_literals=False))
+
+    if port1.is_input and port2.is_input:
+        p1set = {p for p in var_map if port1 in var_map[p]}
+        p2set = {p for p in var_map if port2 in var_map[p]}
+
+        for p1 in p1set:
+            inner = [FalseFormula()]
+            left = Globally(Equivalence(p1.literal, port1.literal, merge_literals=False))
+            for p2 in p2set - {p1}:
+                temp = Globally(Equivalence(p2.literal, port2.literal, merge_literals=False))
+                inner.append(temp)
+
+            inner = reduce(lambda x,y: Disjunction(x, y, merge_literals=False), inner)
+
+            constraints.append(Implication(left, inner, merge_literals=False))
+
+    return reduce(lambda x,y: Conjunction(x, y, merge_literals=False), constraints)
+
 def process_model(spec_list, output_port_names,
                   model, relevant_contracts, manager):
     '''
@@ -578,6 +652,15 @@ def process_model(spec_list, output_port_names,
                 formula = reduce((lambda x, y: Disjunction(x, y, merge_literals=False)), p_map)
                 formulas.append(formula)
 
+    # #process distinct ports
+    # for p1, p2, in manager.library.distinct_ports_set:
+    #     temp = process_distinct_lib_ports(p1, p2, var_map)
+    #     formulas.append(temp)
+
+    # #process distinct specs
+    # for p1, p2, in manager.z3_interface.distinct_spec_port_set:
+    #     temp = process_distinct_spec_ports(p1, p2, spec_contract, var_map)
+    #     formulas.append(temp)
 
     left_sides = TrueFormula()
     preamble = TrueFormula()
@@ -758,7 +841,7 @@ def get_all_candidates(trace, var_map, relevant_allspecs_ports, lev_map=None, cu
             p_opt.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
 
         if len(p_opt) > 0:
-            temp = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), p_opt)
+            temp = reduce(lambda x, y: Disjunction(x, y, merge_literals=False), p_opt)
             v_assign.append(temp)
 
         for x in inner_remove:
@@ -771,13 +854,26 @@ def get_all_candidates(trace, var_map, relevant_allspecs_ports, lev_map=None, cu
 
     return candidate_connection, var_assign, num
 
-def pick_one_candidate(trace, var_map, relevant_allspecs_ports, lev_map=None, current_pool=None):
+def pick_one_candidate(trace, var_map, relevant_allspecs_ports, manager, lev_map=None, current_pool=None):
     ''' return a formula indicating all candidates from a trace'''
     var_assign, lev_vars = trace_analysis(trace, var_map, lev_map)
 
     v_assign = []
     candidate_connection = None
     new_var_assign = {}
+
+    # #preprocess for distinct set
+    # #TODO: this loop might be buggy. what if several constraints are set at once
+    # for (p1, p2) in manager.library.distinct_ports_set:
+    #     if p1 in var_assign and p2 in var_assign:
+    #
+    #         if len(var_assign[p1]) == 1:
+    #             var_assign[p2] = var_assign[p2] - var_assign[p1]
+    #         elif len(var_assign[p2]) == 1:
+    #             var_assign[p1] = var_assign[p1] - var_assign[p2]
+    #         else:
+    #             var_assign[p1] = {var_assign[p1].pop()}
+    #             var_assign[p2] = var_assign[p2] - var_assign[p1]
 
     for p in var_assign:
         p_opt = []
@@ -794,8 +890,10 @@ def pick_one_candidate(trace, var_map, relevant_allspecs_ports, lev_map=None, cu
                 continue
 
             # LOG.debug('1.2')
+
             if v_p not in v_p.contract.relevant_ports | relevant_allspecs_ports:
                 continue
+
 
             # LOG.debug('1.3')
             v_assign.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
@@ -810,7 +908,7 @@ def pick_one_candidate(trace, var_map, relevant_allspecs_ports, lev_map=None, cu
     return candidate_connection, new_var_assign
 
 def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, ref_formulas, all_specs_formula, neg_formula, preamble, left_sides,
-                          var_map, lev_map, input_variables, terminate_evt):
+                          var_map, lev_map, input_variables, terminate_evt, manager):
     """
     verify refinement formula according to preamble
     :param ref_formula:
@@ -885,7 +983,7 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                 #LOG.debug(current_cex)
                 left = Conjunction(left, current_cex, merge_literals=False)
 
-            l_passed, trace = verify_candidate(left, neg_formula)
+            l_passed, ntrace = verify_candidate(left, neg_formula)
             #l_passed, trace = verify_candidate(left, Negation(all_specs_formula))
 
             print('.'),
@@ -899,8 +997,9 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
 
             else:
 
-                candidate_connection, var_assign = pick_one_candidate(trace, var_map,
-                                                             relevant_allspecs_ports, current_pool=current_pool)
+                candidate_connection, var_assign,_ = get_all_candidates(ntrace, var_map,
+                                                             relevant_allspecs_ports,
+                                                                      current_pool=current_pool)
 
                 # LOG.debug(candidate_connection)
                 # LOG.debug(trace)
@@ -955,13 +1054,13 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                             LOG.debug('found single one')
                             candidate = candidate_connection
                             break
-                        else:
-                            # we need a new counterexample, but now tested_candidates will remove this set of solutions
-                            #LOG.debug("nah2")
-                            if tested_candidates is None:
-                                tested_candidates = candidate_connection
-                            else:
-                                tested_candidates = Disjunction(tested_candidates, candidate_connection, merge_literals=False)
+                        # else:
+                        #     # we need a new counterexample, but now tested_candidates will remove this set of solutions
+                        #     #LOG.debug("nah2")
+                        #     if tested_candidates is None:
+                        #         tested_candidates = candidate_connection
+                        #     else:
+                        #         tested_candidates = Disjunction(tested_candidates, candidate_connection, merge_literals=False)
 
                     else:
                         #we need a new counterexample, but now tested_candidates will remove this set of solutions
@@ -976,9 +1075,9 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                         num_left = num_left - num
                         #LOG.debug('remove %d candidates, candidates left = %d ' % (num, num_left))
                         if tested_candidates is None:
-                            tested_candidates = candidate_connection
+                            tested_candidates = least_c
                         else:
-                            tested_candidates = Disjunction(tested_candidates, candidate_connection, merge_literals=False)
+                            tested_candidates = Disjunction(tested_candidates, least_c, merge_literals=False)
 
                 else:
                     #TODO verify_candidate should return None if trace non valid or if it passed
@@ -993,9 +1092,9 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                     # check, _ = verify_candidate(tested_c, candidate_connection)
                     # assert check
                     if tested_candidates is None:
-                        tested_candidates = candidate_connection
+                        tested_candidates = tested_c
                     else:
-                        tested_candidates = Disjunction(tested_candidates, candidate_connection, merge_literals=False)
+                        tested_candidates = Disjunction(tested_candidates, tested_c, merge_literals=False)
 
                     #update counterexample
                     # LOG.debug('update CEX')
@@ -1018,14 +1117,14 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
         LOG.debug(l_passed)
         LOG.debug(candidate)
         # pick one
-        # candidate_connection, _, = pick_one_candidate(local_trace, var_map,
-        #                                                 relevant_allspecs_ports, current_pool=current_pool)
-        #
-        # LOG.debug(candidate)
+        candidate_connection, var_assign, = pick_one_candidate(ntrace, var_map,
+                                                        relevant_allspecs_ports, manager, current_pool=current_pool)
+
+        LOG.debug(candidate_connection)
         l_passed, trace = verify_candidate(candidate_connection, all_specs_formula)
         LOG.debug(l_passed)
 
-        return l_passed, candidate, var_assign
+        return l_passed, candidate_connection, var_assign
 
 
 

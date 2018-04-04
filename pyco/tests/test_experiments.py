@@ -72,9 +72,6 @@ def lib(diff, dirty_diff, fan_out, compl):
 
 
 
-
-
-
 def test_spec_1(lib):
     '''
     Performs simple synthesis
@@ -83,6 +80,26 @@ def test_spec_1(lib):
     spec1 = Spec('G1')
 
     interface = SynthesisInterface(lib, [spec1])
+
+    interface.synthesize(strict_out_lib_map=False,
+                             library_max_redundancy=2,
+                             limit=4,
+                             minimize_components=False,
+                             minimize_ports=False,
+                             filename='exp',
+                             visualize=True,
+                             decompose=False)
+
+
+def test_spec_2(lib):
+    '''
+    Performs simple synthesis
+    '''
+
+    spec1 = Spec('G1')
+    spec2 = SpecAlt('G2')
+
+    interface = SynthesisInterface(lib, [spec1, spec2])
 
     interface.synthesize(strict_out_lib_map=False,
                              library_max_redundancy=2,

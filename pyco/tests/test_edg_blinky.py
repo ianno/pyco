@@ -7,247 +7,97 @@ Add reference
 
 
 import pytest
-from pyco.examples.example_edg_motor import *
+from pyco.examples.example_edg_blinky import *
 
 
 @pytest.fixture
-def simple_mcu():
+def cApm3v3():
     '''
     micro
     '''
-    comp = SimpleMCU('simple_MCU')
-    lib_c = LibraryComponent('simple_MCU', comp)
+    comp = Apm3v3('Apm3v3')
+    lib_c = LibraryComponent('Apm3v3', comp)
     return lib_c
 
 @pytest.fixture
-def small_mcu():
+def cLED():
     '''
     micro
     '''
-    comp = SmallMCU('small_MCU')
-    lib_c = LibraryComponent('small_MCU', comp)
+    comp = LED('LED')
+    lib_c = LibraryComponent('LED', comp)
     return lib_c
 
 @pytest.fixture
-def mcu():
+def cButton():
     '''
     micro
     '''
-    comp = MCU('MCU')
-    lib_c = LibraryComponent('MCU', comp)
+    comp = Button('Button')
+    lib_c = LibraryComponent('Button', comp)
     return lib_c
 
 @pytest.fixture
-def dcdc3():
-    '''
-    LED
-    '''
-    comp = DcDcConverter12_3('dcdc3')
-    return LibraryComponent('dcdc3', comp)
-
-@pytest.fixture
-def dcdc5():
-    '''
-    LED
-    '''
-    comp = DcDcConverter12_5('dcdc5')
-    return LibraryComponent('dcdc5', comp)
-
-@pytest.fixture
-def power_generator12():
+def power_generator3():
     '''
     std generator
     '''
-    comp = PowerAdapter12V('Power12')
-    return LibraryComponent('Power12', comp)
+    comp = PowerAdapter3V('Power3')
+    return LibraryComponent('Power3', comp)
+
 
 @pytest.fixture
-def power_generator5():
-    '''
-    std generator
-    '''
-    comp = PowerAdapter5V('Power5')
-    return LibraryComponent('Power5', comp)
-
-@pytest.fixture
-def half_bridge0():
-    '''
-    std generator
-    '''
-    comp = HalfBridge('half_bridge0')
-    hbridge = LibraryComponent('half_bridge0', comp)
-    hbridge.add_distinct_port_constraints([comp.vin, comp.o1])
-    return hbridge
-
-@pytest.fixture
-def half_bridge1():
-    '''
-    std generator
-    '''
-    comp = HalfBridge('half_bridge1')
-    hbridge = LibraryComponent('half_bridge1', comp)
-    hbridge.add_distinct_port_constraints([comp.vin, comp.o1])
-    return hbridge
-
-@pytest.fixture
-def half_bridge2():
-    '''
-    std generator
-    '''
-    comp = HalfBridge('half_bridge2')
-    hbridge = LibraryComponent('half_bridge2', comp)
-    hbridge.add_distinct_port_constraints([comp.vin, comp.o1])
-    return hbridge
-
-@pytest.fixture
-def edg_mlib(simple_mcu, small_mcu,  mcu, dcdc3, dcdc5, power_generator12, power_generator5,
-             half_bridge0, half_bridge1, half_bridge2):
+def edg_blinky_lib(cApm3v3, cLED,  cButton, power_generator3):
 
     '''
     returns a populated library
     '''
-    library = ContractLibrary('edg_motor_lib')
+    library = ContractLibrary('edg_blinky_lib')
 
-    library.add(simple_mcu)
+    #library.add(cApm3v3)
     # library.add(small_mcu)
-    library.add(mcu)
-    library.add(dcdc3)
-    library.add(dcdc5)
-    library.add(power_generator5)
-    library.add(power_generator12)
-    library.add(half_bridge0)
-    library.add(half_bridge1)
-    library.add(half_bridge2)
+    library.add(cLED)
+    #library.add(cButton)
+    library.add(power_generator3)
 
     library.verify_library()
 
     #add type compatibilities
     library.add_type(IOPin3)
-    library.add_type(IOPin12)
     library.add_type(Voltage)
     library.add_type(Voltage5V)
     library.add_type(Voltage3V)
     library.add_type(Voltage12V)
+    library.add_type(VarVoltage)
+    library.add_type(VarCurrent)
+    library.add_type(Sensor)
+    library.add_type(DigitalState)
+    library.add_type(ButtonState)
+    library.add_type(LedState)
     library.add_type(GND)
 
 
     return library
 
 
-@pytest.fixture
-def edg_mlib_easy(simple_mcu, small_mcu,  mcu, dcdc3, dcdc5, power_generator12, power_generator5,
-             half_bridge0, half_bridge1, half_bridge2):
-
-    '''
-    returns a populated library
-    '''
-    library = ContractLibrary('edg_motor_lib')
-
-    #library.add(simple_mcu)
-    library.add(small_mcu)
-    #library.add(mcu)
-    library.add(dcdc3)
-    library.add(dcdc5)
-    library.add(power_generator5)
-    library.add(power_generator12)
-    library.add(half_bridge0)
-    library.add(half_bridge1)
-    library.add(half_bridge2)
-
-    library.verify_library()
-
-    #add type compatibilities
-    library.add_type(IOPin3)
-    library.add_type(IOPin12)
-    library.add_type(Voltage)
-    library.add_type(Voltage5V)
-    library.add_type(Voltage3V)
-    library.add_type(Voltage12V)
-    library.add_type(GND)
 
 
-    return library
-
-@pytest.fixture
-def edg_mlib_med(small_mcu, dcdc3, dcdc5, power_generator12, power_generator5,
-             half_bridge0, half_bridge1, half_bridge2):
-
-    '''
-    returns a populated library
-    '''
-    library = ContractLibrary('edg_motor_lib')
-
-    #library.add(simple_mcu)
-    library.add(small_mcu)
-    #library.add(mcu)
-    library.add(dcdc3)
-    library.add(dcdc5)
-    library.add(power_generator5)
-    library.add(power_generator12)
-    library.add(half_bridge0, 3)
-    # library.add(half_bridge1)
-    # library.add(half_bridge2)
-
-    library.verify_library()
-
-    #add type compatibilities
-    library.add_type(IOPin3)
-    library.add_type(IOPin12)
-    #library.add_type(Sensor)
-    #library.add_type(HalfBDrive)
-    #library.add_type(CurrentDrive)
-    library.add_type(Voltage)
-    library.add_type(Voltage5V)
-    library.add_type(Voltage3V)
-    library.add_type(Voltage12V)
-    library.add_type(GND)
-
-
-    return library
-
-@pytest.fixture
-def edg_mlib_single(simple_mcu, small_mcu,  mcu, dcdc3, dcdc5, power_generator12, power_generator5,
-             half_bridge0, half_bridge1, half_bridge2):
-
-    '''
-    returns a populated library
-    '''
-    library = ContractLibrary('edg_motor_lib')
-
-    library.add(simple_mcu)
-    # library.add(small_mcu)
-    library.add(mcu)
-    library.add(dcdc3)
-    library.add(dcdc5)
-    library.add(power_generator5)
-    library.add(power_generator12)
-    library.add(half_bridge0)
-
-    library.verify_library()
-
-    #add type compatibilities
-    library.add_type(IOPin3)
-    library.add_type(IOPin12)
-    library.add_type(Voltage)
-    library.add_type(Voltage5V)
-    library.add_type(Voltage3V)
-    library.add_type(Voltage12V)
-    library.add_type(GND)
-
-
-    return library
-
-def test_base(edg_mlib_easy):
+def test_base(edg_blinky_lib):
     '''
     Performs simple synthesis
     '''
 
-    interface = SynthesisInterface(edg_mlib_easy)
+    spec = LED('S1')
 
-    hbridge = interface.get_component('half_bridge0')
-    interface.use_component(hbridge)
+    interface = SynthesisInterface(edg_blinky_lib, [spec])
 
-    interface.synthesize(limit=5)
+
+    #button = interface.get_component('Button')
+    #led = interface.get_component('LED')
+    #interface.use_component(button)
+    #interface.use_component(led)
+
+    interface.synthesize(limit=5, decompose=False)
 
 def test_base_3HB(edg_mlib_easy):
     '''

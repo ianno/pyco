@@ -115,7 +115,7 @@ def dc_tie():
     '''
     comp = DCTwoSideTie('DC2Tie')
     lib_c = LibraryComponent('DC2TieC', comp)
-    lib_c.add_distinct_port_constraints([comp.fail1, comp.fail2])
+    lib_c.add_distinct_port_constraints([comp.fail1_dc, comp.fail2_dc])
 
     return lib_c
 
@@ -126,7 +126,7 @@ def dc_load():
     '''
     comp = DCLoadContactor('DCLoad')
     lib_c = LibraryComponent('DCLoadC', comp)
-    lib_c.add_distinct_port_constraints([comp.fail1, comp.fail2])
+    lib_c.add_distinct_port_constraints([comp.fail1_load, comp.fail2_load])
 
     return lib_c
 
@@ -146,9 +146,9 @@ def ac_lib(abstr_gen, dumb_gen, std_gen, slow_gen, ac_single_back, ac_2_back,
     library.add(slow_gen)
     library.add(ac_single_back)
     library.add(ac_2_back)
-    library.add(ac_4_back)
-    #library.add(ac_4_back_alt)
-    #library.add(back_gen)
+    library.add(ac_4_back,)
+    ##library.add(ac_4_back_alt)
+    ##library.add(back_gen)
     library.add(ac_load)
 
     #add refinement assertion
@@ -160,8 +160,8 @@ def ac_lib(abstr_gen, dumb_gen, std_gen, slow_gen, ac_single_back, ac_2_back,
     #comp_ab.add_refinement_assertion(comp_meta, mapping)
 
     mapping2 = LibraryPortMapping([abstr_gen, std_gen])
-    mapping2.add(abstr_gen.fail, std_gen.fail)
-    mapping2.add(abstr_gen.c, std_gen.c)
+    mapping2.add(abstr_gen.fail, std_gen.fail_std)
+    mapping2.add(abstr_gen.c, std_gen.c_std)
 
     std_gen.add_refinement_assertion(abstr_gen, mapping2)
 

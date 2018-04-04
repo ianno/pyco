@@ -82,3 +82,12 @@ class Spec(Contract):
     OUTPUT_PORTS = [('o1', IntT)]
     ASSUMPTIONS = 'G(i1>=0)'
     GUARANTEES = '''G(i1=5 -> o1=6)''' #& G(i1=4 -> o1=5)
+
+class SpecAlt(Contract):
+    '''
+    Always closed if everything is fine
+    '''
+    INPUT_PORTS = [('i1', IntT)]
+    OUTPUT_PORTS = [('o1', IntT)]
+    ASSUMPTIONS = 'G(i1>=1)'
+    GUARANTEES = '''G(i1=4 -> o1=5)''' #& G(i1=4 -> o1=5)

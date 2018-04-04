@@ -215,7 +215,9 @@ class Z3Interface(object):
 
 
 
-    def synthesize(self, specs, limit=None,
+    def synthesize(self, specs,
+                   distinct_spec_port_set=None,
+                   limit=None,
                    depth=4,
                    minimize_components=False,
                    minimize_cost=False,
@@ -233,6 +235,10 @@ class Z3Interface(object):
 
         #self.time = {}
         #self.time['start'] = time()
+
+        self.distinct_spec_port_set = {}
+        if distinct_spec_port_set is not None:
+            self.distinct_spec_port_set = distinct_spec_port_set
 
         self.fixed_components = fixed_components
         self.fixed_connections = fixed_connections
@@ -292,6 +298,9 @@ class Z3Interface(object):
         else:
             clusters = [self.spec.output_ports_dict.keys()]
             # LOG.debug(clusters)
+
+        if len(clusters) == 0:
+            clusters.append([])
 
         print('Instantiate Solvers...')
         #create parallel solvers

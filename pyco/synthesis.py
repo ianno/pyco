@@ -123,13 +123,15 @@ class SynthesisInterface(object):
 
         time1 = time.time()
 
-        self.solver_interface.synthesize(self.spec_contract_list, limit=limit,
-                                                                 minimize_components=minimize_components,
-                                                                 minimize_cost=minimize_cost,
-                                                                 fixed_components=self.fixed_components,
-                                                                 fixed_connections=self.fixed_connections,
-                                                                 fixed_connections_spec=self.fixed_connections_spec,
-                                                                 decompose=decompose)
+        self.solver_interface.synthesize(self.spec_contract_list,
+                                         distinct_spec_port_set=self.distinct_map,
+                                         limit=limit,
+                                         minimize_components=minimize_components,
+                                         minimize_cost=minimize_cost,
+                                         fixed_components=self.fixed_components,
+                                         fixed_connections=self.fixed_connections,
+                                         fixed_connections_spec=self.fixed_connections_spec,
+                                         decompose=decompose)
         time2 = time.time()
 
         # (model, composition,

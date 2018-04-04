@@ -46,6 +46,7 @@ class ContractLibrary(object):
         self.name_attribute = Attribute(base_name, context)
 
         self.smt_manager = SMTManager(self)
+        self.distinct_ports_set = set()
 
     @property
     def max_hierarchy(self):
@@ -139,7 +140,12 @@ class ContractLibrary(object):
             #num_elem = len(self.components[library_component])
             #name = '%s_%d' % (library_component.base_name, num_elem)
             #copied_comp = library_component.contract.copy(name)
-            self.components[library_component].add(library_component.contract.copy())
+            ccopy = library_component.contract.copy()
+            self.components[library_component].add(ccopy)
+            for (p1, p2) in library_component.distinct_set:
+                self.distinct_ports_set.add((ccopy.ports_dict[p1.base_name],
+                                            ccopy.ports_dict[p2.base_name]))
+
 
             # if name in self.component_map:
             #     raise DuplicateNameError(name)
@@ -279,8 +285,56 @@ class ContractLibrary(object):
 
 
 
-    def create_connection_map_for_component(self, candidate_set, contract_pool,
-                                            ports_left, whole_set, spec=None):
+    # def create_connection_map_for_component(self, candidate_set, contract_pool,
+    #                                         ports_left, whole_set, spec=None):
+    #     """
+    #     recursive function that populate the whole_set which sets of components which can
+    #     provide full inputs for a certain component
+    #     :param candidate_set:
+    #     :param contract_pool:
+    #     :param ports_left:
+    #     :param whole_set:
+    #     :return:
+    #     """
+    #     LOG.debug(len(ports_left))
+    #     LOG.debug(len(candidate_set))
+    #     if len(ports_left) == 0:
+    #         whole_set.add(frozenset(candidate_set))
+    #     else:
+    #         for iport in ports_left:
+    #             itype = iport.contract.port_type[iport.base_name]
+    #             for contract in contract_pool:
+    #                 for oname, oport in contract.output_ports_dict.items():
+    #                     otype = contract.port_type[oname]
+    #                     # LOG.debug('---')
+    #                     # LOG.debug(iport.base_name)
+    #                     # LOG.debug(oport.base_name)
+    #                     # LOG.debug('---')
+    #                     if self.__check_match(itype, otype):
+    #                         # we found a good match!
+    #                         # fork
+    #                         new_cand = candidate_set | {contract}
+    #                         new_leftp = ports_left - {iport}
+    #                         LOG.debug('in')
+    #                         self.create_connection_map_for_component(new_cand, contract_pool, new_leftp, whole_set)
+    #             if spec is not None:
+    #                 for sname, sport in spec.input_ports_dict.items():
+    #                     stype = spec.port_type[sname]
+    #
+    #                     if self.__check_match(itype, stype):
+    #                         # we found a good match!
+    #                         # fork
+    #                         new_leftp = ports_left - {iport}
+    #                         #we pass the old candidate set
+    #                         LOG.debug('in2')
+    #                         self.create_connection_map_for_component(candidate_set, contract_pool, new_leftp, whole_set,
+    #                                                                  spec=spec)
+    #
+    #     LOG.debug('out')
+
+
+    def create_connection_map_for_component(self, contract_pool,
+                                            ports_left):
         """
         recursive function that populate the whole_set which sets of components which can
         provide full inputs for a certain component
@@ -290,33 +344,26 @@ class ContractLibrary(object):
         :param whole_set:
         :return:
         """
+        clusters = {}
+        for iport in ports_left:
+            itype = iport.contract.port_type[iport.base_name]
+            clusters[iport] = set()
+            for contract in contract_pool:
+                for oname, oport in contract.output_ports_dict.items():
+                    otype = contract.port_type[oname]
+                    # LOG.debug('---')
+                    # LOG.debug(iport.base_name)
+                    # LOG.debug(oport.base_name)
+                    # LOG.debug('---')
+                    if self.__check_match(itype, otype):
+                        # we found a good match!
+                        # fork
+                        clusters[iport].add(contract)
+                        break
 
-        if len(ports_left) == 0:
-            whole_set.add(frozenset(candidate_set))
-        else:
-            for iport in ports_left:
-                itype = iport.contract.port_type[iport.base_name]
-                for contract in contract_pool:
-                    for oname, oport in contract.output_ports_dict.items():
-                        otype = contract.port_type[oname]
-
-                        if self.__check_match(itype, otype):
-                            # we found a good match!
-                            # fork
-                            new_cand = candidate_set | {contract}
-                            new_leftp = ports_left - {iport}
-                            self.create_connection_map_for_component(new_cand, contract_pool, new_leftp, whole_set)
-                if spec is not None:
-                    for sname, sport in spec.input_ports_dict.items():
-                        stype = spec.port_type[sname]
-
-                        if self.__check_match(itype, stype):
-                            # we found a good match!
-                            # fork
-                            new_leftp = ports_left - {iport}
-                            #we pass the old candidate set
-                            self.create_connection_map_for_component(candidate_set, contract_pool, new_leftp, whole_set,
-                                                                     spec=spec)
+        for i in clusters:
+            clusters[i] = frozenset(clusters[i])
+        return clusters
 
 
     def __check_match(self, itype, otype):
@@ -381,15 +428,20 @@ class ContractLibrary(object):
         # TODO: make the following executed by a pool of processes
         #inputs are a bit different
         for contract in all_c:
-            whole_set = set()
             candidate_set = set()
             ports_left = set(contract.input_ports_dict.values())
             contract_pool = all_c - {contract}
 
-            self.create_connection_map_for_component(candidate_set, contract_pool,
-                                                     ports_left, whole_set, spec=spec)
+            port_map = self.create_connection_map_for_component(contract_pool,
+                                                     ports_left)
 
-            libspec_connection_map[contract] = whole_set
+            #mash all in one set
+            whole_set = reduce(lambda x,y: x|y, port_map.values(), set([]))
+            libspec_connection_map[contract] = {frozenset(whole_set)}
+
+            #product instead
+            # whole_set = {frozenset(x[0]) for x in itertools.product(port_map.values())}
+            # libspec_connection_map[contract] = whole_set
 
         # LOG.debug(spec_out_map)
         # LOG.debug(libspec_connection_map)
@@ -429,12 +481,6 @@ class ContractLibrary(object):
             new_map[contract] = new_set
 
         return new_map
-
-
-
-
-
-
 
 
 
@@ -514,7 +560,7 @@ class LibraryComponent(object):
         Add a set of ports that cannot be connected together during synthesis
         '''
         for (port_1, port_2) in itertools.combinations(port_list, 2):
-           self.distinct_set.add((port_1.base_name, port_2.base_name))
+           self.distinct_set.add((port_1, port_2))
 
     def register_to_library(self, library):
         '''

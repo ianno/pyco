@@ -207,7 +207,7 @@ class Z3Interface(object):
             options = [self.lib_model.use_flags[c] == 1
                             for c in self.library.spec_out_map[port]]
 
-            constraints.append(Or(options, context))
+            constraints.append(And(options, context))
 
         #LOG.debug(constraints)
         # self.solver.add(constraints)

@@ -802,7 +802,7 @@ def _check_levels(in_p, out_p, lev_map, lev_vars):
 
     return False
 
-def get_all_candidates(trace, var_map, relevant_allspecs_ports, lev_map=None, current_pool=None):
+def get_all_candidates(trace, var_map, relevant_allspecs_ports, lev_map=None, current_pool=None, conjoin=False):
     ''' return a formula indicating all candidates from a trace'''
     var_assign, lev_vars = trace_analysis(trace, var_map, lev_map)
     #LOG.debug(var_assign)
@@ -841,7 +841,10 @@ def get_all_candidates(trace, var_map, relevant_allspecs_ports, lev_map=None, cu
             p_opt.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
 
         if len(p_opt) > 0:
-            temp = reduce(lambda x, y: Disjunction(x, y, merge_literals=False), p_opt)
+            if conjoin:
+                temp = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), p_opt)
+            else:
+                temp = reduce(lambda x, y: Disjunction(x, y, merge_literals=False), p_opt)
             v_assign.append(temp)
 
         for x in inner_remove:
@@ -983,8 +986,9 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                 #LOG.debug(current_cex)
                 left = Conjunction(left, current_cex, merge_literals=False)
 
-            l_passed, ntrace = verify_candidate(left, neg_formula)
-            #l_passed, trace = verify_candidate(left, Negation(all_specs_formula))
+            #l_passed, ntrace = verify_candidate(left, neg_formula)
+            l_passed, ntrace = verify_candidate(left, Negation(all_specs_formula))
+
 
             print('.'),
 
@@ -992,7 +996,7 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                 #if this passes, it means that we are done. This is NOT a solution.
                 # we could find an assignment that makes the formula false,
                 # or the formula is always false for any possible connection
-                # LOG.debug('bad candidate')
+                LOG.debug('bad candidate')
                 return False, None ,None
 
             else:
@@ -1024,8 +1028,9 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                 # check for termination
                 if terminate_evt.is_set():
                     return False, None, None
-                l_passed, trace = verify_candidate(left, all_specs_formula)
 
+                #l_passed, trace = verify_candidate(left, all_specs_formula)
+                l_passed, trace = verify_candidate(candidate_connection, all_specs_formula)
                 # LOG.debug(tested_c)
                 # update tested candidates
 
@@ -1035,7 +1040,7 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                     # check for termination
                     if terminate_evt.is_set():
                         return False, None, None
-                    #LOG.debug("GOOD. let's double check")
+                    LOG.debug("GOOD. let's double check")
                     local_pass, local_trace = verify_candidate(candidate_connection, all_specs_formula)
 
                     if local_pass:
@@ -1062,54 +1067,60 @@ def exists_forall_learner(composition, spec_contract, relevant_allspecs_ports, r
                         #     else:
                         #         tested_candidates = Disjunction(tested_candidates, candidate_connection, merge_literals=False)
 
-                    else:
-                        #we need a new counterexample, but now tested_candidates will remove this set of solutions
-                        #LOG.debug("nah")
-                        #LOG.debug('reset CEX')
-                        input_formula, _ = derive_inputs_from_trace(local_trace, input_variables)
-                        current_cex = input_formula
-                        #LOG.debug(input_formula)
-
-                        least_c, _, num = get_all_candidates(local_trace, var_map,
-                                                          relevant_allspecs_ports)
-                        num_left = num_left - num
-                        #LOG.debug('remove %d candidates, candidates left = %d ' % (num, num_left))
-                        if tested_candidates is None:
-                            tested_candidates = least_c
-                        else:
-                            tested_candidates = Disjunction(tested_candidates, least_c, merge_literals=False)
-
                 else:
-                    #TODO verify_candidate should return None if trace non valid or if it passed
-                    tested_c, _, num = get_all_candidates(trace, var_map,
-                                                       relevant_allspecs_ports)
-                    # LOG.debug('remove %d candidates' % num)
-                    #num_left = num_left - num
-                    #LOG.debug('remove %d candidates, candidates left = %d ' % (num, num_left))
-                    # assert num_left >= 0
-                    # LOG.debug(tested_c)
-                    # LOG.debug(trace)
-                    # check, _ = verify_candidate(tested_c, candidate_connection)
-                    # assert check
-                    if tested_candidates is None:
-                        tested_candidates = tested_c
-                    else:
-                        tested_candidates = Disjunction(tested_candidates, tested_c, merge_literals=False)
-
-                    #update counterexample
-                    # LOG.debug('update CEX')
-                    # LOG.debug(current_cex)
-                    # LOG.debug(trace)
+                    #we need a new counterexample, but now tested_candidates will remove this set of solutions
+                    #LOG.debug("nah")
+                    LOG.debug('reset CEX')
+                    #input_formula, _ = derive_inputs_from_trace(local_trace, input_variables)
                     input_formula, _ = derive_inputs_from_trace(trace, input_variables)
-                    assert input_formula is not None
-                    # LOG.debug(input_formula)
 
-                    # if current_cex is not None:
-                    #     check = Implication(input_formula, current_cex, merge_literals=False)
-                    #     checked = verify_tautology(check, return_trace=False)
-                    #
-                    #     assert checked
                     current_cex = input_formula
+                    LOG.debug(input_formula)
+
+                    #least_c, _, num = get_all_candidates(local_trace, var_map,
+                    #                                  relevant_allspecs_ports)
+                    least_c, _, num = get_all_candidates(trace, var_map,
+                                                      relevant_allspecs_ports)
+                    num_left = num_left - num
+
+                    LOG.debug(least_c)
+                    #LOG.debug('remove %d candidates, candidates left = %d ' % (num, num_left))
+                    if tested_candidates is None:
+                        tested_candidates = least_c
+                    else:
+                        tested_candidates = Disjunction(tested_candidates, least_c, merge_literals=False)
+
+                # else:
+                #     #TODO verify_candidate should return None if trace non valid or if it passed
+                #     tested_c, _, num = get_all_candidates(trace, var_map,
+                #                                        relevant_allspecs_ports)
+                #     # LOG.debug('remove %d candidates' % num)
+                #     #num_left = num_left - num
+                #     #LOG.debug('remove %d candidates, candidates left = %d ' % (num, num_left))
+                #     # assert num_left >= 0
+                #     # LOG.debug(tested_c)
+                #     # LOG.debug(trace)
+                #     # check, _ = verify_candidate(tested_c, candidate_connection)
+                #     # assert check
+                #     if tested_candidates is None:
+                #         tested_candidates = tested_c
+                #     else:
+                #         tested_candidates = Disjunction(tested_candidates, tested_c, merge_literals=False)
+                #
+                #     #update counterexample
+                #     LOG.debug('update CEX')
+                #     # LOG.debug(current_cex)
+                #     # LOG.debug(trace)
+                #     input_formula, _ = derive_inputs_from_trace(trace, input_variables)
+                #     assert input_formula is not None
+                #     # LOG.debug(input_formula)
+                #
+                #     # if current_cex is not None:
+                #     #     check = Implication(input_formula, current_cex, merge_literals=False)
+                #     #     checked = verify_tautology(check, return_trace=False)
+                #     #
+                #     #     assert checked
+                #     current_cex = input_formula
 
                     #LOG.debug(input_formula)
 

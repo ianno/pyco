@@ -125,12 +125,12 @@ class Z3Interface(object):
         constraints = []
         #LOG.debug(self.library.connection_map)
         # limit the values
-        for contract in self.library.all_contracts:
+        for contract in self.library.all_contracts - self.library.incompatible_components:
             options = []
             for opt in self.library.connection_map[contract]:
                 single_conf = [And(self.lib_model.use_flags[c] == 1,
                                    self.lib_model.level_index[c] < self.lib_model.level_index[contract])
-                               for c in opt]
+                               for c in opt - self.library.incompatible_components]
                 if len(single_conf) > 0:
                     options.append(And(single_conf))
                 else:
@@ -151,11 +151,11 @@ class Z3Interface(object):
         constraints = []
         #LOG.debug(self.library.connection_map)
         # limit the values
-        for contract in self.library.all_contracts:
+        for contract in self.library.all_contracts - self.library.incompatible_components:
             options = []
             for opt in self.library.connection_map[contract]:
                 single_conf = [self.lib_model.use_flags[c] == 1
-                               for c in opt]
+                               for c in opt - self.library.incompatible_components]
                 if len(single_conf) > 0:
                     options.append(And(single_conf))
                 else:

@@ -623,7 +623,7 @@ class SinglePortSolver(multiprocessing.Process):
                 if not done:
                     for n2, p2 in spec.input_ports_dict.items():
 
-                        if n2 in var_assign[u1]:
+                        if u1 in var_assign and n2 in var_assign[u1]:
                             spec.connect_to_port(p2, p1)
                             processed_ports.add(p1)
                             processed_ports.add(p2)

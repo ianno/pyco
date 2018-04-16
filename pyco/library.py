@@ -151,6 +151,21 @@ class ContractLibrary(object):
             #     raise DuplicateNameError(name)
 
 
+    def contract_with_siblings(self, contract):
+        '''
+        returns the contract and all the other instances of the same contract
+        :param component:
+        :return:
+        '''
+
+        comp = self.contract_map[contract.base_name]
+
+        all_c = [c for c in self.components[comp]]
+
+        return set(all_c)
+
+
+
     def add_type(self, type_cls):
         '''
         add a type class to the list
@@ -282,59 +297,31 @@ class ContractLibrary(object):
         LOG.debug(self.connection_map)
 
 
+    def check_compatibility(self, iport, oport):
+        '''
+        check compatibility of two ports
+        :param iport:
+        :param oport:
+        :return:
+        '''
+        itype = iport.contract.port_type[iport.base_name]
+        otype = oport.contract.port_type[oport.base_name]
 
+        # if self.__check_match(itype, otype):
+        #     ic = iport.contract.copy()
+        #     oc = oport.contract.copy()
+        #     ip = ic.ports_dict[iport.base_name]
+        #     op = oc.ports_dict[oport.base_name]
+        #     mapping = CompositionMapping([ic, oc])
+        #     mapping.connect(ip, op)
+        #     composite = oc.compose([ic], composition_mapping=mapping)
+        #
+        #     return composite.is_compatible()
 
-
-    # def create_connection_map_for_component(self, candidate_set, contract_pool,
-    #                                         ports_left, whole_set, spec=None):
-    #     """
-    #     recursive function that populate the whole_set which sets of components which can
-    #     provide full inputs for a certain component
-    #     :param candidate_set:
-    #     :param contract_pool:
-    #     :param ports_left:
-    #     :param whole_set:
-    #     :return:
-    #     """
-    #     LOG.debug(len(ports_left))
-    #     LOG.debug(len(candidate_set))
-    #     if len(ports_left) == 0:
-    #         whole_set.add(frozenset(candidate_set))
-    #     else:
-    #         for iport in ports_left:
-    #             itype = iport.contract.port_type[iport.base_name]
-    #             for contract in contract_pool:
-    #                 for oname, oport in contract.output_ports_dict.items():
-    #                     otype = contract.port_type[oname]
-    #                     # LOG.debug('---')
-    #                     # LOG.debug(iport.base_name)
-    #                     # LOG.debug(oport.base_name)
-    #                     # LOG.debug('---')
-    #                     if self.__check_match(itype, otype):
-    #                         # we found a good match!
-    #                         # fork
-    #                         new_cand = candidate_set | {contract}
-    #                         new_leftp = ports_left - {iport}
-    #                         LOG.debug('in')
-    #                         self.create_connection_map_for_component(new_cand, contract_pool, new_leftp, whole_set)
-    #             if spec is not None:
-    #                 for sname, sport in spec.input_ports_dict.items():
-    #                     stype = spec.port_type[sname]
-    #
-    #                     if self.__check_match(itype, stype):
-    #                         # we found a good match!
-    #                         # fork
-    #                         new_leftp = ports_left - {iport}
-    #                         #we pass the old candidate set
-    #                         LOG.debug('in2')
-    #                         self.create_connection_map_for_component(candidate_set, contract_pool, new_leftp, whole_set,
-    #                                                                  spec=spec)
-    #
-    #     LOG.debug('out')
-
+        return self.__check_match(itype, otype)#False
 
     def create_connection_map_for_component(self, contract_pool,
-                                            ports_left):
+                                            ports_left, incompatible_components):
         """
         recursive function that populate the whole_set which sets of components which can
         provide full inputs for a certain component
@@ -346,20 +333,26 @@ class ContractLibrary(object):
         """
         clusters = {}
         for iport in ports_left:
-            itype = iport.contract.port_type[iport.base_name]
+            #itype = iport.contract.port_type[iport.base_name]
             clusters[iport] = set()
             for contract in contract_pool:
                 for oname, oport in contract.output_ports_dict.items():
-                    otype = contract.port_type[oname]
+                    #otype = contract.port_type[oname]
                     # LOG.debug('---')
                     # LOG.debug(iport.base_name)
                     # LOG.debug(oport.base_name)
                     # LOG.debug('---')
-                    if self.__check_match(itype, otype):
+                    if self.check_compatibility(iport, oport):
                         # we found a good match!
-                        # fork
+                        # check for contract compatibility
                         clusters[iport].add(contract)
                         break
+
+            if len(clusters[iport]) == 0:
+                if iport.contract not in incompatible_components:
+                    incompatible_components[iport.contract] = set()
+                incompatible_components[iport.contract].add(iport)
+
 
         for i in clusters:
             clusters[i] = frozenset(clusters[i])
@@ -409,6 +402,7 @@ class ContractLibrary(object):
         spec_outputs = spec.output_ports_dict.values()
         spec_out_map = {x.base_name: set() for x in spec_outputs}
         libspec_connection_map = {}
+        incompatible_components = {}
 
         all_c = self.all_contracts
 
@@ -433,7 +427,7 @@ class ContractLibrary(object):
             contract_pool = all_c - {contract}
 
             port_map = self.create_connection_map_for_component(contract_pool,
-                                                     ports_left)
+                                                     ports_left, incompatible_components)
 
             #mash all in one set
             whole_set = reduce(lambda x,y: x|y, port_map.values(), set([]))
@@ -442,6 +436,20 @@ class ContractLibrary(object):
             #product instead
             # whole_set = {frozenset(x[0]) for x in itertools.product(port_map.values())}
             # libspec_connection_map[contract] = whole_set
+
+        #preprocess spec inputs:
+        safe = set()
+        for c, pset in incompatible_components.items():
+            for p in pset:
+                for i in spec.input_ports_dict.values():
+                    if self.check_compatibility(p, i):
+                        safe.add(c)
+                        break
+                if c in safe:
+                    break
+
+        LOG.debug(incompatible_components)
+        incompatible_components = set(incompatible_components.keys()) - safe
 
         # LOG.debug(spec_out_map)
         # LOG.debug(libspec_connection_map)
@@ -458,7 +466,10 @@ class ContractLibrary(object):
                              for x in all_c}
         self.spec_out_map = spec_out_map
 
-        return libspec_connection_map, spec_out_map
+        self.incompatible_components = incompatible_components
+        LOG.debug(incompatible_components)
+
+        return libspec_connection_map, incompatible_components, spec_out_map
 
 
 

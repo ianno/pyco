@@ -147,7 +147,7 @@ class Apm3v3(Contract):
                     ('gvout2', VarVoltage), ('gout2', DigitalState),
                     ('gvout3', VarVoltage), ('gout3', DigitalState),
                     ('gvout4', VarVoltage), ('gout4', DigitalState),]
-    ASSUMPTIONS = '''G(vin >= 25 & vin <= 55) 
+    ASSUMPTIONS = '''G(vin >= 45 & vin <= 55) 
                      & G(gvin1 = 0 | gvin1 = 30) 
                      & G(gvin2 = 0 | gvin2 = 30) 
                      & G(gvin3 = 0 | gvin3 = 30) 

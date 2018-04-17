@@ -91,6 +91,8 @@ def test_base(edg_blinky_lib):
 
     interface = SynthesisInterface(edg_blinky_lib, [spec])
 
+    interface.balance_max_quantities(VarVoltage, VarCurrent, VarVoltage, MaxCurrent)
+
 
     #button = interface.get_component('Button')
     #led = interface.get_component('LED')

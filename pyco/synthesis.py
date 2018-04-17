@@ -33,6 +33,8 @@ class SynthesisInterface(object):
         self.fixed_connections = set()
         self.fixed_connections_spec = set()
 
+        self.balance_types = set()
+
         self.solver_interface = Z3Interface(library)
 
 
@@ -51,6 +53,17 @@ class SynthesisInterface(object):
         '''
         for (port_1, port_2) in itertools.combinations(port_list, 2):
            self.distinct_map.add((port_1.base_name, port_2.base_name))
+
+
+    def balance_max_quantities(self, out_type, in_type, quantity_type):
+        '''
+        requires that the sum of in is less than the value of out
+        :param out_type:
+        :param in_type:
+        :return:
+        '''
+
+        self.balance_types.add((out_type, in_type, quantity_type))
 
     def get_lib_redundancy_level(self):
         """

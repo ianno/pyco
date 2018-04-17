@@ -11,7 +11,7 @@ from pyco.contract import CompositionMapping
 from pycolite.formula import (Globally, Equivalence, Disjunction, Implication,
                               Negation, Conjunction, Next, TrueFormula, FalseFormula,
                                 Constant, DoubleImplication, Eventually, Until, Le as Lt, Literal,
-                                Geq, Leq, Ge as Gt)
+                                Geq, Leq, Ge as Gt, Addition)
 from pycolite.symbol_sets import NusmvSymbolSet
 from pycolite.types import FrozenInt, Int, FrozenBool
 from pycolite.nuxmv import (NuxmvRefinementStrategy, verify_tautology, verify_tautology_smv,
@@ -527,6 +527,84 @@ def process_distinct_spec_ports(port1_name, port2_name, spec_contract, var_map):
             constraints.append(Implication(left, inner, merge_literals=False))
 
     return reduce(lambda x,y: Conjunction(x, y, merge_literals=False), constraints)
+
+
+def build_balance_constraints(balance_types, contracts, location_vars, location_map):
+    '''
+    returns constraints encoding balance constraints
+    :param balance_types:
+    :param location_vars:
+    :param location_map:
+    :return:
+    '''
+
+
+    #first phase, build map
+
+    map_balance = {}
+
+    for out_t, in_t, qt_t in balance_types:
+        temp_map = {}
+        for c in contracts:
+
+            for op in c.output_ports_dict.values():
+                if c.port_type[op.base_name] == out_t:
+                    temp_map[op] = set()
+
+        for c in contracts:
+            temp_ip = None
+            temp_qnt = None
+
+            for ip in c.input_ports_dict.values():
+                if c.port_type[ip.base_name] == in_t:
+                    temp_ip = ip
+                elif c.port_type[ip.base_name] == qt_t:
+                    temp_qnt = ip
+
+
+            if temp_ip is not None and temp_qnt is not None:
+                for k in temp_map:
+                    temp_map[k].add((temp_ip, temp_qnt))
+
+                map_balance.update(temp_map)
+
+
+    #second phase, build formula
+    all_c = []
+    for op, setp in map_balance.items():
+        in_constr = []
+        vlist = []
+        for ip, iq in setp:
+            vq = Literal('q', l_type=FrozenInt())
+            il = location_vars[ip]
+            lval = [k for k,v in location_map[ip].items() if v == op][0]
+
+            pos_p = Equivalence(il, Constant(lval), merge_literals=False)
+            pos_p = Implication(pos_p, Equivalence(vq, iq, merge_literals=False), merge_literals=False)
+
+            neg_p = Negation(Equivalence(il, Constant(lval), merge_literals=False))
+            neg_p = Implication(neg_p, Equivalence(vq, Constant(0), merge_literals=False), merge_literals=False)
+
+            in_constr.append(Conjunction(pos_p, neg_p, merge_literals=False))
+            vlist.append(vq)
+
+        if len(vlist) > 0:
+            vsum = reduce(lambda x,y: Addition(x,y,merge_literals=False), vlist)
+            vsum = Leq(vsum, op, merge_literals=False)
+
+            in_constr.append(vsum)
+
+            in_constr = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), in_constr)
+            all_c.append(in_constr)
+
+
+    all_f = None
+    if len(all_c) > 0:
+        all_f + reduce(lambda x, y: Conjunction(x, y, merge_literals=False), all_c)
+
+    return all_f
+
+
 
 def process_model(spec_list, output_port_names,
                   model, relevant_contracts, manager):

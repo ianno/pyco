@@ -224,6 +224,7 @@ class Z3Interface(object):
                    fixed_components=None,
                    fixed_connections=None,
                    fixed_connections_spec=None,
+                   balance_types=None,
                    decompose=True):
         '''
         perform synthesis process
@@ -260,6 +261,11 @@ class Z3Interface(object):
 
         if depth is None:
             depth = min(int(3* limit/spec_outs), limit)
+
+
+        self.balance_max_types = set()
+        if balance_types is not None:
+            self.balance_max_types = balance_types
 
         constraints = [True]
 

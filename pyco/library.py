@@ -10,7 +10,7 @@ from pycolite.attribute import Attribute
 
 from pyco.contract import (RefinementMapping, PortMappingError, PortMapping,
                            CompositionMapping, NotARefinementError, BaseTypeBool, BaseTypeInt,
-                            BaseTypeFloat, NotATypeError)
+                            BaseTypeFloat, NotATypeError, ParameterInt)
 from pyco import LOG
 from pyco.solver_interface import SMTManager
 
@@ -172,7 +172,8 @@ class ContractLibrary(object):
         '''
         if not (issubclass(type_cls, BaseTypeBool) or
                 issubclass(type_cls, BaseTypeInt) or
-                issubclass(type_cls, BaseTypeFloat)):
+                issubclass(type_cls, BaseTypeFloat) or
+                issubclass(type_cls, ParameterInt)):
             raise NotATypeError(type_cls)
 
         self.typeset.add(type_cls)

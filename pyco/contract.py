@@ -162,6 +162,12 @@ class BaseTypeInt(Int):
     """
     pass
 
+class ParameterInt(Int):
+    """
+    Implements parametric (frozen) integer
+    """
+    pass
+
 class BaseTypeFloat(Float):
     """
     Implements base type for contract ports

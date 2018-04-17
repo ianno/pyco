@@ -304,6 +304,7 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
                                                      model, relevant_contracts, manager)
 
     input_variables = set([p for p in spec_contract.input_ports_dict.values()])
+    input_variables = input_variables & rel_spec_ports
 
 
         # from graphviz_converter import GraphizConverter
@@ -543,13 +544,19 @@ def build_balance_constraints(balance_types, contracts, location_vars, location_
 
     map_balance = {}
 
-    for out_t, in_t, qt_t in balance_types:
+    for out_t, outqt_t, in_t, inqt_t in balance_types:
         temp_map = {}
         for c in contracts:
-
+            temp_op = None
+            temp_oq = None
             for op in c.output_ports_dict.values():
                 if c.port_type[op.base_name] == out_t:
-                    temp_map[op] = set()
+                    temp_op = op
+                if c.port_type[op.base_name] == outqt_t:
+                    temp_oq = op
+
+            if temp_op is not None and temp_oq is not None:
+                temp_map[(temp_op, temp_oq)] = set()
 
         for c in contracts:
             temp_ip = None
@@ -558,8 +565,12 @@ def build_balance_constraints(balance_types, contracts, location_vars, location_
             for ip in c.input_ports_dict.values():
                 if c.port_type[ip.base_name] == in_t:
                     temp_ip = ip
-                elif c.port_type[ip.base_name] == qt_t:
-                    temp_qnt = ip
+                    break
+
+            for op in c.output_ports_dict.values():
+                if c.port_type[op.base_name] == inqt_t:
+                    temp_qnt = op
+                    break
 
 
             if temp_ip is not None and temp_qnt is not None:
@@ -571,26 +582,29 @@ def build_balance_constraints(balance_types, contracts, location_vars, location_
 
     #second phase, build formula
     all_c = []
-    for op, setp in map_balance.items():
+    for (op, oq), setp in map_balance.items():
         in_constr = []
         vlist = []
         for ip, iq in setp:
-            vq = Literal('q', l_type=FrozenInt())
-            il = location_vars[ip]
-            lval = [k for k,v in location_map[ip].items() if v == op][0]
+            if ip in location_vars:
+                vq = Literal('q', l_type=FrozenInt())
+                il = location_vars[ip]
+                lval = [k for k,v in location_map[il].items() if v == op]
+                if len(lval) > 0:
+                    lval = lval[0]
 
-            pos_p = Equivalence(il, Constant(lval), merge_literals=False)
-            pos_p = Implication(pos_p, Equivalence(vq, iq, merge_literals=False), merge_literals=False)
+                    pos_p = Equivalence(il, Constant(lval), merge_literals=False)
+                    pos_p = Implication(pos_p, Equivalence(vq, iq.literal, merge_literals=False), merge_literals=False)
 
-            neg_p = Negation(Equivalence(il, Constant(lval), merge_literals=False))
-            neg_p = Implication(neg_p, Equivalence(vq, Constant(0), merge_literals=False), merge_literals=False)
+                    neg_p = Negation(Equivalence(il, Constant(lval), merge_literals=False))
+                    neg_p = Implication(neg_p, Equivalence(vq, Constant(0), merge_literals=False), merge_literals=False)
 
-            in_constr.append(Conjunction(pos_p, neg_p, merge_literals=False))
-            vlist.append(vq)
+                    in_constr.append(Conjunction(pos_p, neg_p, merge_literals=False))
+                    vlist.append(vq)
 
         if len(vlist) > 0:
             vsum = reduce(lambda x,y: Addition(x,y,merge_literals=False), vlist)
-            vsum = Leq(vsum, op, merge_literals=False)
+            vsum = Leq(vsum, oq.literal, merge_literals=False)
 
             in_constr.append(vsum)
 
@@ -600,7 +614,7 @@ def build_balance_constraints(balance_types, contracts, location_vars, location_
 
     all_f = None
     if len(all_c) > 0:
-        all_f + reduce(lambda x, y: Conjunction(x, y, merge_literals=False), all_c)
+        all_f = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), all_c)
 
     return all_f
 
@@ -872,6 +886,11 @@ def process_model(spec_list, output_port_names,
     preamble = Conjunction(preamble, no_conn, merge_literals=False)
     preamble = Conjunction(preamble, c_conds, merge_literals=False)
 
+    balance_f = build_balance_constraints(manager.z3_interface.balance_max_types, relevant_contracts,
+                                          location_vars, location_map)
+    if balance_f is not None:
+        preamble = Conjunction(preamble, balance_f, merge_literals=False)
+
     left = Conjunction(preamble, left_sides, merge_literals=False)
     autf = Implication(left, neg_formula, merge_literals=False)
 
@@ -889,7 +908,7 @@ def process_model(spec_list, output_port_names,
 
     # passed, trace = verify_tautology(Negation(neg_formula), return_trace=True)
     # LOG.debug(trace)
-    LOG.debug(location_map)
+    #LOG.debug(location_map)
     # #name map
     # var_name_map = {}
     # for c in [spec_contract] + relevant_contracts:
@@ -1479,7 +1498,7 @@ def derive_inputs_from_trace(trace, input_variables):
 
     unique_names = {p.unique_name: p for p in input_variables}
 
-    # LOG.debug(trace)
+    LOG.debug(trace)
     # LOG.debug(monitored_vars)
 
     #create structure to record values

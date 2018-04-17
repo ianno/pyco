@@ -55,7 +55,7 @@ class SynthesisInterface(object):
            self.distinct_map.add((port_1.base_name, port_2.base_name))
 
 
-    def balance_max_quantities(self, out_type, in_type, quantity_type):
+    def balance_max_quantities(self, out_type, out_quantity_type, in_type, in_quantity_type):
         '''
         requires that the sum of in is less than the value of out
         :param out_type:
@@ -63,7 +63,7 @@ class SynthesisInterface(object):
         :return:
         '''
 
-        self.balance_types.add((out_type, in_type, quantity_type))
+        self.balance_types.add((out_type, out_quantity_type, in_type, in_quantity_type))
 
     def get_lib_redundancy_level(self):
         """
@@ -144,6 +144,7 @@ class SynthesisInterface(object):
                                          fixed_components=self.fixed_components,
                                          fixed_connections=self.fixed_connections,
                                          fixed_connections_spec=self.fixed_connections_spec,
+                                         balance_types=self.balance_types,
                                          decompose=decompose)
         time2 = time.time()
 

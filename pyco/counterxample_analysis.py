@@ -673,6 +673,12 @@ def process_model(spec_list, output_port_names,
     w_spec.guarantee_formula = all_guarantees
 
 
+    #extend with fixed components
+    for spec in spec_dict.values():
+        for c in manager.retrieve_fixed_components():
+            spec.assume_formula = Conjunction(spec.assume_formula, c.assume_formula, merge_literals=False)
+
+
     rel_spec_ports = set()
     for spec in spec_dict.values():
         rel_spec_ports |= spec.relevant_ports
@@ -773,7 +779,7 @@ def process_model(spec_list, output_port_names,
                             lev_c = Conjunction(lev_c, min_c, merge_literals=False)
                         else:
                             #it's the spec
-                            lev_c = Equivalence(lev_map[port.contract], Constant(0))
+                            lev_c = Geq(lev_map[port.contract], Constant(0))
 
                         inner2 = Conjunction(inner2, lev_c, merge_literals=False)
 
@@ -844,7 +850,7 @@ def process_model(spec_list, output_port_names,
         all_c = manager.library.contract_with_siblings(contract)
         eqs_neg = [TrueFormula()]
         eqs_pos = [TrueFormula()]
-        for c in all_c:
+        for c in all_c & relevant_contracts:
             eqs_neg.append(Equivalence(lev_map[c], Constant(-1), merge_literals=False))
             eqs_pos.append(Geq(lev_map[c], Constant(0), merge_literals=False))
 
@@ -891,6 +897,17 @@ def process_model(spec_list, output_port_names,
     if balance_f is not None:
         preamble = Conjunction(preamble, balance_f, merge_literals=False)
 
+
+    #add constraints for fixed components:
+    fix = []
+    for c in manager.retrieve_fixed_components():
+        fix.append(Geq(lev_map[c], Constant(0), merge_literals=False))
+
+    if len(fix) > 0:
+        fix = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), fix)
+        preamble = Conjunction(preamble, fix, merge_literals=False)
+
+
     left = Conjunction(preamble, left_sides, merge_literals=False)
     autf = Implication(left, neg_formula, merge_literals=False)
 
@@ -906,8 +923,9 @@ def process_model(spec_list, output_port_names,
 
     LOG.debug(neg_formula)
 
-    # passed, trace = verify_tautology(Negation(neg_formula), return_trace=True)
+    # passed, trace = verify_tautology(Negation(preamble), return_trace=True)
     # LOG.debug(trace)
+    # LOG.debug(preamble)
     #LOG.debug(location_map)
     # #name map
     # var_name_map = {}
@@ -1254,7 +1272,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
         # left = Conjunction(preamble, left_sides, merge_literals=False)
         # autf = Conjunction(left, neg_formula, merge_literals=False)
 
-        # LOG.debug(neg_formula)
+        #LOG.debug(neg_formula)
         autsign, aut = build_smv_module(neg_formula, location_vars.values()+lev_map.values())
 
         loc_limits = []
@@ -1262,7 +1280,10 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             a = Geq(loc, Constant(-1))
             b = Leq(loc, Constant(len(lmap)-1))
             loc_limits.append(Conjunction(a, b, merge_literals=False))
-        loc_c = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), loc_limits)
+
+        loc_c = None
+        if len(loc_limits) > 0:
+            loc_c = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), loc_limits)
 
 
         while True:
@@ -1287,7 +1308,10 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             else:
                 no_repeat = TrueFormula()
 
-            left = Conjunction(loc_c, no_repeat, merge_literals=False)
+            left = no_repeat
+            if loc_c is not None:
+                left = Conjunction(loc_c, left, merge_literals=False)
+
             left = left.generate(symbol_set=NusmvSymbolSet)
 
             base_spec_str = '(' + left + '& (%s))' % cex_str
@@ -1301,10 +1325,10 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             l_passed, ntrace = verify_tautology_smv(smv, return_trace=True)
 
             if l_passed:
-                # LOG.debug(smv)
+                #LOG.debug(smv)
                 return False, None, None
 
-            # LOG.debug(ntrace)
+            #LOG.debug(ntrace)
             #analyze trace to derive possible solution
             locs = trace_analysis_for_loc(ntrace, location_vars.values())
             uses = trace_analysis_for_loc(ntrace, lev_map.values())
@@ -1323,11 +1347,14 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             for var, use in uses.items():
                 used.append(Equivalence(var, Constant(use)))
 
-            used = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), used)
+            if len(used) > 0:
+                used = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), used)
+            else:
+                used = TrueFormula()
 
             # now check if this is a good solution indeed
             constr = [TrueFormula()]
-            lconstr = []
+            lconstr = [TrueFormula()]
             for var, val in locs.items():
                 lconstr.append(Equivalence(var, Constant(val), merge_literals=False))
                 if val >= 0:
@@ -1396,16 +1423,17 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                 #     i += 1
 
 
-                cex_p = False
-                for c in cex_dict.values():
-                    cex_check = Implication(c, cex, merge_literals=False)
-                    cex_p = verify_tautology(cex_check, return_trace=False)
-                    if cex_p:
-                        break
-                if not cex_p and do_cex_checks:
-                    cex_dict[Literal('m')] = cex
-                    generated_cex.add(cex)
-                    LOG.debug(len(cex_dict))
+                if cex is not None:
+                    cex_p = False
+                    for c in cex_dict.values():
+                        cex_check = Implication(c, cex, merge_literals=False)
+                        cex_p = verify_tautology(cex_check, return_trace=False)
+                        if cex_p:
+                            break
+                    if not cex_p and do_cex_checks:
+                        cex_dict[Literal('m')] = cex
+                        generated_cex.add(cex)
+                        LOG.debug(len(cex_dict))
 
                 if all_candidates is None:
                     all_candidates = lconn
@@ -1498,7 +1526,7 @@ def derive_inputs_from_trace(trace, input_variables):
 
     unique_names = {p.unique_name: p for p in input_variables}
 
-    LOG.debug(trace)
+    # LOG.debug(trace)
     # LOG.debug(monitored_vars)
 
     #create structure to record values

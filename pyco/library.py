@@ -129,7 +129,7 @@ class ContractLibrary(object):
         add a library_component to the library object
         '''
         if library_component not in self.components:
-            self.components[library_component] = set()
+            self.components[library_component] = []
             self.contract_map[library_component.contract.base_name] = library_component
             library_component.register_to_library(self)
             library_component.assign_to_solver(self.smt_manager)
@@ -141,7 +141,7 @@ class ContractLibrary(object):
             #name = '%s_%d' % (library_component.base_name, num_elem)
             #copied_comp = library_component.contract.copy(name)
             ccopy = library_component.contract.copy()
-            self.components[library_component].add(ccopy)
+            self.components[library_component].append(ccopy)
             for (p1, p2) in library_component.distinct_set:
                 self.distinct_ports_set.add((ccopy.ports_dict[p1.base_name],
                                             ccopy.ports_dict[p2.base_name]))
@@ -263,7 +263,7 @@ class ContractLibrary(object):
         :return:
         '''
 
-        return reduce(lambda x, y: x | y, self.components.values())
+        return reduce(lambda x, y: set(x) | set(y), self.components.values())
 
     @property
     def all_contracts_by_uname(self):

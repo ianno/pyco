@@ -272,10 +272,16 @@ class SinglePortSolver(multiprocessing.Process):
         # for spec_out in output_port_names:
         #     configurations[spec_out] = {x: [] for x in spec_map[spec_out] if x in all_contracts_in_model}
 
-        configurations = {x: [] for spec_out in output_port_names for x in spec_map[spec_out] if x in all_contracts_in_model}
-
 
         seen = set()
+        seen |= self.retrieve_fixed_components()
+
+        configurations = {x: [] for spec_out in output_port_names for x in spec_map[spec_out] if x in all_contracts_in_model}
+
+        fixed_conf = {c: [] for c in seen }
+
+        configurations.update(fixed_conf)
+
         for x in configurations:
         #x is a contract
 
@@ -287,9 +293,17 @@ class SinglePortSolver(multiprocessing.Process):
                                                             configurations[x])
 
 
+
         # LOG.debug(all_contracts_in_model - seen)
         return seen, configurations
 
+
+    def retrieve_fixed_components(self):
+        '''
+        return fixed components
+        :return:
+        '''
+        return self.z3_interface.retrieve_fixed_components()
 
     def __find_configurations_for_contract(self, seen, used, contract,
                                            all_contracts, connection_map, upper_list):
@@ -629,7 +643,7 @@ class SinglePortSolver(multiprocessing.Process):
                             processed_ports.add(p2)
                             break
 
-        relevant_contracts = used_contracts
+        relevant_contracts = used_contracts | self.retrieve_fixed_components()
         for c in relevant_contracts:
             for p in c.ports_dict.values():
                 if p not in processed_ports:

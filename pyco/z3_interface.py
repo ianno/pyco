@@ -180,6 +180,33 @@ class Z3Interface(object):
         # self.solver.add(constraints)
         return And(constraints)
 
+    def process_fixed_components(self):
+        '''
+        Force the solver to include related components if a component is chosen
+        '''
+
+        #constraints = []
+        #LOG.debug(self.library.connection_map)
+        # limit the values
+        constraints = [self.lib_model.use_flags[c] == 1 for c in self.retrieve_fixed_components()]
+
+        # LOG.debug(constraints)
+        # self.solver.add(constraints)
+        return And(constraints)
+
+    def retrieve_fixed_components(self):
+        '''
+        returns a set of fixed components
+        :return:
+        '''
+        seen = set()
+        for c, l in self.fixed_components:
+            comp = self.library.contract_map[c.base_name]
+            el = self.library.components[comp][l]
+            seen.add(el)
+
+        return seen
+
     def max_depth(self, n):
         '''
         Set max depth of solution
@@ -283,6 +310,8 @@ class Z3Interface(object):
         #constraints.append(self.max_depth(depth))
         constraints.append(self.type_connection_rules())
         # constraints.append(self.type_connection_rules_and_no_loops())
+
+        constraints.append(self.process_fixed_components())
 
         goal = Goal()
         goal.add(constraints)

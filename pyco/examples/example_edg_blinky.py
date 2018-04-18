@@ -64,6 +64,12 @@ class IOPin(BaseTypeBool):
     '''
     pass
 
+class Touch(BaseTypeBool):
+    '''
+    input/output pin
+    '''
+    pass
+
 class IOPin3(IOPin):
     '''
     input/output pin
@@ -100,20 +106,33 @@ class GND(BaseTypeBool):
     '''
     pass
 
+class FixedStateT(ButtonState, LedState):
+    '''
+    generic state
+    '''
 
 #Now let's include some components
+class FixedState(Contract):
+    '''
+    source of state
+    '''
+    INPUT_PORTS = []
+    OUTPUT_PORTS = [('s', FixedStateT)]
+    ASSUMPTIONS = 'true'
+    GUARANTEES = '''G(!s)
+                    '''
 class Button(Contract):
     '''
     button. Need to add that vin and iino are a logic port,
     ie, need to be connected to same logic port
     '''
-    INPUT_PORTS = [('gnd', GND), ('vin', VarVoltage)]
-    OUTPUT_PORTS = [('vout', VarVoltage), ('iout', MaxCurrent),
-                    ('bout', ButtonState)]
-    ASSUMPTIONS = 'G(vin >= 0 & vin <= 360)'
-    GUARANTEES = '''G(iout = 2)
-                    & G(bout -> (vout = 0))
-                    & G(!bout -> (vout = vin))
+    INPUT_PORTS = [('gnd', GND), ('vin', VarVoltage), ('tin', Touch)]
+    OUTPUT_PORTS = [('vout', VarVoltage), ('imax', MaxCurrent),
+                    ('bout', ButtonState), ('iout', VarCurrent)]
+    ASSUMPTIONS = 'GF(tin) & G(vin >= 0 & vin <= 360)'
+    GUARANTEES = '''G(imax = 3) & G(iout = 2)
+                    & G(!tin -> (vout = 0 & !bout))
+                    & G(tin -> (vout = vin & bout))
                     '''
 
 class PowerAdapter3V(Contract):
@@ -123,6 +142,14 @@ class PowerAdapter3V(Contract):
     INPUT_PORTS = []
     OUTPUT_PORTS = [('gnd', GND), ('vout', VarVoltage), ('iout', VarCurrent)]
     GUARANTEES = '''G(vout = 30) & G(iout = 1000)'''
+
+class PowerAdapter5V(Contract):
+    '''
+    MCU
+    '''
+    INPUT_PORTS = []
+    OUTPUT_PORTS = [('gnd', GND), ('vout', VarVoltage), ('iout', VarCurrent)]
+    GUARANTEES = '''G(vout = 50) & G(iout = 1000)'''
 
 class LED(Contract):
     '''
@@ -135,7 +162,7 @@ class LED(Contract):
                      & G((vin > 0) -> lin) & G((vin = 0) -> !lin) 
                      '''
     GUARANTEES = '''G(iout = 2) & G(vout = vin)
-                    & G((vout > 0) -> lout) & G((vout) = 0 -> !lout)'''
+                    & G(lin -> lout) & G(!lin -> !lout)'''
 
 
 class Apm3v3(Contract):
@@ -171,9 +198,11 @@ class Apm3v3(Contract):
                      # & G(gvout4 = 0 | gvout4 = 30) & G(gvout4 > 0 -> gout4) & G(gvout4 = 0 -> !gout4)'''
 
 
-    class zerospec(Contract):
-        '''
-        base spec. Say you want a button and LED
-        '''
-        INPUT_PORTS = [ ]
-        OUTPUT_PORTS = [ ]
+class Zerospec(Contract):
+    '''
+    base spec. Say you want a button and LED
+    '''
+    INPUT_PORTS = [('bin', Touch)]
+    OUTPUT_PORTS = [('lout', LedState)]
+    ASSUMPTIONS = '''GF(bin)'''
+    GUARANTEES = '''GF(lout)'''

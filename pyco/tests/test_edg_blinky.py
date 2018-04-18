@@ -45,9 +45,24 @@ def power_generator3():
     comp = PowerAdapter3V('Power3')
     return LibraryComponent('Power3', comp)
 
+@pytest.fixture
+def power_generator5():
+    '''
+    std generator
+    '''
+    comp = PowerAdapter5V('Power5')
+    return LibraryComponent('Power5', comp)
 
 @pytest.fixture
-def edg_blinky_lib(cApm3v3, cLED,  cButton, power_generator3):
+def state_source():
+    '''
+    std generator
+    '''
+    comp = FixedState('FixedState')
+    return LibraryComponent('FixedState', comp)
+
+@pytest.fixture
+def edg_blinky_lib(cApm3v3, cLED,  cButton, power_generator5, power_generator3, state_source):
 
     '''
     returns a populated library
@@ -59,6 +74,8 @@ def edg_blinky_lib(cApm3v3, cLED,  cButton, power_generator3):
     library.add(cLED)
     library.add(cButton)
     library.add(power_generator3)
+    library.add(power_generator5)
+    library.add(state_source)
 
     library.verify_library()
 
@@ -75,6 +92,8 @@ def edg_blinky_lib(cApm3v3, cLED,  cButton, power_generator3):
     library.add_type(ButtonState)
     library.add_type(LedState)
     library.add_type(GND)
+    library.add_type(Touch)
+    #library.add_type(FixedStateT)
 
 
     return library
@@ -87,17 +106,17 @@ def test_base(edg_blinky_lib):
     Performs simple synthesis
     '''
 
-    spec = LED('S1')
+    spec = Zerospec('S1')
 
     interface = SynthesisInterface(edg_blinky_lib, [spec])
 
     interface.balance_max_quantities(VarVoltage, VarCurrent, VarVoltage, MaxCurrent)
 
 
-    #button = interface.get_component('Button')
-    #led = interface.get_component('LED')
-    #interface.use_component(button)
-    #interface.use_component(led)
+    # button = interface.get_component('Button')
+    # led = interface.get_component('LED')
+    # interface.use_component(button)
+    # interface.use_component(led)
 
     interface.synthesize(limit=5, decompose=False)
 

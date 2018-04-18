@@ -683,6 +683,10 @@ def process_model(spec_list, output_port_names,
     for spec in spec_dict.values():
         rel_spec_ports |= spec.relevant_ports
 
+
+    rel_spec_ports = {p for p in rel_spec_ports if (p.base_name in output_port_names)
+                                                    or (p.is_input)}
+
     p_names = {p.unique_name for p in rel_spec_ports}
 
     rel_spec_ports = {port for port in spec_contract.ports_dict.values() if port.unique_name in p_names}
@@ -844,25 +848,6 @@ def process_model(spec_list, output_port_names,
         no_conn = TrueFormula()
 
 
-    #all siblings together
-    c_conds = [TrueFormula()]
-    for contract in relevant_contracts:
-        all_c = manager.library.contract_with_siblings(contract)
-        eqs_neg = [TrueFormula()]
-        eqs_pos = [TrueFormula()]
-        for c in all_c & relevant_contracts:
-            eqs_neg.append(Equivalence(lev_map[c], Constant(-1), merge_literals=False))
-            eqs_pos.append(Geq(lev_map[c], Constant(0), merge_literals=False))
-
-        eqs_neg = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), eqs_neg)
-        eqs_pos = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), eqs_pos)
-
-        c_conds.append(Implication(Equivalence(lev_map[contract], Constant(-1), merge_literals=False), eqs_neg))
-        c_conds.append(Implication(Geq(lev_map[contract], Constant(0), merge_literals=False), eqs_pos))
-
-
-    c_conds = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), c_conds)
-
     # #process distinct ports
     # for p1, p2, in manager.library.distinct_ports_set:
     #     temp = process_distinct_lib_ports(p1, p2, var_map)
@@ -890,7 +875,28 @@ def process_model(spec_list, output_port_names,
 
     no_conn = Conjunction(no_conn, all_cond, merge_literals=False)
     preamble = Conjunction(preamble, no_conn, merge_literals=False)
-    preamble = Conjunction(preamble, c_conds, merge_literals=False)
+
+
+
+    # #all siblings together
+    # c_conds = [TrueFormula()]
+    # for contract in relevant_contracts:
+    #     all_c = manager.library.contract_with_siblings(contract)
+    #     eqs_neg = [TrueFormula()]
+    #     eqs_pos = [TrueFormula()]
+    #     for c in all_c & relevant_contracts:
+    #         eqs_neg.append(Equivalence(lev_map[c], Constant(-1), merge_literals=False))
+    #         eqs_pos.append(Geq(lev_map[c], Constant(0), merge_literals=False))
+    #
+    #     eqs_neg = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), eqs_neg)
+    #     eqs_pos = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), eqs_pos)
+    #
+    #     c_conds.append(Implication(Equivalence(lev_map[contract], Constant(-1), merge_literals=False), eqs_neg))
+    #     c_conds.append(Implication(Geq(lev_map[contract], Constant(0), merge_literals=False), eqs_pos))
+    #
+    #
+    # c_conds = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), c_conds)
+    # preamble = Conjunction(preamble, c_conds, merge_literals=False)
 
     balance_f = build_balance_constraints(manager.z3_interface.balance_max_types, relevant_contracts,
                                           location_vars, location_map)
@@ -1332,13 +1338,14 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             #analyze trace to derive possible solution
             locs = trace_analysis_for_loc(ntrace, location_vars.values())
             uses = trace_analysis_for_loc(ntrace, lev_map.values())
-            LOG.debug(locs)
             LOG.debug(uses)
+            LOG.debug(locs)
+
 
             # TODO: it seems there is a problem with this
-            # locs = detect_reject_list(locs, location_vars, location_map,
-            #                           set(spec_contract.output_ports_dict.values()) & rel_spec_ports)
-            # LOG.debug(locs)
+            locs = detect_reject_list(locs, location_vars, location_map,
+                                      set(spec_contract.output_ports_dict.values()) & rel_spec_ports)
+            LOG.debug(locs)
 
             #LOG.debug(location_map)
 
@@ -1368,12 +1375,12 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             lconn = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), lconstr)
             just_conn = conn
             LOG.debug(just_conn)
-            #new cex
-            if len(generated_cex) > 0 and do_cex_checks:
-                all_cex = reduce(lambda x,y: Disjunction(x,y, merge_literals=False), generated_cex)
-                all_cex = Negation(all_cex)
-                LOG.debug(all_cex)
-                conn = Conjunction(conn, all_cex, merge_literals=False)
+            # #new cex
+            # if len(generated_cex) > 0 and do_cex_checks:
+            #     all_cex = reduce(lambda x,y: Disjunction(x,y, merge_literals=False), generated_cex)
+            #     all_cex = Negation(all_cex)
+            #     LOG.debug(all_cex)
+            #     conn = Conjunction(conn, all_cex, merge_literals=False)
 
             conn = Conjunction(used, conn, merge_literals=False)
             #LOG.debug(conn)
@@ -1381,6 +1388,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
             if not passed:
                 # LOG.debug(trace)
+                # LOG.debug(input_variables)
                 # get counterexample for inputs
                 cex, _ = derive_inputs_from_trace(trace, input_variables)
                 LOG.debug(cex)
@@ -1478,6 +1486,8 @@ def detect_reject_list(location_vals, location_vars, location_map, spec_vars):
     '''
 
     #connected_contracts = set()
+
+    LOG.debug([p.base_name for p in spec_vars])
 
     port_list = set(spec_vars)
     var_dict = {}

@@ -1523,7 +1523,7 @@ def verify_candidate(candidate, spec):
 
     return l_passed, trace
 
-def derive_inputs_from_trace(trace, input_variables):
+def derive_inputs_from_trace(trace, input_variables, max_horizon=None):
     """
     Derives a formula encoding the input sequence used in the trace
     :param trace:
@@ -1561,6 +1561,7 @@ def derive_inputs_from_trace(trace, input_variables):
 
     after_preamble = False
     pre_trace = True
+    lasso_index = -1
 
     for line in lines:
         line = line.strip()
@@ -1574,7 +1575,11 @@ def derive_inputs_from_trace(trace, input_variables):
                 pre_trace = True
         if not after_preamble:
             if not line.startswith('->'):
+                if line.startswith('--'):
+                    # indicates loop in trace, skip line
+                    lasso_index = i + 1
                 continue
+
             else:
                 after_preamble = True
                 # LOG.debug('after preamble')
@@ -1603,7 +1608,7 @@ def derive_inputs_from_trace(trace, input_variables):
 
         elif line.startswith('--'):
             # indicates loop in trace, skip line
-            pass
+            lasso_index = i+1
         else:
             line_elems = line.split('=')
             line_elems = [l.strip() for l in line_elems]
@@ -1628,7 +1633,8 @@ def derive_inputs_from_trace(trace, input_variables):
 
                 time_sequence[i][line_elems[0]] = val
 
-    # time_sequence = time_sequence[:-1]
+    time_sequence = time_sequence[:-1]
+
     formula_bits = []
     for i in range(len(time_sequence)):
 
@@ -1645,6 +1651,21 @@ def derive_inputs_from_trace(trace, input_variables):
 
             formula_bits.append(inner)
 
+    # formula_bits has i elements. We need to replicate the lasso sequence
+    diff = len(formula_bits) - lasso_index
+    horizon = len(formula_bits)
+    while max_horizon is not None and horizon < max_horizon:
+        partial = []
+        for j in range(diff, 0, -1):
+            partial.append(Next(formula_bits[-j]))
+
+        formula_bits += partial
+        horizon = len(formula_bits)
+
+        if horizon >= max_horizon:
+            formula_bits = formula_bits[:max_horizon]
+
+
     try:
         conj = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), formula_bits)
     except TypeError:
@@ -1652,6 +1673,7 @@ def derive_inputs_from_trace(trace, input_variables):
     else:
         # formula = Globally(Eventually(conj))
         formula = conj
+
 
     return formula, i
 

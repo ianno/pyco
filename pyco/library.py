@@ -263,7 +263,7 @@ class ContractLibrary(object):
         :return:
         '''
 
-        return reduce(lambda x, y: set(x) | set(y), self.components.values())
+        return set(reduce(lambda x, y: set(x) | set(y), self.components.values()))
 
     @property
     def all_contracts_by_uname(self):

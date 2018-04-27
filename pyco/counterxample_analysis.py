@@ -17,6 +17,7 @@ from pycolite.types import FrozenInt, Int, FrozenBool
 from pycolite.nuxmv import (NuxmvRefinementStrategy, verify_tautology, verify_tautology_smv,
                             ltl2smv, _process_var_decl, MODULE_TEMPLATE)
 from pycolite.parser.parser import LTL_PARSER
+from pycolite.util.util import NUXMV_BOUND
 from multiprocessing import *
 
 
@@ -298,8 +299,9 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
         return False, composition, connected_spec, contracts, model_map
 
     (composition, spec_contract, rel_spec_ports,
-     ref_formulas, all_specs_formula,
-     neg_formula, neg_check, preamble, left_sides,
+     ref_formulas, all_specs_formula, pos_formula, pos_check,
+     neg_ca_formula, neg_ca_check, neg_formula,
+     neg_check, preamble, left_sides,
      var_map, lev_map, location_vars, location_map) = process_model(spec_list, output_port_names,
                                                      model, relevant_contracts, manager)
 
@@ -321,7 +323,9 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
     #performs first step of learning loo?p
     passed, candidate, var_assign = exists_forall_learner(composition, spec_contract, rel_spec_ports,
                                                           ref_formulas, all_specs_formula,
-                                                          neg_formula, neg_check, preamble, left_sides,
+                                                          neg_formula, neg_check, pos_formula, pos_check,
+                                                          neg_ca_formula, neg_ca_check,
+                                                          preamble, left_sides,
                                                         var_map, lev_map, input_variables,
                                                           location_vars, location_map,
                                                           terminate_evt, manager, relevant_contracts)
@@ -719,9 +723,13 @@ def process_model(spec_list, output_port_names,
     for c in relevant_contracts:
         c.assume_formula = Implication(Geq(lev_map[c], Constant(0)), c.assume_formula)
         c.guarantee_formula = Implication(Geq(lev_map[c], Constant(0)), c.guarantee_formula)
-    #root = relevant_contracts.pop()
-    composition = w_spec.compose(relevant_contracts, composition_mapping=mapping)
-    #relevant_contracts.add(root)
+
+    if len(output_port_names) != len(spec_contract.output_ports_dict):
+        composition = w_spec.compose(relevant_contracts, composition_mapping=mapping)
+    else:
+        root = relevant_contracts.pop()
+        composition = root.compose(relevant_contracts, composition_mapping=mapping)
+        relevant_contracts.add(root)
 
     #TODO: can we simplify this?
     ref_formulas = [build_formulas_for_other_spec(s, composition) for s in
@@ -757,7 +765,7 @@ def process_model(spec_list, output_port_names,
             #disconnected
             # #location_map[location_vars[port]][-1] = None
             if port.contract in relevant_contracts:
-                inner = Equivalence(location_vars[port], Constant(-1), merge_literals=False)
+                inner = Leq(location_vars[port], Constant(-1), merge_literals=False)
                 inner = Conjunction(inner, Equivalence(lev_map[port.contract], Constant(-1), merge_literals=False))
                 # #inner = Implication(inner, TrueFormula(), merge_literals=False)
                 p_map.append(inner)
@@ -873,6 +881,7 @@ def process_model(spec_list, output_port_names,
             #break
 
 
+    encoded_connections = preamble
     no_conn = Conjunction(no_conn, all_cond, merge_literals=False)
     preamble = Conjunction(preamble, no_conn, merge_literals=False)
 
@@ -917,10 +926,21 @@ def process_model(spec_list, output_port_names,
     left = Conjunction(preamble, left_sides, merge_literals=False)
     autf = Implication(left, neg_formula, merge_literals=False)
 
-    neg_check = Literal('p')
+    neg_check = Literal('n')
 
     neg_formula = Implication(autf, Globally(neg_check), merge_literals=False)
 
+    #pos_left = Conjunction(preamble, composition.assume_formula, merge_literals=False)
+    pos_formula = Implication(encoded_connections, composition.guarantee_formula, merge_literals=False)
+
+    pos_check = Literal('p')
+    pos_formula = DoubleImplication(pos_formula, Globally(pos_check), merge_literals=False)
+
+
+    neg_ca_formula = Implication(preamble, Negation(composition.assume_formula), merge_literals=False)
+
+    neg_ca_check = Literal('a')
+    neg_ca_formula = DoubleImplication(neg_ca_formula, Globally(neg_ca_check), merge_literals=False)
     # #additional bit
     # add_bit = Conjunction(preamble, all_specs_formula, merge_literals=False)
     # add_bit = Implication(Negation(Globally(neg_check)), add_bit, merge_literals=False)
@@ -928,6 +948,8 @@ def process_model(spec_list, output_port_names,
     # neg_formula = Conjunction(neg_formula, add_bit, merge_literals=False)
 
     LOG.debug(neg_formula)
+    LOG.debug(all_specs_formula)
+    LOG.debug(pos_formula)
 
     # passed, trace = verify_tautology(Negation(preamble), return_trace=True)
     # LOG.debug(trace)
@@ -939,8 +961,8 @@ def process_model(spec_list, output_port_names,
     #     for p in c.ports_dict.values():
     #         var_name_map[p.unique_name] = p
 
-    return (composition, spec_contract, rel_spec_ports, ref_formulas, all_specs_formula,
-            neg_formula, neg_check, preamble, left_sides, var_map, lev_map, location_vars, location_map)
+    return (composition, spec_contract, rel_spec_ports, ref_formulas, all_specs_formula, pos_formula, pos_check,
+            neg_ca_formula, neg_ca_check, neg_formula, neg_check, preamble, left_sides, var_map, lev_map, location_vars, location_map)
 
 
 
@@ -1166,7 +1188,7 @@ def pick_one_candidate(trace, var_map, relevant_allspecs_ports, manager, lev_map
 
     return candidate_connection, new_var_assign
 
-def build_smv_module(module_formula, parameters):
+def build_smv_module(module_formula, parameters, prefix=None):
     '''
     returns a smv module string and its signature
     :param module_formula:
@@ -1177,7 +1199,7 @@ def build_smv_module(module_formula, parameters):
     mod_vars = [x for (_, x) in module_formula.get_literal_items()]
     mod_vars = set(mod_vars) - set(parameters)
     aut = ltl2smv(module_formula, include_vars=mod_vars,
-                  parameters=parameters)
+                  parameters=parameters, prefix=prefix)
     # LOG.debug(aut)
 
     autline = aut.split('\n', 1)[0]
@@ -1185,17 +1207,28 @@ def build_smv_module(module_formula, parameters):
 
     return autsign, aut
 
-def build_smv_program(autsign, aut, parameters, module_instances, check_var, spec_str):
+def build_smv_program(neg_autsign, neg_aut, pos_autsign, pos_aut, neg_ca_autsign, neg_ca_aut,
+                      parameters, neg_module_instances, pos_module_instances,
+                      neg_ca_module_instances, spec_str):
 
 
     lvars_str = _process_var_decl(parameters)
 
 
-    for v in module_instances:
-        inst = 'VAR %s: %s;' % (v.unique_name, autsign)
+    for v in neg_module_instances:
+        inst = 'VAR %s: %s;' % (v.unique_name, neg_autsign)
         lvars_str = lvars_str + '\n' + inst
         #inst = 'JUSTICE %s.%s;' % (v.unique_name, check_var.unique_name)
         #lvars_str = lvars_str + '\n' + inst
+
+    for v in pos_module_instances:
+        inst = 'VAR %s: %s;' % (v.unique_name, pos_autsign)
+        lvars_str = lvars_str + '\n' + inst
+
+
+    for v in neg_ca_module_instances:
+        inst = 'VAR %s: %s;' % (v.unique_name, neg_ca_autsign)
+        lvars_str = lvars_str + '\n' + inst
 
 
     #check formula
@@ -1204,7 +1237,13 @@ def build_smv_program(autsign, aut, parameters, module_instances, check_var, spe
 
     base_module = MODULE_TEMPLATE % (lvars_str, spec_str)
 
-    module = aut + '\n' + base_module
+    module = neg_aut + '\n' + base_module
+
+    module = pos_aut + '\n' + module
+
+    module = neg_ca_aut + '\n' + module
+
+    LOG.debug(module)
 
     return module
 
@@ -1219,8 +1258,9 @@ def reject_all_equivalent(locs, relevant_contracts, location_vars):
     '''
 
 def exists_forall_learner(composition, spec_contract, rel_spec_ports,
-                          ref_formulas, all_specs_formula, neg_formula, neg_check, preamble,
-                          left_sides, var_map, lev_map, input_variables,
+                          ref_formulas, all_specs_formula, neg_formula, neg_check,
+                          pos_formula, pos_check, neg_ca_formula, neg_ca_check,
+                          preamble, left_sides, var_map, lev_map, input_variables,
                           location_vars, location_map, terminate_evt, manager, relevant_contracts):
     """
     verify refinement formula according to preamble
@@ -1233,13 +1273,18 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
     candidate = None
     l_passed = False
-    cex_dict = {Literal('m'): TrueFormula()}
+    in_cex_dict = {Literal('m'): TrueFormula()}
+    # full_cex_dict = {Literal('w'): Negation(spec_contract.guarantee_formula)}
+    full_cex_dict = {}
+    full_neg_ca_cex_dict = {}
     generated_cex = set()
     tested_candidates = None
     all_candidates = None
     inverse_location_vars = {y:x for (x,y) in location_vars.items()}
     do_cex_checks = True
     i = 0
+    all_s_variables = set([p for p in spec_contract.ports_dict.values()])
+    all_s_variables = all_s_variables & rel_spec_ports
 
     total = 1
     for p in var_map:
@@ -1279,7 +1324,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
         # autf = Conjunction(left, neg_formula, merge_literals=False)
 
         #LOG.debug(neg_formula)
-        autsign, aut = build_smv_module(neg_formula, location_vars.values()+lev_map.values())
+        autsign, aut = build_smv_module(neg_formula, location_vars.values()+lev_map.values(), prefix='0')
 
         loc_limits = []
         for loc, lmap in location_map.items():
@@ -1292,19 +1337,26 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             loc_c = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), loc_limits)
 
 
+        #build positive automaton
+        pos_autsign, pos_aut = build_smv_module(pos_formula, location_vars.values()+lev_map.values(), prefix='1')
+
+        #build neg assumpt automaton
+        neg_ca_autsign, neg_ca_aut = build_smv_module(neg_ca_formula, location_vars.values()+lev_map.values(), prefix='2')
+
+
         while True:
             if terminate_evt.is_set():
                 return False, None, None
 
 
             cex_str_list = [cex.generate(symbol_set=NusmvSymbolSet, prefix='%s.'%m.unique_name)
-                                    for m, cex in cex_dict.items()]
+                                    for m, cex in in_cex_dict.items()]
 
 
             cex_str = ' & '.join(cex_str_list)
 
             checks_list = [Globally(neg_check).generate(symbol_set=NusmvSymbolSet, prefix='%s.'%m.unique_name)
-                        for m in cex_dict]
+                        for m in in_cex_dict]
 
             checks_str = ' | '.join(checks_list)
 
@@ -1323,8 +1375,33 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             base_spec_str = '(' + left + '& (%s))' % cex_str
             base_spec_str = base_spec_str + ' -> (%s)' % checks_str
 
-            smv = build_smv_program(autsign, aut, location_vars.values()+lev_map.values(),
-                                    cex_dict.keys(), neg_check, base_spec_str)
+
+            #positive checks
+            if len(full_cex_dict) > 0:
+                pos_cex_str_list = [(w, cex.generate(symbol_set=NusmvSymbolSet, prefix='%s.' % w.unique_name))
+                                for w, cex in full_cex_dict.items()]
+
+                pos_checks_list = ['((%s) -> %s)' % (cex_str, Globally(pos_check).generate(symbol_set=NusmvSymbolSet, prefix='%s.' % w.unique_name))
+                               for w, cex_str in pos_cex_str_list]
+
+                pos_cex_str = ' | '.join(pos_checks_list)
+
+                base_spec_str = '(%s) | %s' % (base_spec_str, pos_cex_str)
+
+            # negative comp assumption bit
+            if len(full_neg_ca_cex_dict) > 0:
+                neg_ca_cex_str_list = [(x, cex.generate(symbol_set=NusmvSymbolSet, prefix='%s.' % x.unique_name))
+                                for x, cex in full_neg_ca_cex_dict.items()]
+
+                neg_ca_checks_list = ['((%s) -> %s)' % (cex_str, Globally(neg_ca_check).generate(symbol_set=NusmvSymbolSet, prefix='%s.' % x.unique_name))
+                               for x, cex_str in neg_ca_cex_str_list]
+
+                neg_ca_cex_str = ' | '.join(neg_ca_checks_list)
+
+                base_spec_str = '(%s) | %s' % (base_spec_str, neg_ca_cex_str)
+
+            smv = build_smv_program(autsign, aut, pos_autsign, pos_aut, neg_ca_autsign, neg_ca_aut, location_vars.values()+lev_map.values(),
+                                    in_cex_dict.keys(), full_cex_dict.keys(), full_neg_ca_cex_dict.keys(), base_spec_str)
 
             # LOG.debug(smv)
             #l_passed, ntrace = verify_candidate(left, neg_formula)
@@ -1334,7 +1411,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                 #LOG.debug(smv)
                 return False, None, None
 
-            #LOG.debug(ntrace)
+            LOG.debug(ntrace)
             #analyze trace to derive possible solution
             locs = trace_analysis_for_loc(ntrace, location_vars.values())
             uses = trace_analysis_for_loc(ntrace, lev_map.values())
@@ -1375,12 +1452,12 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             lconn = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), lconstr)
             just_conn = conn
             LOG.debug(just_conn)
-            # #new cex
-            # if len(generated_cex) > 0 and do_cex_checks:
-            #     all_cex = reduce(lambda x,y: Disjunction(x,y, merge_literals=False), generated_cex)
-            #     all_cex = Negation(all_cex)
-            #     LOG.debug(all_cex)
-            #     conn = Conjunction(conn, all_cex, merge_literals=False)
+            #new cex
+            if len(generated_cex) > 0 and do_cex_checks:
+                all_cex = reduce(lambda x,y: Disjunction(x,y, merge_literals=False), generated_cex)
+                all_cex = Negation(all_cex)
+                LOG.debug(all_cex)
+                conn = Conjunction(conn, all_cex, merge_literals=False)
 
             conn = Conjunction(used, conn, merge_literals=False)
             #LOG.debug(conn)
@@ -1391,7 +1468,11 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                 # LOG.debug(input_variables)
                 # get counterexample for inputs
                 cex, _ = derive_inputs_from_trace(trace, input_variables)
+                fullcex, _ = derive_inputs_from_trace(trace, all_s_variables, max_horizon=NUXMV_BOUND)
+                #full_in_cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
                 LOG.debug(cex)
+                LOG.debug(fullcex)
+                #LOG.debug(full_in_cex)
 
                 # # PRINT
                 # n = 5
@@ -1433,15 +1514,37 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
                 if cex is not None:
                     cex_p = False
-                    for c in cex_dict.values():
+                    for c in in_cex_dict.values():
                         cex_check = Implication(c, cex, merge_literals=False)
                         cex_p = verify_tautology(cex_check, return_trace=False)
                         if cex_p:
                             break
                     if not cex_p and do_cex_checks:
-                        cex_dict[Literal('m')] = cex
+                        in_cex_dict[Literal('m')] = cex
                         generated_cex.add(cex)
-                        LOG.debug(len(cex_dict))
+                        LOG.debug(len(in_cex_dict))
+
+                #check full check is false for spec
+                fcex_check = Implication(fullcex, spec_contract.guarantee_formula, merge_literals=False)
+                fcex_p = verify_tautology(fcex_check, return_trace=False)
+
+                if not fcex_p:
+                    cex_p = False
+                    for c in full_cex_dict.values():
+                        cex_check = Implication(c, fullcex, merge_literals=False)
+                        cex_p = verify_tautology(cex_check, return_trace=False)
+                        if cex_p:
+                            LOG.debug('redundant negative example')
+                            break
+                    if not cex_p:
+                        full_cex_dict[Literal('w')] = fullcex
+                        LOG.debug('adding negative example')
+                        # LOG.debug(ft)
+                # else:
+                #     full_neg_ca_cex_dict[Literal('x')] = fullcex
+                #     LOG.debug('adding positive input example')
+                    # LOG.debug(ft)
+                #generated_cex.add(cex)
 
                 if all_candidates is None:
                     all_candidates = lconn
@@ -1633,7 +1736,7 @@ def derive_inputs_from_trace(trace, input_variables, max_horizon=None):
 
                 time_sequence[i][line_elems[0]] = val
 
-    time_sequence = time_sequence[:-1]
+    # time_sequence = time_sequence[:-1]
 
     formula_bits = []
     for i in range(len(time_sequence)):
@@ -1654,16 +1757,23 @@ def derive_inputs_from_trace(trace, input_variables, max_horizon=None):
     # formula_bits has i elements. We need to replicate the lasso sequence
     diff = len(formula_bits) - lasso_index
     horizon = len(formula_bits)
-    while max_horizon is not None and horizon < max_horizon:
+    # LOG.debug(trace)
+    # LOG.debug(diff)
+    while max_horizon is not None and horizon <= max_horizon:
         partial = []
         for j in range(diff, 0, -1):
-            partial.append(Next(formula_bits[-j]))
+            partial.append(formula_bits[-j])
+        #add horizons
+
+        for j in range(len(partial)):
+            for h in range(diff):
+                partial[j] = Next(partial[j])
 
         formula_bits += partial
         horizon = len(formula_bits)
 
-        if horizon >= max_horizon:
-            formula_bits = formula_bits[:max_horizon]
+        if horizon > max_horizon+1:
+            formula_bits = formula_bits[:max_horizon+1]
 
 
     try:

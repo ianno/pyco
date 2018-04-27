@@ -161,7 +161,7 @@ class LED(Contract):
     ASSUMPTIONS = '''G(vin >= 0 & vin <= 360)
                      & G((vin > 0) -> lin) & G((vin = 0) -> !lin) 
                      '''
-    GUARANTEES = '''G(iout = 2) & G(vout = vin)
+    GUARANTEES = '''G(iout = 2) & G(vout = 0)
                     & G(lin -> lout) & G(!lin -> !lout)'''
 
 
@@ -181,16 +181,13 @@ class Apm3v3(Contract):
                     ('gvout2', VarVoltage), ('gout2', DigitalState),
                     ('gvout3', VarVoltage), ('gout3', DigitalState),
                     ('gvout4', VarVoltage), ('gout4', DigitalState),]
-    ASSUMPTIONS = '''G(vin >= 45 & vin <= 55) 
-                     & G(gvin1 < 30) 
-                     & G(gvin2 < 30) 
-                     & G(gvin3 < 30) 
-                     & G(gvin4 < 30) '''
+    ASSUMPTIONS = '''true '''
     GUARANTEES = '''G(p5vout = 50) & G(p3vout = 30) & G(iout = 500) & G(giout = 50)
-                     & G(gvout1 = 0 ) & G(gvout1 > 0 -> gout1) & G(gvout1 = 0 -> !gout1)
-                     & G(gvout2 = 0 ) & G(gvout2 > 0 -> gout2) & G(gvout2 = 0 -> !gout2)
-                     & G(gvout3 = 0 ) & G(gvout3 > 0 -> gout3) & G(gvout3 = 0 -> !gout3)
-                     & G(gvout4 = 0 ) & G(gvout4 > 0 -> gout4) & G(gvout4 = 0 -> !gout4)'''
+                     & G(gvout1 >= 0 ) & G(gvout1 > 0 -> gout1) & G(gvout1 = 0 -> !gout1)
+                     & G(gvout2 >= 0 ) & G(gvout2 > 0 -> gout2) & G(gvout2 = 0 -> !gout2)
+                     & G(gvout3 >= 0 ) & G(gvout3 > 0 -> gout3) & G(gvout3 = 0 -> !gout3)
+                     & G(gvout4 = 0 ) & G(gvout4 > 0 -> gout4) & G(gvout4 = 0 -> !gout4)
+                     & G(gout3)'''
 
                      # & G(gvout1 = 0 | gvout1 = 30) & G(gvout1 > 0 -> gout1) & G(gvout1 = 0 -> !gout1)
                      # & G(gvout2 = 0 | gvout2 = 30) & G(gvout2 > 0 -> gout2) & G(gvout2 = 0 -> !gout2)
@@ -202,7 +199,7 @@ class Zerospec(Contract):
     '''
     base spec. Say you want a button and LED
     '''
-    INPUT_PORTS = [('bin', Touch)]
-    OUTPUT_PORTS = [('lout', LedState)]
-    ASSUMPTIONS = '''GF(bin)'''
-    GUARANTEES = '''GF(lout)'''
+    INPUT_PORTS = [('bin', VarVoltage)]
+    OUTPUT_PORTS = [('lout', DigitalState)]
+    ASSUMPTIONS = '''true'''
+    GUARANTEES = '''G(lout)'''

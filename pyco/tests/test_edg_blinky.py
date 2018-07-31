@@ -69,7 +69,7 @@ def edg_blinky_lib(cApm3v3, cLED,  cButton, power_generator5, power_generator3, 
     '''
     library = ContractLibrary('edg_blinky_lib')
 
-    library.add(cApm3v3)
+    library.add(cApm3v3, number_of_instances=1)
     # library.add(small_mcu)
     library.add(cLED)
     library.add(cButton)

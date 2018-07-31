@@ -786,9 +786,9 @@ def process_model(spec_list, output_port_names,
                     if port.contract in relevant_contracts:
                         if p.contract in relevant_contracts:
                             #add level vars
-                            lev_c = Lt(lev_map[p.contract], lev_map[port.contract])
-                            min_c = Geq(lev_map[p.contract], Constant(0))
-                            lev_c = Conjunction(lev_c, min_c, merge_literals=False)
+                            #lev_c = Lt(lev_map[p.contract], lev_map[port.contract])
+                            lev_c = Geq(lev_map[p.contract], Constant(0))
+                            #lev_c = Conjunction(lev_c, min_c, merge_literals=False)
                         else:
                             #it's the spec
                             lev_c = Geq(lev_map[port.contract], Constant(0))
@@ -930,11 +930,11 @@ def process_model(spec_list, output_port_names,
 
     neg_formula = Implication(autf, Globally(neg_check), merge_literals=False)
 
-    #pos_left = Conjunction(preamble, composition.assume_formula, merge_literals=False)
-    pos_formula = Implication(encoded_connections, composition.guarantee_formula, merge_literals=False)
+    pos_left = Conjunction(preamble, composition.assume_formula, merge_literals=False)
+    pos_formula = Implication(pos_left, composition.guarantee_formula, merge_literals=False)
 
     pos_check = Literal('p')
-    pos_formula = DoubleImplication(pos_formula, Globally(pos_check), merge_literals=False)
+    pos_formula = Implication(pos_formula, Globally(pos_check), merge_literals=False)
 
 
     neg_ca_formula = Implication(preamble, Negation(composition.assume_formula), merge_literals=False)
@@ -1467,7 +1467,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                 # LOG.debug(trace)
                 # LOG.debug(input_variables)
                 # get counterexample for inputs
-                cex, _ = derive_inputs_from_trace(trace, input_variables)
+                cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
                 fullcex, _ = derive_inputs_from_trace(trace, all_s_variables, max_horizon=NUXMV_BOUND)
                 #full_in_cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
                 LOG.debug(cex)
@@ -1524,27 +1524,27 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                         generated_cex.add(cex)
                         LOG.debug(len(in_cex_dict))
 
-                #check full check is false for spec
-                fcex_check = Implication(fullcex, spec_contract.guarantee_formula, merge_literals=False)
-                fcex_p = verify_tautology(fcex_check, return_trace=False)
-
-                if not fcex_p:
-                    cex_p = False
-                    for c in full_cex_dict.values():
-                        cex_check = Implication(c, fullcex, merge_literals=False)
-                        cex_p = verify_tautology(cex_check, return_trace=False)
-                        if cex_p:
-                            LOG.debug('redundant negative example')
-                            break
-                    if not cex_p:
-                        full_cex_dict[Literal('w')] = fullcex
-                        LOG.debug('adding negative example')
-                        # LOG.debug(ft)
-                # else:
-                #     full_neg_ca_cex_dict[Literal('x')] = fullcex
-                #     LOG.debug('adding positive input example')
-                    # LOG.debug(ft)
-                #generated_cex.add(cex)
+                # #check full check is false for spec
+                # fcex_check = Implication(fullcex, spec_contract.guarantee_formula, merge_literals=False)
+                # fcex_p = verify_tautology(fcex_check, return_trace=False)
+                #
+                # if not fcex_p:
+                #     cex_p = False
+                #     for c in full_cex_dict.values():
+                #         cex_check = Implication(c, fullcex, merge_literals=False)
+                #         cex_p = verify_tautology(cex_check, return_trace=False)
+                #         if cex_p:
+                #             LOG.debug('redundant negative example')
+                #             break
+                #     if not cex_p:
+                #         full_cex_dict[Literal('w')] = fullcex
+                #         LOG.debug('adding negative example')
+                #         # LOG.debug(ft)
+                # # else:
+                # #     full_neg_ca_cex_dict[Literal('x')] = fullcex
+                # #     LOG.debug('adding positive input example')
+                #     # LOG.debug(ft)
+                # #generated_cex.add(cex)
 
                 if all_candidates is None:
                     all_candidates = lconn
@@ -1593,11 +1593,14 @@ def detect_reject_list(location_vals, location_vars, location_map, spec_vars):
     LOG.debug([p.base_name for p in spec_vars])
 
     port_list = set(spec_vars)
+    seen = set()
     var_dict = {}
 
     while len(port_list) > 0:
         port = port_list.pop()
-        if port in location_vars:
+
+        if port not in seen and port in location_vars:
+            seen.add(port)
             l = location_vars[port]
             val = location_vals[l]
             var_dict[l] = val
@@ -1758,8 +1761,8 @@ def derive_inputs_from_trace(trace, input_variables, max_horizon=None):
     diff = len(formula_bits) - lasso_index
     horizon = len(formula_bits)
     # LOG.debug(trace)
-    # LOG.debug(diff)
-    while max_horizon is not None and horizon <= max_horizon:
+    LOG.debug(diff)
+    while diff > 0 and max_horizon is not None and horizon <= max_horizon:
         partial = []
         for j in range(diff, 0, -1):
             partial.append(formula_bits[-j])

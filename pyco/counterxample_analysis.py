@@ -696,7 +696,7 @@ def process_model(spec_list, output_port_names,
     rel_spec_ports = {port for port in spec_contract.ports_dict.values() if port.unique_name in p_names}
 
 
-    var_map, lev_map = extract_model_connections(spec_contract, relevant_contracts,
+    var_map, component_map = extract_model_connections(spec_contract, relevant_contracts,
                                                  output_port_names, library)
 
 
@@ -721,8 +721,8 @@ def process_model(spec_list, output_port_names,
 
 
     for c in relevant_contracts:
-        c.assume_formula = Implication(Geq(lev_map[c], Constant(0)), c.assume_formula)
-        c.guarantee_formula = Implication(Geq(lev_map[c], Constant(0)), c.guarantee_formula)
+        c.assume_formula = Implication(Geq(component_map[c], Constant(0)), c.assume_formula)
+        c.guarantee_formula = Implication(Geq(component_map[c], Constant(0)), c.guarantee_formula)
 
     if len(output_port_names) != len(spec_contract.output_ports_dict):
         composition = w_spec.compose(relevant_contracts, composition_mapping=mapping)
@@ -751,7 +751,7 @@ def process_model(spec_list, output_port_names,
     location_map = {}
     inverse_location_vars = {}
 
-    LOG.debug(lev_map)
+    LOG.debug(component_map)
     for port in var_map:
         p_map = []
 
@@ -766,7 +766,7 @@ def process_model(spec_list, output_port_names,
             # #location_map[location_vars[port]][-1] = None
             if port.contract in relevant_contracts:
                 inner = Leq(location_vars[port], Constant(-1), merge_literals=False)
-                inner = Conjunction(inner, Equivalence(lev_map[port.contract], Constant(-1), merge_literals=False))
+                inner = Conjunction(inner, Equivalence(component_map[port.contract], Constant(-1), merge_literals=False))
                 # #inner = Implication(inner, TrueFormula(), merge_literals=False)
                 p_map.append(inner)
             for p in var_map[port]:
@@ -786,23 +786,23 @@ def process_model(spec_list, output_port_names,
                     if port.contract in relevant_contracts:
                         if p.contract in relevant_contracts:
                             #add level vars
-                            #lev_c = Lt(lev_map[p.contract], lev_map[port.contract])
-                            lev_c = Geq(lev_map[p.contract], Constant(0))
+                            #lev_c = Lt(component_map[p.contract], component_map[port.contract])
+                            lev_c = Geq(component_map[p.contract], Constant(0))
                             #lev_c = Conjunction(lev_c, min_c, merge_literals=False)
                         else:
                             #it's the spec
-                            lev_c = Geq(lev_map[port.contract], Constant(0))
+                            lev_c = Geq(component_map[port.contract], Constant(0))
 
                         inner2 = Conjunction(inner2, lev_c, merge_literals=False)
 
                     else:
-                        inner2 = Conjunction(inner2, Geq(lev_map[p.contract], Constant(0)))
+                        inner2 = Conjunction(inner2, Geq(component_map[p.contract], Constant(0)))
 
                     inner = Conjunction(inner, inner2, merge_literals=False)
 
                     p_map.append(inner)
 
-            if len(p_map) > 0:
+            if len(p_map) > 1:
                 formula = reduce((lambda x, y: Disjunction(x, y, merge_literals=False)), p_map)
                 formulas.append(formula)
 
@@ -826,7 +826,7 @@ def process_model(spec_list, output_port_names,
 
             if len(port_fs) > 0:
                 port_fs = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), port_fs)
-                port_fs = Implication(Equivalence(lev_map[c], Constant(-1)), port_fs)
+                port_fs = Implication(Equivalence(component_map[c], Constant(-1)), port_fs)
                 all_cond.append(port_fs)
 
 
@@ -836,7 +836,7 @@ def process_model(spec_list, output_port_names,
         all_cond = TrueFormula()
 
     no_conn = []
-    for c, lev in lev_map.items():
+    for c, lev in component_map.items():
         if c in loc_by_contract:
             locs = loc_by_contract[c]
 
@@ -894,14 +894,14 @@ def process_model(spec_list, output_port_names,
     #     eqs_neg = [TrueFormula()]
     #     eqs_pos = [TrueFormula()]
     #     for c in all_c & relevant_contracts:
-    #         eqs_neg.append(Equivalence(lev_map[c], Constant(-1), merge_literals=False))
-    #         eqs_pos.append(Geq(lev_map[c], Constant(0), merge_literals=False))
+    #         eqs_neg.append(Equivalence(component_map[c], Constant(-1), merge_literals=False))
+    #         eqs_pos.append(Geq(component_map[c], Constant(0), merge_literals=False))
     #
     #     eqs_neg = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), eqs_neg)
     #     eqs_pos = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), eqs_pos)
     #
-    #     c_conds.append(Implication(Equivalence(lev_map[contract], Constant(-1), merge_literals=False), eqs_neg))
-    #     c_conds.append(Implication(Geq(lev_map[contract], Constant(0), merge_literals=False), eqs_pos))
+    #     c_conds.append(Implication(Equivalence(component_map[contract], Constant(-1), merge_literals=False), eqs_neg))
+    #     c_conds.append(Implication(Geq(component_map[contract], Constant(0), merge_literals=False), eqs_pos))
     #
     #
     # c_conds = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), c_conds)
@@ -916,7 +916,7 @@ def process_model(spec_list, output_port_names,
     #add constraints for fixed components:
     fix = []
     for c in manager.retrieve_fixed_components():
-        fix.append(Geq(lev_map[c], Constant(0), merge_literals=False))
+        fix.append(Geq(component_map[c], Constant(0), merge_literals=False))
 
     if len(fix) > 0:
         fix = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), fix)
@@ -961,8 +961,10 @@ def process_model(spec_list, output_port_names,
     #     for p in c.ports_dict.values():
     #         var_name_map[p.unique_name] = p
 
+    # TODO process constants
+
     return (composition, spec_contract, rel_spec_ports, ref_formulas, all_specs_formula, pos_formula, pos_check,
-            neg_ca_formula, neg_ca_check, neg_formula, neg_check, preamble, left_sides, var_map, lev_map, location_vars, location_map)
+            neg_ca_formula, neg_ca_check, neg_formula, neg_check, preamble, left_sides, var_map, component_map, location_vars, location_map)
 
 
 
@@ -1239,11 +1241,11 @@ def build_smv_program(neg_autsign, neg_aut, pos_autsign, pos_aut, neg_ca_autsign
 
     module = neg_aut + '\n' + base_module
 
-    module = pos_aut + '\n' + module
+    #module = pos_aut + '\n' + module
 
-    module = neg_ca_aut + '\n' + module
+    #module = neg_ca_aut + '\n' + module
 
-    LOG.debug(module)
+    #LOG.debug(module)
 
     return module
 
@@ -1285,6 +1287,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
     i = 0
     all_s_variables = set([p for p in spec_contract.ports_dict.values()])
     all_s_variables = all_s_variables & rel_spec_ports
+    ntrace = trace = None
 
     total = 1
     for p in var_map:
@@ -1337,11 +1340,11 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             loc_c = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), loc_limits)
 
 
-        #build positive automaton
-        pos_autsign, pos_aut = build_smv_module(pos_formula, location_vars.values()+lev_map.values(), prefix='1')
+        ##build positive automaton
+        #pos_autsign, pos_aut = build_smv_module(pos_formula, location_vars.values()+lev_map.values(), prefix='1')
 
-        #build neg assumpt automaton
-        neg_ca_autsign, neg_ca_aut = build_smv_module(neg_ca_formula, location_vars.values()+lev_map.values(), prefix='2')
+        ##build neg assumpt automaton
+        #neg_ca_autsign, neg_ca_aut = build_smv_module(neg_ca_formula, location_vars.values()+lev_map.values(), prefix='2')
 
 
         while True:
@@ -1376,39 +1379,44 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             base_spec_str = base_spec_str + ' -> (%s)' % checks_str
 
 
-            #positive checks
-            if len(full_cex_dict) > 0:
-                pos_cex_str_list = [(w, cex.generate(symbol_set=NusmvSymbolSet, prefix='%s.' % w.unique_name))
-                                for w, cex in full_cex_dict.items()]
+            # #positive checks
+            # if len(full_cex_dict) > 0:
+            #     pos_cex_str_list = [(w, cex.generate(symbol_set=NusmvSymbolSet, prefix='%s.' % w.unique_name))
+            #                     for w, cex in full_cex_dict.items()]
+            #
+            #     pos_checks_list = ['((%s) -> %s)' % (cex_str, Globally(pos_check).generate(symbol_set=NusmvSymbolSet, prefix='%s.' % w.unique_name))
+            #                    for w, cex_str in pos_cex_str_list]
+            #
+            #     pos_cex_str = ' | '.join(pos_checks_list)
+            #
+            #     base_spec_str = '(%s) | %s' % (base_spec_str, pos_cex_str)
+            #
+            # # negative comp assumption bit
+            # if len(full_neg_ca_cex_dict) > 0:
+            #     neg_ca_cex_str_list = [(x, cex.generate(symbol_set=NusmvSymbolSet, prefix='%s.' % x.unique_name))
+            #                     for x, cex in full_neg_ca_cex_dict.items()]
+            #
+            #     neg_ca_checks_list = ['((%s) -> %s)' % (cex_str, Globally(neg_ca_check).generate(symbol_set=NusmvSymbolSet, prefix='%s.' % x.unique_name))
+            #                    for x, cex_str in neg_ca_cex_str_list]
+            #
+            #     neg_ca_cex_str = ' | '.join(neg_ca_checks_list)
+            #
+            #     base_spec_str = '(%s) | %s' % (base_spec_str, neg_ca_cex_str)
 
-                pos_checks_list = ['((%s) -> %s)' % (cex_str, Globally(pos_check).generate(symbol_set=NusmvSymbolSet, prefix='%s.' % w.unique_name))
-                               for w, cex_str in pos_cex_str_list]
-
-                pos_cex_str = ' | '.join(pos_checks_list)
-
-                base_spec_str = '(%s) | %s' % (base_spec_str, pos_cex_str)
-
-            # negative comp assumption bit
-            if len(full_neg_ca_cex_dict) > 0:
-                neg_ca_cex_str_list = [(x, cex.generate(symbol_set=NusmvSymbolSet, prefix='%s.' % x.unique_name))
-                                for x, cex in full_neg_ca_cex_dict.items()]
-
-                neg_ca_checks_list = ['((%s) -> %s)' % (cex_str, Globally(neg_ca_check).generate(symbol_set=NusmvSymbolSet, prefix='%s.' % x.unique_name))
-                               for x, cex_str in neg_ca_cex_str_list]
-
-                neg_ca_cex_str = ' | '.join(neg_ca_checks_list)
-
-                base_spec_str = '(%s) | %s' % (base_spec_str, neg_ca_cex_str)
-
-            smv = build_smv_program(autsign, aut, pos_autsign, pos_aut, neg_ca_autsign, neg_ca_aut, location_vars.values()+lev_map.values(),
+            smv = build_smv_program(autsign, aut, None, None, None, None, location_vars.values()+lev_map.values(),
                                     in_cex_dict.keys(), full_cex_dict.keys(), full_neg_ca_cex_dict.keys(), base_spec_str)
 
             # LOG.debug(smv)
             #l_passed, ntrace = verify_candidate(left, neg_formula)
+            LOG.debug(ntrace)
             l_passed, ntrace = verify_tautology_smv(smv, return_trace=True)
 
             if l_passed:
-                #LOG.debug(smv)
+                # LOG.debug(smv)
+                # LOG.debug(cex)
+                # LOG.debug(ntrace)
+                # LOG.debug(trace)
+                # LOG.debug(neg_formula)
                 return False, None, None
 
             LOG.debug(ntrace)
@@ -1605,15 +1613,17 @@ def detect_reject_list(location_vals, location_vars, location_map, spec_vars):
             val = location_vals[l]
             var_dict[l] = val
 
-            other_p = location_map[l][val]
-            contract = other_p.contract
+            if val == -1:
+                continue
+            else:
+                other_p = location_map[l][val]
+                contract = other_p.contract
 
+                #connected_contracts.add(contract)
 
-            #connected_contracts.add(contract)
-
-            for iport in contract.input_ports_dict.values():
-                if iport not in var_dict:
-                    port_list.add(iport)
+                for iport in contract.input_ports_dict.values():
+                    if iport not in var_dict:
+                        port_list.add(iport)
         # else:
         #     LOG.debug(port.unique_name)
         #     LOG.debug(port.contract)

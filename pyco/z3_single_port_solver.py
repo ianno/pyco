@@ -564,11 +564,12 @@ class SinglePortSolver(multiprocessing.Process):
             port = spec.ports_dict[bname]
             for c in relevant_contracts:
                 done = False
+
                 for obname, oport in c.output_ports_dict.items():
                     ouname = oport.unique_name
 
                     if bname in var_assign:
-                        if ouname in var_assign[bname]:
+                        if ouname == var_assign[bname]:
                             spec.connect_to_port(port, oport)
                             done = True
                             used_contracts.add(c)
@@ -602,7 +603,7 @@ class SinglePortSolver(multiprocessing.Process):
                         for n2, p2 in c2.output_ports_dict.items():
                             u2 = p2.unique_name
 
-                            if u2 in var_assign[u1]:
+                            if u2 == var_assign[u1]:
                                 mapping.connect(p1, p2,
                                                 '%s_%s' % (c1.unique_name,
                                                            p1.base_name))
@@ -637,7 +638,7 @@ class SinglePortSolver(multiprocessing.Process):
                 if not done:
                     for n2, p2 in spec.input_ports_dict.items():
 
-                        if u1 in var_assign and n2 in var_assign[u1]:
+                        if u1 in var_assign and n2 == var_assign[u1]:
                             spec.connect_to_port(p2, p1)
                             processed_ports.add(p1)
                             processed_ports.add(p2)
@@ -725,6 +726,9 @@ class SinglePortSolver(multiprocessing.Process):
             composition = root.compose(relevant_contracts, composition_mapping=mapping)
             relevant_contracts.add(root)
 
+        LOG.debug(composition)
+        for c in relevant_contracts:
+            LOG.debug(c)
         return composition, spec, relevant_contracts
 
 

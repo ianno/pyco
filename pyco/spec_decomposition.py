@@ -232,7 +232,7 @@ class MultipleOutputProcessor(Process):
         self.semaphore.release()
         return
 
-def decompose_spec(spec_list):
+def decompose_spec(spec_list, library):
     '''
     decompose specification in clusters of outputs
     :param spec_list:
@@ -261,26 +261,29 @@ def decompose_spec(spec_list):
 
             for other_name in (unclustered - set([pivot_name])):
 
-                for spec in spec_list:
-                    w_spec = spec.copy()
+                if library.check_connectivity(spec_root.ports_dict[pivot_name],
+                                              spec_root.ports_dict[other_name]):
 
-                    formula_r = Globally(Equivalence(w_spec.ports_dict[pivot_name].literal,
-                                                                      w_spec.ports_dict[other_name].literal,
-                                                                      merge_literals=False))
+                    for spec in spec_list:
+                        w_spec = spec.copy()
 
-                    guarantees = w_spec.guarantee_formula
+                        formula_r = Globally(Equivalence(w_spec.ports_dict[pivot_name].literal,
+                                                                          w_spec.ports_dict[other_name].literal,
+                                                                          merge_literals=False))
 
-                    formula = Implication(guarantees, formula_r, merge_literals=False)
+                        guarantees = w_spec.guarantee_formula
 
-                    l_passed = verify_tautology(formula, return_trace=False)
+                        formula = Implication(guarantees, formula_r, merge_literals=False)
 
-                    if not l_passed:
-                        break
+                        l_passed = verify_tautology(formula, return_trace=False)
+
+                        if not l_passed:
+                            break
 
 
-                if l_passed:
-                    cluster.add(other_name)
-                    done.add(other_name)
+                    if l_passed:
+                        cluster.add(other_name)
+                        done.add(other_name)
 
             init_clusters.append(cluster)
 

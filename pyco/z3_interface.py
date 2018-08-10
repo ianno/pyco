@@ -329,7 +329,7 @@ class Z3Interface(object):
 
         if decompose:
             print('Decomposing Specification...')
-            clusters = decompose_spec(self.specification_list)
+            clusters = decompose_spec(self.specification_list, self.library)
         else:
             clusters = [self.spec.output_ports_dict.keys()]
             # LOG.debug(clusters)

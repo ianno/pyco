@@ -1325,8 +1325,8 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
         # left = Conjunction(preamble, left_sides, merge_literals=False)
         # autf = Conjunction(left, neg_formula, merge_literals=False)
-
-        #LOG.debug(neg_formula)
+        LOG.debug(preamble)
+        LOG.debug(neg_formula)
         autsign, aut = build_smv_module(neg_formula, location_vars.values()+lev_map.values(), prefix='0')
 
         loc_limits = []
@@ -1406,11 +1406,11 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             smv = build_smv_program(autsign, aut, None, None, None, None, location_vars.values()+lev_map.values(),
                                     in_cex_dict.keys(), full_cex_dict.keys(), full_neg_ca_cex_dict.keys(), base_spec_str)
 
-            # LOG.debug(smv)
+            LOG.debug(smv)
             #l_passed, ntrace = verify_candidate(left, neg_formula)
-            LOG.debug(ntrace)
+            # LOG.debug(ntrace)
             l_passed, ntrace = verify_tautology_smv(smv, return_trace=True)
-
+            LOG.debug(ntrace)
             if l_passed:
                 # LOG.debug(smv)
                 # LOG.debug(cex)
@@ -1421,28 +1421,37 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
             LOG.debug(ntrace)
             #analyze trace to derive possible solution
-            locs = trace_analysis_for_loc(ntrace, location_vars.values())
+            all_locs = trace_analysis_for_loc(ntrace, location_vars.values())
             uses = trace_analysis_for_loc(ntrace, lev_map.values())
             LOG.debug(uses)
-            LOG.debug(locs)
+            LOG.debug(all_locs)
 
 
             # TODO: it seems there is a problem with this
-            locs = detect_reject_list(locs, location_vars, location_map,
+            locs = detect_reject_list(all_locs, location_vars, location_map,
                                       set(spec_contract.output_ports_dict.values()) & rel_spec_ports)
             LOG.debug(locs)
 
-            #LOG.debug(location_map)
+            LOG.debug(location_map)
 
-            #which components are used?
-            used = []
+            #which components are really used?
+            used_contracts = {inverse_location_vars[loc_var].contract for loc_var in locs}
+            #remove spec from list
+            used_contracts = used_contracts - {spec_contract}
+
+            really_used = {lev_map[c] for c in used_contracts}
+            used_f = []
             for var, use in uses.items():
-                used.append(Equivalence(var, Constant(use)))
+                if var in really_used:
+                    used_f.append(Equivalence(var, Constant(use)))
+                else:
+                    used_f.append(Equivalence(var, Constant(-1)))
+            #done
 
-            if len(used) > 0:
-                used = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), used)
+            if len(used_f) > 0:
+                used_f = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), used_f)
             else:
-                used = TrueFormula()
+                used_f = TrueFormula()
 
             # now check if this is a good solution indeed
             constr = [TrueFormula()]
@@ -1467,12 +1476,13 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                 LOG.debug(all_cex)
                 conn = Conjunction(conn, all_cex, merge_literals=False)
 
-            conn = Conjunction(used, conn, merge_literals=False)
-            #LOG.debug(conn)
+            conn = Conjunction(used_f, conn, merge_literals=False)
+            LOG.debug(conn)
+            LOG.debug(all_specs_formula)
             passed, trace = verify_candidate(conn, all_specs_formula)
 
             if not passed:
-                # LOG.debug(trace)
+                LOG.debug(trace)
                 # LOG.debug(input_variables)
                 # get counterexample for inputs
                 cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
@@ -1559,7 +1569,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                 else:
                     all_candidates = Disjunction(all_candidates, lconn, merge_literals=False)
             else:
-                just_conn = Conjunction(used, just_conn, merge_literals=False)
+                just_conn = Conjunction(used_f, just_conn, merge_literals=False)
                 passed, trace = verify_candidate(just_conn, all_specs_formula)
 
                 if not passed:

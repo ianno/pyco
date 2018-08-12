@@ -1427,7 +1427,6 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             LOG.debug(all_locs)
 
 
-            # TODO: it seems there is a problem with this
             locs = detect_reject_list(all_locs, location_vars, location_map,
                                       set(spec_contract.output_ports_dict.values()) & rel_spec_ports)
             LOG.debug(locs)
@@ -1529,18 +1528,29 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                 # if i < n:
                 #     i += 1
 
+                #DONE: add check to make sure cex is agreeing with spec assumptions. Sometimes it does not work...
 
+                #TODO: check what happens sometimes with recurrent cex. it should not happen to see the same cex multiple times
                 if cex is not None:
                     cex_p = False
-                    for c in in_cex_dict.values():
-                        cex_check = Implication(c, cex, merge_literals=False)
-                        cex_p = verify_tautology(cex_check, return_trace=False)
-                        if cex_p:
-                            break
-                    if not cex_p and do_cex_checks:
-                        in_cex_dict[Literal('m')] = cex
-                        generated_cex.add(cex)
-                        LOG.debug(len(in_cex_dict))
+                    #check this is not a spurious cex
+                    cex_check = Implication(cex, spec_contract.assume_formula, merge_literals=False)
+                    valid = verify_tautology(cex_check, return_trace=False)
+
+                    if valid:
+                        for c in in_cex_dict.values():
+                            cex_check = Implication(c, cex, merge_literals=False)
+                            cex_p = verify_tautology(cex_check, return_trace=False)
+                            if cex_p:
+                                break
+                        if not cex_p and do_cex_checks:
+                            in_cex_dict[Literal('m')] = cex
+                            generated_cex.add(cex)
+                            LOG.debug(len(in_cex_dict))
+                    else:
+                        LOG.debug('Spurious CEX')
+                        LOG.debug(cex)
+                        cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
 
                 # #check full check is false for spec
                 # fcex_check = Implication(fullcex, spec_contract.guarantee_formula, merge_literals=False)
@@ -1694,20 +1704,16 @@ def derive_inputs_from_trace(trace, input_variables, max_horizon=None):
 
         # LOG.debug(line)
 
-        if not pre_trace:
-            if not line.startswith('-- Trace was successfully completed.'):
-                continue
-            else:
-                pre_trace = True
+        ## Only if with coi
+        # if pre_trace:
+        #     if not line.startswith('-- Trace was successfully completed.'):
+        #         continue
+        #     else:
+        #         pre_trace = False
         if not after_preamble:
-            if not line.startswith('->'):
-                if line.startswith('--'):
-                    # indicates loop in trace, skip line
-                    lasso_index = i + 1
-                continue
-
-            else:
+            if line.startswith('Trace Type: Counterexample'):
                 after_preamble = True
+                continue
                 # LOG.debug('after preamble')
 
         # done with the preamble
@@ -1782,6 +1788,8 @@ def derive_inputs_from_trace(trace, input_variables, max_horizon=None):
     horizon = len(formula_bits)
     # LOG.debug(trace)
     LOG.debug(diff)
+
+    #include full loops. use max_horizon to figure out how many loops you need.
     while diff > 0 and max_horizon is not None and horizon <= max_horizon:
         partial = []
         for j in range(diff, 0, -1):
@@ -1795,8 +1803,8 @@ def derive_inputs_from_trace(trace, input_variables, max_horizon=None):
         formula_bits += partial
         horizon = len(formula_bits)
 
-        if horizon > max_horizon+1:
-            formula_bits = formula_bits[:max_horizon+1]
+        # if horizon > max_horizon+1:
+        #     formula_bits = formula_bits[:max_horizon+1]
 
 
     try:

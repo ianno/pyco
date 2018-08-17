@@ -766,7 +766,7 @@ def process_model(spec_list, output_port_names,
             # #location_map[location_vars[port]][-1] = None
             if port.contract in relevant_contracts:
                 inner = Leq(location_vars[port], Constant(-1), merge_literals=False)
-                inner = Conjunction(inner, Equivalence(component_map[port.contract], Constant(-1), merge_literals=False))
+                inner = Conjunction(inner, Equivalence(component_map[port.contract], Constant(-1), merge_literals=False), merge_literals=False)
                 # #inner = Implication(inner, TrueFormula(), merge_literals=False)
                 p_map.append(inner)
             for p in var_map[port]:
@@ -778,6 +778,9 @@ def process_model(spec_list, output_port_names,
 
                     inverse_location_vars[p.contract][p].add((count, location_vars[port]))
                     inner = Equivalence(location_vars[port], Constant(count), merge_literals=False)
+
+                    if port.contract in component_map: #does not include spec
+                        inner = Conjunction(inner, Geq(component_map[port.contract], Constant(0), merge_literals=False), merge_literals=False)
                     location_map[location_vars[port]][count] = p
                     count += 1
 
@@ -789,11 +792,11 @@ def process_model(spec_list, output_port_names,
                             #lev_c = Lt(component_map[p.contract], component_map[port.contract])
                             lev_c = Geq(component_map[p.contract], Constant(0))
                             #lev_c = Conjunction(lev_c, min_c, merge_literals=False)
-                        else:
-                            #it's the spec
-                            lev_c = Geq(component_map[port.contract], Constant(0))
+                        # else:
+                        #     #it's the spec
+                        #     lev_c = Geq(component_map[port.contract], Constant(0))
 
-                        inner2 = Conjunction(inner2, lev_c, merge_literals=False)
+                            inner2 = Conjunction(inner2, lev_c, merge_literals=False)
 
                     else:
                         inner2 = Conjunction(inner2, Geq(component_map[p.contract], Constant(0)))
@@ -802,7 +805,7 @@ def process_model(spec_list, output_port_names,
 
                     p_map.append(inner)
 
-            if len(p_map) > 1:
+            if len(p_map) > 0:
                 formula = reduce((lambda x, y: Disjunction(x, y, merge_literals=False)), p_map)
                 formulas.append(formula)
 
@@ -875,6 +878,7 @@ def process_model(spec_list, output_port_names,
 
 
         left_sides = Conjunction(left_sides, composition.guarantee_formula, merge_literals=False)
+        left_sides = Conjunction(left_sides, composition.assume_formula, merge_literals=False)
 
         for s in spec_dict.values():
             left_sides = Conjunction(left_sides, s.assume_formula, merge_literals=False)
@@ -928,7 +932,7 @@ def process_model(spec_list, output_port_names,
 
     neg_check = Literal('n')
 
-    neg_formula = Implication(autf, Globally(neg_check), merge_literals=False)
+    #neg_formula = Implication(autf, Globally(neg_check), merge_literals=False)
 
     pos_left = Conjunction(preamble, composition.assume_formula, merge_literals=False)
     pos_formula = Implication(pos_left, composition.guarantee_formula, merge_literals=False)
@@ -1038,7 +1042,8 @@ def build_neg_formula_for_all_specs(spec_list, composition):
     # a_check = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), [compositions[s.unique_name].assume_formula for s in spec_list])
     a_check = composition.assume_formula
 
-    return Negation(Conjunction(a_check, g_check, merge_literals=False))
+    # return Negation(Conjunction(a_check, g_check, merge_literals=False))
+    return Negation(g_check)
     # neg_ref = Negation(ref_formula)
 
 # def build_formula_for_all_specs(connected_spec, spec_list, composition):
@@ -1190,7 +1195,7 @@ def pick_one_candidate(trace, var_map, relevant_allspecs_ports, manager, lev_map
 
     return candidate_connection, new_var_assign
 
-def build_smv_module(module_formula, parameters, prefix=None):
+def build_smv_module(module_formula, parameters, prefix=None, include_formula=TrueFormula()):
     '''
     returns a smv module string and its signature
     :param module_formula:
@@ -1200,7 +1205,7 @@ def build_smv_module(module_formula, parameters, prefix=None):
 
     mod_vars = [x for (_, x) in module_formula.get_literal_items()]
     mod_vars = set(mod_vars) - set(parameters)
-    aut = ltl2smv(module_formula, include_vars=mod_vars,
+    aut = ltl2smv(include_formula, include_vars=mod_vars,
                   parameters=parameters, prefix=prefix)
     # LOG.debug(aut)
 
@@ -1327,7 +1332,16 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
         # autf = Conjunction(left, neg_formula, merge_literals=False)
         LOG.debug(preamble)
         LOG.debug(neg_formula)
-        autsign, aut = build_smv_module(neg_formula, location_vars.values()+lev_map.values(), prefix='0')
+
+        left = Conjunction(preamble, left_sides, merge_literals=False)
+        all_f = Implication(left, neg_formula, merge_literals=False)
+        #all_f = Implication(left_sides, neg_formula, merge_literals=False)
+
+        # t,_ = verify_tautology(neg_formula)
+
+        #LOG.debug(all_f)
+        autsign, aut = build_smv_module(all_f, location_vars.values()+lev_map.values(),
+                                        prefix='0')
 
         loc_limits = []
         for loc, lmap in location_map.items():
@@ -1358,7 +1372,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
             cex_str = ' & '.join(cex_str_list)
 
-            checks_list = [Globally(neg_check).generate(symbol_set=NusmvSymbolSet, prefix='%s.'%m.unique_name)
+            checks_list = [all_f.generate(symbol_set=NusmvSymbolSet, prefix='%s.'%m.unique_name)
                         for m in in_cex_dict]
 
             checks_str = ' | '.join(checks_list)
@@ -1410,7 +1424,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             #l_passed, ntrace = verify_candidate(left, neg_formula)
             # LOG.debug(ntrace)
             l_passed, ntrace = verify_tautology_smv(smv, return_trace=True)
-            LOG.debug(ntrace)
+            # LOG.debug(ntrace)
             if l_passed:
                 # LOG.debug(smv)
                 # LOG.debug(cex)
@@ -1419,7 +1433,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                 # LOG.debug(neg_formula)
                 return False, None, None
 
-            LOG.debug(ntrace)
+            # LOG.debug(ntrace)
             #analyze trace to derive possible solution
             all_locs = trace_analysis_for_loc(ntrace, location_vars.values())
             uses = trace_analysis_for_loc(ntrace, lev_map.values())
@@ -1476,16 +1490,18 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                 conn = Conjunction(conn, all_cex, merge_literals=False)
 
             conn = Conjunction(used_f, conn, merge_literals=False)
-            LOG.debug(conn)
-            LOG.debug(all_specs_formula)
+            # LOG.debug(conn)
+            # LOG.debug(all_specs_formula)
             passed, trace = verify_candidate(conn, all_specs_formula)
 
+            # print_model(locs, inverse_location_vars, location_map, spec_contract, relevant_contracts, manager)
+
             if not passed:
-                LOG.debug(trace)
+                # LOG.debug(trace)
                 # LOG.debug(input_variables)
                 # get counterexample for inputs
-                cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
-                fullcex, _ = derive_inputs_from_trace(trace, all_s_variables, max_horizon=NUXMV_BOUND)
+                cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND*2)
+                fullcex, _ = derive_inputs_from_trace(trace, all_s_variables, max_horizon=NUXMV_BOUND*2)
                 #full_in_cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
                 LOG.debug(cex)
                 LOG.debug(fullcex)
@@ -1495,29 +1511,25 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                 # n = 5
                 # if i >= n:
                 # #if l_passed:
-                #     var_assign = {}
-                #     for var, val in locs.items():
-                #         if val >= 0:
-                #             # LOG.debug(location_map)
-                #             port = inverse_location_vars[var]
-                #             connected_p = location_map[var][val]
-                #             if port.contract in relevant_contracts:
-                #                 var_assign[port.unique_name] = connected_p.unique_name
-                #             else:
-                #                 var_assign[port.base_name] = connected_p.unique_name
+                # var_assign = {}
+                # for var, val in locs.items():
+                #     if val >= 0:
+                #         # LOG.debug(location_map)
+                #         port = inverse_location_vars[var]
+                #         connected_p = location_map[var][val]
+                #         var_assign[port.unique_name] = connected_p.unique_name
+                # LOG.debug(var_assign)
                 #
-                #     LOG.debug(var_assign)
+                # composition, connected_spec, contract_inst = \
+                #     manager.build_composition_from_model(None, manager.spec_port_names,
+                #                                          relevant_contracts, var_assign)
                 #
-                #     composition, connected_spec, contract_inst = \
-                #         manager.build_composition_from_model(None, manager.spec_port_names,
-                #                                              relevant_contracts, var_assign)
-                #
-                #     LOG.debug(connected_spec)
-                #     from graphviz_converter import GraphizConverter
-                #     graphviz_conv = GraphizConverter(connected_spec, composition, contract_inst,
-                #                                      filename='_'.join(manager.spec_port_names))
-                #     graphviz_conv.generate_graphviz()
-                #     graphviz_conv.view()
+                # LOG.debug(connected_spec)
+                # from graphviz_converter import GraphizConverter
+                # graphviz_conv = GraphizConverter(connected_spec, composition, contract_inst,
+                #                                  filename='_'.join(manager.spec_port_names))
+                # graphviz_conv.generate_graphviz()
+                # graphviz_conv.view()
                 #
                 #     import time
                 #     time.sleep(10)
@@ -1539,18 +1551,26 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
                     if valid:
                         for c in in_cex_dict.values():
+                            LOG.debug(c)
                             cex_check = Implication(c, cex, merge_literals=False)
                             cex_p = verify_tautology(cex_check, return_trace=False)
                             if cex_p:
+                                LOG.debug('CEX already encoded')
+                                #assert False
                                 break
                         if not cex_p and do_cex_checks:
-                            in_cex_dict[Literal('m')] = cex
+                            #if we have only the initial case, replace TRUE with the current CEX
+                            if len(in_cex_dict) == 1 and type(in_cex_dict.values()[0]) is TrueFormula:
+                                in_cex_dict[in_cex_dict.keys()[0]] = cex
+                            else:
+                                in_cex_dict[Literal('m')] = cex
+                            #in_cex_dict[Literal('m')] = cex
                             generated_cex.add(cex)
                             LOG.debug(len(in_cex_dict))
                     else:
                         LOG.debug('Spurious CEX')
                         LOG.debug(cex)
-                        cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
+                        # cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND*2)
 
                 # #check full check is false for spec
                 # fcex_check = Implication(fullcex, spec_contract.guarantee_formula, merge_literals=False)
@@ -1574,10 +1594,29 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                 #     # LOG.debug(ft)
                 # #generated_cex.add(cex)
 
+                    # #double check
+                    # if len(generated_cex) > 1:
+                    #     tt = lconn
+                    #
+                    #     for c in generated_cex - {cex}:
+                    #         tt = Conjunction(tt, c, merge_literals=False)
+                    #
+                    #     tt = Implication(tt, all_specs_formula, merge_literals=False)
+                    #
+                    #     p,t = verify_tautology(tt, return_trace=True)
+                    #
+                    #     LOG.debug(p)
+                    #     LOG.debug(t)
+                    #     assert p
+
                 if all_candidates is None:
                     all_candidates = lconn
                 else:
                     all_candidates = Disjunction(all_candidates, lconn, merge_literals=False)
+
+
+
+
             else:
                 just_conn = Conjunction(used_f, just_conn, merge_literals=False)
                 passed, trace = verify_candidate(just_conn, all_specs_formula)
@@ -1715,7 +1754,7 @@ def derive_inputs_from_trace(trace, input_variables, max_horizon=None):
                 after_preamble = True
                 continue
                 # LOG.debug('after preamble')
-
+            continue
         # done with the preamble
         # analyze state by state
         if line.startswith('->'):
@@ -1739,6 +1778,8 @@ def derive_inputs_from_trace(trace, input_variables, max_horizon=None):
 
 
         elif line.startswith('--'):
+            if lasso_index > -1:
+                continue #already have a loop
             # indicates loop in trace, skip line
             lasso_index = i+1
         else:
@@ -1942,3 +1983,42 @@ def assemble_checked_vars(trace_diff, monitored_vars, checked_vars):
 
     # LOG.debug(checked_vars)
     return checked_vars
+
+
+def print_model(locs, inverse_location_vars, location_map, spec_contract, relevant_contracts, manager):
+    '''
+    calls graphviz and generate a graphical representation of the model
+    :return:
+    '''
+    var_assign = {}
+    for var, val in locs.items():
+        if val >= 0:
+            # LOG.debug(location_map)
+            port = inverse_location_vars[var]
+            connected_p = location_map[var][val]
+            var_assign[port.unique_name] = connected_p.unique_name
+    LOG.debug(var_assign)
+
+    # convert names in spec to original spec
+    for name, port in spec_contract.ports_dict.items():
+        uname = port.unique_name
+        orig_port = manager.spec.ports_dict[name]
+
+        if uname in var_assign:
+            var_assign[orig_port.base_name] = var_assign[uname]
+            var_assign.pop(uname)
+        else:
+            for name in var_assign:
+                if uname == var_assign[name]:
+                    var_assign[name] = orig_port.base_name
+
+    composition, connected_spec, contract_inst = \
+        manager.build_composition_from_model(None, manager.spec_port_names,
+                                             relevant_contracts, var_assign)
+
+    LOG.debug(connected_spec)
+    from graphviz_converter import GraphizConverter
+    graphviz_conv = GraphizConverter(connected_spec, composition, contract_inst,
+                                     filename='_'.join(manager.spec_port_names))
+    graphviz_conv.generate_graphviz()
+    graphviz_conv.view()

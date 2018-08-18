@@ -12,13 +12,14 @@ LINE_LENGTH = 80
 
 
 class GraphizConverter(object):
-    def __init__(self, spec, composed_contract, contract_list, synthesis_time=None, filename=None):
+    def __init__(self, spec, composed_contract, contract_list, parameters_values=None, synthesis_time=None, filename=None):
 
         if filename is not None:
             filename = filename+'.gv'
 
         self.spec = spec
         self.contract_list = contract_list
+        self.parameters_values = parameters_values
 
         self.graph = graphviz.Digraph('pyco_out', filename=filename,
                                       node_attr={'shape': 'Mrecord'},)
@@ -41,7 +42,15 @@ class GraphizConverter(object):
 
     def __translate_and_add_contract(self, contract, graph):
         input_port_str = '|'.join(['<%s> %s' % (base_name, base_name) for base_name in contract.input_ports_dict])
-        output_port_str = '|'.join(['<%s> %s' % (base_name, base_name) for base_name in contract.output_ports_dict])
+
+        #process parameters
+        str_out_ports = ['<%s> %s' % (base_name, base_name) for base_name, port in contract.output_ports_dict.items()
+                         if port.unique_name not in set(self.parameters_values.keys())]
+        str_out_ports += ['<%s> %s = %s' % (base_name, base_name, str(self.parameters_values[port.unique_name]))
+                          for base_name, port in contract.output_ports_dict.items()
+                         if port.unique_name in set(self.parameters_values.keys())]
+
+        output_port_str = '|'.join(str_out_ports)
 
         graph.node(contract.unique_name,
                         label='{{%s}|%s|{%s}}' % (input_port_str, contract.base_name, output_port_str))

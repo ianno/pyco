@@ -119,7 +119,7 @@ class SinglePortSolver(multiprocessing.Process):
 
             try:
                 (model, composition,
-                 spec, contract_list) = thread_manager.synthesize()
+                 spec, contract_list, params_assign) = thread_manager.synthesize()
             except NotSynthesizableError:
                 raise
             else:
@@ -129,10 +129,10 @@ class SinglePortSolver(multiprocessing.Process):
                 # LOG.info(spec)
                 # LOG.info(composition)
                 from graphviz_converter import GraphizConverter
-                graphviz_conv = GraphizConverter(spec, composition, contract_list, filename='_'.join(self.spec_port_names))
+                graphviz_conv = GraphizConverter(spec, composition, contract_list, parameters_values=params_assign, filename='_'.join(self.spec_port_names))
                 graphviz_conv.generate_graphviz()
                 graphviz_conv.view()
-                return model, composition, spec, contract_list
+                return model, composition, spec, contract_list, params_assign
 
                 # return model, composition, spec, contract_list
         else:
@@ -539,7 +539,7 @@ class SinglePortSolver(multiprocessing.Process):
         '''
 
 
-        spec = self.spec
+        spec = self.spec.copy()
         working_spec = spec.copy()
 
         processed_ports = set()

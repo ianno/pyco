@@ -108,13 +108,13 @@ class Spec(Contract):
                    ]
     OUTPUT_PORTS = [('adcbit_0', AdcBusLine), ('adcbit_1', AdcBusLine),
                     ('ready', Ready)]
-    ASSUMPTIONS = '''!req & G(req -> (X !req & XX !req & XXX !req & XXXX !req))'''
-    GUARANTEES = '''G(req -> XXXX ready) &
+    ASSUMPTIONS = '''!req & G(req -> (X !req & X2 !req & X3 !req & X4 !req))'''
+    GUARANTEES = '''G(req -> X4 ready) &
                     G(req -> (
-                              ( ((XXXX adcbit_0) <-> anbit_0) & ((XXXX adcbit_1) <-> anbit_1) ) |
-                              ( ((XXXX adcbit_0) <-> X anbit_0) & ((XXXX adcbit_1) <-> X anbit_1) ) |
-                              ( ((XXXX adcbit_0) <-> XX anbit_0) & ((XXXX adcbit_1) <-> XX anbit_1) ) |
-                              ( ((XXXX adcbit_0) <-> XXX anbit_0) & ((XXXX adcbit_1) <-> XXX anbit_1) ) 
+                              ( ((X4 adcbit_0) <-> anbit_0) & ((X4 adcbit_1) <-> anbit_1) ) |
+                              ( ((X4 adcbit_0) <-> X anbit_0) & ((X4 adcbit_1) <-> X anbit_1) ) |
+                              ( ((X4 adcbit_0) <-> X2 anbit_0) & ((X4 adcbit_1) <-> X2 anbit_1) ) |
+                              ( ((X4 adcbit_0) <-> X3 anbit_0) & ((X4 adcbit_1) <-> X3 anbit_1) ) 
                              )
                      )
                     '''
@@ -145,9 +145,9 @@ class SpecCounter(Contract):
     1 bit ADC
     '''
     INPUT_PORTS = [('reset', Signal), ('clk', Clk),]
-    OUTPUT_PORTS = [('is_eq', Signal) ]
-    ASSUMPTIONS = '''G reset'''
-    GUARANTEES = '''G !is_eq
+    OUTPUT_PORTS = [('outVal', IntegerSignal) ]
+    ASSUMPTIONS = ''' G(!reset)'''
+    GUARANTEES = '''(  (outVal = 0) & X6 (outVal = 6)  )
                     '''
 
 #counter block
@@ -158,8 +158,8 @@ class SpecIncremental(Contract):
     INPUT_PORTS = [('reset', Signal), ('clk', Clk), ]
     OUTPUT_PORTS = [('adcbit_0', Signal),
                     ('ready', Signal)]
-    ASSUMPTIONS = '''!reset & G(reset -> (X !reset))'''
-    GUARANTEES = '''G(reset ->  F ready)
+    ASSUMPTIONS = '''reset & G(reset -> (X !reset & XX !reset & XXX !reset & XXXX !reset & XXXXX !reset))'''
+    GUARANTEES = '''G(reset ->  !ready & X!ready & XXXXready )
                     '''
 
 
@@ -174,8 +174,21 @@ class Counter(Contract):
     ASSUMPTIONS = '''true'''
     GUARANTEES = '''value = 0 &
                     G(reset -> X (value = 0)) &
-                    G((value < n) & !reset -> (X value = value + 1)) & 
-                    G((value = n) -> (X (value = 0)))
+                    G((value < n) & !reset -> (X (value) = value + 1)) & 
+                    G((value >= n) -> (X (value = 0)))
+                    '''
+
+class Counter1(Contract):
+    '''
+    1- Counter
+    '''
+    INPUT_PORTS = [('reset', Signal), ('clk', Clk), ]
+    OUTPUT_PORTS = [('value', IntegerSignal)]
+    ASSUMPTIONS = '''true'''
+    GUARANTEES = '''value = 0 &
+                    G(reset -> X (value = 0)) &
+                    G((value < 1) & !reset -> (X (value) = value + 1)) & 
+                    G((value = 1) -> (X (value = 0)))
                     '''
 
 class Counter3(Contract):
@@ -187,8 +200,30 @@ class Counter3(Contract):
     ASSUMPTIONS = '''true'''
     GUARANTEES = '''value = 0 &
                     G(reset -> X (value = 0)) &
-                    G((value = 0) & !reset -> (X (value = 1))) & 
+                    G((value < 1) & !reset -> (X (value) = value + 1)) & 
                     G((value = 1) -> (X (value = 0)))
+                    '''
+
+class CounterPiece3(Contract):
+    '''
+    3- Counter
+    '''
+    INPUT_PORTS = [ ('clk', Clk), ('acc', IntegerSignal)]
+    OUTPUT_PORTS = [('value', IntegerSignal)]
+    ASSUMPTIONS = '''true'''
+    GUARANTEES = '''value = 3 &
+                    G((value < 3)  -> (X (value = acc))) & 
+                    G((value = 3) -> (X (value = 0)))
+                    '''
+
+class Accumulator(Contract):
+    '''
+    3- Counter
+    '''
+    INPUT_PORTS = [('clk', Clk), ('inVal', IntegerSignal)]
+    OUTPUT_PORTS = [('outVal', IntegerSignal)]
+    ASSUMPTIONS = '''true'''
+    GUARANTEES = '''outVal = 1 & G(X(outVal = (inVal + 1)))
                     '''
 
 class Comparator(Contract):

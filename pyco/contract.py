@@ -10,7 +10,7 @@
 from pycolite.contract import (Contract as BaseContract, PortMapping, CompositionMapping,
                            RefinementMapping, NotARefinementError)
 from pycolite.parser.lexer import BaseSymbolSet
-from pycolite.types import Bool, Int, Float
+from pycolite.types import Bool, Int, Float, FrozenInt, FrozenBool
 from pyco import LOG
 
 LOG.debug('In contract.py')
@@ -156,17 +156,24 @@ class BaseTypeBool(Bool):
     """
     pass
 
+class ParameterBool(FrozenBool):
+    """
+    Implements parametric (frozen) bool
+    """
+    pass
+
 class BaseTypeInt(Int):
     """
     Implements base type for contract ports
     """
     pass
 
-class ParameterInt(Int):
+class ParameterInt(FrozenInt):
     """
     Implements parametric (frozen) integer
     """
     pass
+
 
 class BaseTypeFloat(Float):
     """

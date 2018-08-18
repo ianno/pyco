@@ -28,7 +28,7 @@ def comparator():
     '''
     comparator
     '''
-    comp = Comparator('Comparator')
+    comp = Comparator3('Comparator')
     return LibraryComponent('Comparator', comp)
 
 @pytest.fixture
@@ -48,9 +48,32 @@ def flipflop():
     comp = FlipFlop('ff')
     return LibraryComponent('ff', comp)
 
+@pytest.fixture
+def invert():
+    '''
+    flipflop
+    '''
+    comp = Invert('invert')
+    return LibraryComponent('invert', comp)
 
 @pytest.fixture
-def spi_lib(counter, comparator, adc, flipflop):
+def counter_piece():
+    '''
+    counter
+    '''
+    comp = CounterPiece3('CounterPiece')
+    return LibraryComponent('CounterPiece', comp)
+
+@pytest.fixture
+def accumulator():
+    '''
+    counter
+    '''
+    comp = Accumulator('Accumulator')
+    return LibraryComponent('Accumulator', comp)
+
+@pytest.fixture
+def spi_lib(counter, comparator, adc, flipflop, invert, counter_piece, accumulator):
     '''
     library
     :param counter:
@@ -63,9 +86,12 @@ def spi_lib(counter, comparator, adc, flipflop):
     library = ContractLibrary('spilib')
 
     library.add(counter, number_of_instances=1)
-    library.add(comparator, number_of_instances=1)
-    library.add(adc, number_of_instances=1)
-    library.add(flipflop, number_of_instances=1)
+    # library.add(comparator, number_of_instances=1)
+    # library.add(adc, number_of_instances=1)
+    # library.add(flipflop, number_of_instances=1)
+    # library.add(invert, number_of_instances=1)
+    # library.add(counter_piece, number_of_instances=1)
+    # library.add(accumulator, number_of_instances=1)
 
     # add type compatibilities
     library.add_type(FlipFlopOut)
@@ -81,7 +107,9 @@ def test_adc1(spi_lib):
     Performs simple synthesis
     '''
 
-    spec1 = Spec1bit('G1')
+    # spec1 = Spec1bit('G1')
+    spec1 = SpecCounter('G1')
+    # spec1 = Spec('G1')
 
     interface = SynthesisInterface(spi_lib, [spec1])
 
@@ -90,4 +118,4 @@ def test_adc1(spi_lib):
     # interface.use_connected_spec(adc, 'anbit_0', 'anbit_0')
 
 
-    interface.synthesize(limit=8, library_max_redundancy=1)
+    interface.synthesize(limit=8, library_max_redundancy=1, decompose=False)

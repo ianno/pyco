@@ -14,7 +14,7 @@ from pyco import LOG
 from counterxample_analysis import counterexample_analysis, parallel_solve
 import time
 
-MAX_THREADS = 8
+MAX_THREADS = 1
 
 #NotSynthesizableError = z3_interface.NotSynthesizableError
 
@@ -151,10 +151,12 @@ class ModelVerificationManager(object):
             LOG.debug("get solution")
             pids = []
             var_assign_pid = {}
+            params_pid = {}
             while not self.result_queue.empty():
-                pid, model_map_items = self.result_queue.get()
+                pid, model_map_items, params_items = self.result_queue.get()
                 pids.append(pid)
                 var_assign_pid[pid] = {k: v for (k, v) in model_map_items}
+                params_pid[pid] = {k: v for (k, v) in params_items}
 
             pid = min(pids)
         else:
@@ -162,6 +164,7 @@ class ModelVerificationManager(object):
 
         self.model = self.model_dict[pid]
         self.var_assign = var_assign_pid[pid]
+        self.params_assign = params_pid[pid]
         self.relevant_contracts = self.relevant_contracts_pid[pid]
 
         #rebuild composition
@@ -175,7 +178,7 @@ class ModelVerificationManager(object):
         #for thread in self.thread_pool:
         #    thread.join()
 
-        return (self.model, self.composition, self.connected_spec, self.contract_inst)
+        return (self.model, self.composition, self.connected_spec, self.contract_inst, self.params_assign)
 
 
 class RefinementChecker(multiprocessing.Process):

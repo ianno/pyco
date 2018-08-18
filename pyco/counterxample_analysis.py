@@ -13,7 +13,7 @@ from pycolite.formula import (Globally, Equivalence, Disjunction, Implication,
                                 Constant, DoubleImplication, Eventually, Until, Le as Lt, Literal,
                                 Geq, Leq, Ge as Gt, Addition)
 from pycolite.symbol_sets import NusmvSymbolSet
-from pycolite.types import FrozenInt, Int, FrozenBool
+from pycolite.types import FrozenInt, Int, FrozenBool, FrozenVar
 from pycolite.nuxmv import (NuxmvRefinementStrategy, verify_tautology, verify_tautology_smv,
                             ltl2smv, _process_var_decl, MODULE_TEMPLATE)
 from pycolite.parser.parser import LTL_PARSER
@@ -302,7 +302,8 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
      ref_formulas, all_specs_formula, pos_formula, pos_check,
      neg_ca_formula, neg_ca_check, neg_formula,
      neg_check, preamble, left_sides,
-     var_map, lev_map, location_vars, location_map) = process_model(spec_list, output_port_names,
+     var_map, lev_map, location_vars, location_map,
+     parameters) = process_model(spec_list, output_port_names,
                                                      model, relevant_contracts, manager)
 
     input_variables = set([p for p in spec_contract.input_ports_dict.values()])
@@ -321,14 +322,14 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
 
 
     #performs first step of learning loo?p
-    passed, candidate, var_assign = exists_forall_learner(composition, spec_contract, rel_spec_ports,
+    passed, candidate, var_assign, param_assign = exists_forall_learner(composition, spec_contract, rel_spec_ports,
                                                           ref_formulas, all_specs_formula,
                                                           neg_formula, neg_check, pos_formula, pos_check,
                                                           neg_ca_formula, neg_ca_check,
                                                           preamble, left_sides,
                                                         var_map, lev_map, input_variables,
                                                           location_vars, location_map,
-                                                          terminate_evt, manager, relevant_contracts)
+                                                          terminate_evt, manager, relevant_contracts, parameters)
     # LOG.debug(passed)
     # while not passed:
     #     #check again if terminate is set
@@ -362,11 +363,15 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
                     var_assign[name] = orig_port.base_name
 
 
+    #convert params to unique names
+    param_assign = {x.unique_name: v for x, v in param_assign.items()}
+
     # preamble = new_preamble
     # LOG.debug('spec done')
     LOG.debug(model)
     LOG.debug(var_assign)
     LOG.debug(candidate)
+    LOG.debug(param_assign)
 
     #if we are here we passed
     #we need to build model map
@@ -395,7 +400,7 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
 
     if passed:
         LOG.debug('done')
-        result_queue.put((pid, frozenset(var_assign.items())))
+        result_queue.put((pid, frozenset(var_assign.items()), frozenset(param_assign.items())))
         found_event.set()
         terminate_evt.set()
 
@@ -641,6 +646,7 @@ def process_model(spec_list, output_port_names,
     spec_contract = unconnected_spec.copy()
     working_specs = {s.unique_name: s.copy() for s in spec_list}
     spec_dict = {s.unique_name: s for s in spec_list}
+    parameters = {x.literal for c in relevant_contracts for x in c.output_ports_dict.values() if isinstance(x.l_type, FrozenVar)}
 
     partial_spec = False
     if len(output_port_names) != len(spec_contract.output_ports_dict):
@@ -967,7 +973,8 @@ def process_model(spec_list, output_port_names,
     # TODO process constants
 
     return (composition, spec_contract, rel_spec_ports, ref_formulas, all_specs_formula, pos_formula, pos_check,
-            neg_ca_formula, neg_ca_check, neg_formula, neg_check, preamble, left_sides, var_map, component_map, location_vars, location_map)
+            neg_ca_formula, neg_ca_check, neg_formula, neg_check, preamble, left_sides, var_map, component_map, location_vars,
+            location_map, parameters)
 
 
 
@@ -1213,11 +1220,11 @@ def build_smv_module(module_formula, parameters, prefix=None, include_formula=Tr
     return autsign, aut
 
 def build_smv_program(neg_autsign, neg_aut, pos_autsign, pos_aut, neg_ca_autsign, neg_ca_aut,
-                      parameters, neg_module_instances, pos_module_instances,
+                      variables, neg_module_instances, pos_module_instances,
                       neg_ca_module_instances, spec_str):
 
 
-    lvars_str = _process_var_decl(parameters)
+    lvars_str = _process_var_decl(variables)
 
 
     for v in neg_module_instances:
@@ -1266,7 +1273,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                           ref_formulas, all_specs_formula, neg_formula, neg_check,
                           pos_formula, pos_check, neg_ca_formula, neg_ca_check,
                           preamble, left_sides, var_map, lev_map, input_variables,
-                          location_vars, location_map, terminate_evt, manager, relevant_contracts):
+                          location_vars, location_map, terminate_evt, manager, relevant_contracts, parameters):
     """
     verify refinement formula according to preamble
     :param ref_formula:
@@ -1291,6 +1298,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
     all_s_variables = set([p for p in spec_contract.ports_dict.values()])
     all_s_variables = all_s_variables & rel_spec_ports
     ntrace = trace = None
+    param_list = [x for x in parameters]
 
     total = 1
     for p in var_map:
@@ -1338,7 +1346,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
         # t,_ = verify_tautology(neg_formula)
 
         #LOG.debug(all_f)
-        autsign, aut = build_smv_module(all_f, location_vars.values()+lev_map.values(),
+        autsign, aut = build_smv_module(all_f, location_vars.values()+lev_map.values()+param_list,
                                         prefix='0')
 
         loc_limits = []
@@ -1414,7 +1422,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             #
             #     base_spec_str = '(%s) | %s' % (base_spec_str, neg_ca_cex_str)
 
-            smv = build_smv_program(autsign, aut, None, None, None, None, location_vars.values()+lev_map.values(),
+            smv = build_smv_program(autsign, aut, None, None, None, None, location_vars.values()+lev_map.values()+param_list,
                                     in_cex_dict.keys(), full_cex_dict.keys(), full_neg_ca_cex_dict.keys(), base_spec_str)
 
             LOG.debug(smv)
@@ -1428,14 +1436,16 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                 # LOG.debug(ntrace)
                 # LOG.debug(trace)
                 # LOG.debug(neg_formula)
-                return False, None, None
+                return False, None, None, None
 
             # LOG.debug(ntrace)
             #analyze trace to derive possible solution
             all_locs = trace_analysis_for_loc(ntrace, location_vars.values())
             uses = trace_analysis_for_loc(ntrace, lev_map.values())
+            param_assign = trace_analysis_for_loc(ntrace, param_list)
             LOG.debug(uses)
             LOG.debug(all_locs)
+            LOG.debug(param_assign)
 
 
             locs = detect_reject_list(all_locs, location_vars, location_map,
@@ -1489,7 +1499,18 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             conn = Conjunction(used_f, conn, merge_literals=False)
             # LOG.debug(conn)
             # LOG.debug(all_specs_formula)
-            passed, trace = verify_candidate(conn, all_specs_formula)
+
+
+            #process parameters
+            param_constr = [TrueFormula()]
+            for p, v in param_assign.items():
+                param_constr.append(Equivalence(p, Constant(v), merge_literals=False))
+            param_f = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), param_constr)
+            # TODO: add tried parameter in the list of used connections in the next loop
+
+            #put it all together
+            left = Conjunction(conn, param_f, merge_literals=False)
+            passed, trace = verify_candidate(left, all_specs_formula)
 
             # print_model(locs, inverse_location_vars, location_map, spec_contract, relevant_contracts, manager)
 
@@ -1616,7 +1637,8 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
             else:
                 just_conn = Conjunction(used_f, just_conn, merge_literals=False)
-                passed, trace = verify_candidate(just_conn, all_specs_formula)
+                left = Conjunction(just_conn, param_f, merge_literals=False)
+                passed, trace = verify_candidate(left, all_specs_formula)
 
                 if not passed:
                     #do_cex_checks = False
@@ -1637,7 +1659,8 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                         connected_p = location_map[var][val]
                         var_assign[port.unique_name] = connected_p.unique_name
                 LOG.debug(var_assign)
-                return passed, conn, var_assign
+                LOG.debug(param_assign)
+                return passed, conn, var_assign, param_assign
 
 
 

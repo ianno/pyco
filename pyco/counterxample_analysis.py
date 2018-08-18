@@ -878,7 +878,6 @@ def process_model(spec_list, output_port_names,
 
 
         left_sides = Conjunction(left_sides, composition.guarantee_formula, merge_literals=False)
-        left_sides = Conjunction(left_sides, composition.assume_formula, merge_literals=False)
 
         for s in spec_dict.values():
             left_sides = Conjunction(left_sides, s.assume_formula, merge_literals=False)
@@ -1042,8 +1041,7 @@ def build_neg_formula_for_all_specs(spec_list, composition):
     # a_check = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), [compositions[s.unique_name].assume_formula for s in spec_list])
     a_check = composition.assume_formula
 
-    # return Negation(Conjunction(a_check, g_check, merge_literals=False))
-    return Negation(g_check)
+    return Negation(Conjunction(a_check, g_check, merge_literals=False))
     # neg_ref = Negation(ref_formula)
 
 # def build_formula_for_all_specs(connected_spec, spec_list, composition):
@@ -1365,14 +1363,13 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             if terminate_evt.is_set():
                 return False, None, None
 
-
-            cex_str_list = [cex.generate(symbol_set=NusmvSymbolSet, prefix='%s.'%m.unique_name)
+            cex_str_list = ['(%s)' % cex.generate(symbol_set=NusmvSymbolSet, prefix='%s.'%m.unique_name)
                                     for m, cex in in_cex_dict.items()]
 
 
             cex_str = ' & '.join(cex_str_list)
 
-            checks_list = [all_f.generate(symbol_set=NusmvSymbolSet, prefix='%s.'%m.unique_name)
+            checks_list = ['(%s)' % all_f.generate(symbol_set=NusmvSymbolSet, prefix='%s.'%m.unique_name)
                         for m in in_cex_dict]
 
             checks_str = ' | '.join(checks_list)
@@ -1389,7 +1386,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
             left = left.generate(symbol_set=NusmvSymbolSet)
 
-            base_spec_str = '(' + left + '& (%s))' % cex_str
+            base_spec_str = '((' + left + ') & (%s))' % cex_str
             base_spec_str = base_spec_str + ' -> (%s)' % checks_str
 
 

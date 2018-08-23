@@ -28,7 +28,7 @@ def comparator():
     '''
     comparator
     '''
-    comp = Comparator3('Comparator')
+    comp = Comparator('Comparator')
     return LibraryComponent('Comparator', comp)
 
 @pytest.fixture
@@ -36,7 +36,7 @@ def adc():
     '''
     adc
     '''
-    #comp = ADC2('ADC')
+    # comp = ADC2('ADC')
     comp = ADC1('ADC')
     return LibraryComponent('ADC', comp)
 
@@ -85,19 +85,21 @@ def spi_lib(counter, comparator, adc, flipflop, invert, counter_piece, accumulat
 
     library = ContractLibrary('spilib')
 
-    library.add(counter, number_of_instances=1)
-    # library.add(comparator, number_of_instances=1)
-    # library.add(adc, number_of_instances=1)
-    # library.add(flipflop, number_of_instances=1)
-    # library.add(invert, number_of_instances=1)
+    library.add(counter, number_of_instances=2)
+    library.add(comparator, number_of_instances=2)
+    library.add(adc, number_of_instances=1)
+    library.add(flipflop, number_of_instances=2)
+    library.add(invert, number_of_instances=1)
     # library.add(counter_piece, number_of_instances=1)
     # library.add(accumulator, number_of_instances=1)
 
     # add type compatibilities
     library.add_type(FlipFlopOut)
     library.add_type(AdcBusLine)
+    library.add_type(SPIMiso)
 
     library.add_type_compatibility(FlipFlopOut, AdcBusLine)
+    library.add_type_compatibility(SPIMiso, AdcBusLine)
 
     return library
 
@@ -107,9 +109,9 @@ def test_adc1(spi_lib):
     Performs simple synthesis
     '''
 
-    # spec1 = Spec1bit('G1')
-    spec1 = SpecCounter('G1')
+    spec1 = Spec1bit('G1')
     # spec1 = Spec('G1')
+    # spec1 = SpecIncremental('G1')
 
     interface = SynthesisInterface(spi_lib, [spec1])
 

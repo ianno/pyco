@@ -186,8 +186,8 @@ class AC4WayBackup(Contract):
                   G((!fail1 & !fail2 & fail3 & fail4) -> (!c1 & c2 & !c3 & c4)) &
                   G((fail1 & fail2 & !fail3 & !fail4) -> (c1 & !c2 & c3 & !c4)) &
                   G((fail2 & fail3 & (fail1 | fail4)) -> (c1 & !c2 & !c3 & c4)) &
-                  G((!fail2 & (fail1 | fail4)) -> (c1 & c2 & !c3 & c4)) &
-                  G((fail2 & (fail1 | fail4)) -> (c1 & !c2 & c3 & c4))'''
+                  G((!fail2 & fail1 & fail4) -> (c1 & c2 & !c3 & c4)) &
+                  G((fail2 & (fail1 & fail4)) -> (c1 & !c2 & c3 & c4))'''
 
 class AC4WayBackupAlt(Contract):
     '''

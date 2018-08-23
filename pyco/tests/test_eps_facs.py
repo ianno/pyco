@@ -140,7 +140,7 @@ def ac_lib(abstr_gen, dumb_gen, std_gen, slow_gen, ac_single_back, ac_2_back,
     '''
     library = ContractLibrary('gen_lib')
 
-    library.add(abstr_gen)
+    #library.add(abstr_gen)
     library.add(dumb_gen)
     library.add(std_gen)
     library.add(slow_gen)
@@ -156,20 +156,20 @@ def ac_lib(abstr_gen, dumb_gen, std_gen, slow_gen, ac_single_back, ac_2_back,
     mapping1.add(abstr_gen.fail, dumb_gen.fail)
     mapping1.add(abstr_gen.c, dumb_gen.c)
 
-    dumb_gen.add_refinement_assertion(abstr_gen, mapping1)
+    #dumb_gen.add_refinement_assertion(abstr_gen, mapping1)
     #comp_ab.add_refinement_assertion(comp_meta, mapping)
 
     mapping2 = LibraryPortMapping([abstr_gen, std_gen])
     mapping2.add(abstr_gen.fail, std_gen.fail_std)
     mapping2.add(abstr_gen.c, std_gen.c_std)
 
-    std_gen.add_refinement_assertion(abstr_gen, mapping2)
+    #std_gen.add_refinement_assertion(abstr_gen, mapping2)
 
     mapping3 = LibraryPortMapping([abstr_gen, slow_gen])
     mapping3.add(abstr_gen.fail, slow_gen.fail)
     mapping3.add(abstr_gen.c, slow_gen.c)
 
-    slow_gen.add_refinement_assertion(abstr_gen, mapping3)
+    #slow_gen.add_refinement_assertion(abstr_gen, mapping3)
 
 
     library.verify_library()

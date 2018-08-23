@@ -44,11 +44,15 @@ class GraphizConverter(object):
         input_port_str = '|'.join(['<%s> %s' % (base_name, base_name) for base_name in contract.input_ports_dict])
 
         #process parameters
-        str_out_ports = ['<%s> %s' % (base_name, base_name) for base_name, port in contract.output_ports_dict.items()
-                         if port.unique_name not in set(self.parameters_values.keys())]
-        str_out_ports += ['<%s> %s = %s' % (base_name, base_name, str(self.parameters_values[port.unique_name]))
-                          for base_name, port in contract.output_ports_dict.items()
-                         if port.unique_name in set(self.parameters_values.keys())]
+        if self.parameters_values is None:
+            str_out_ports = ['<%s> %s' % (base_name, base_name) for base_name, port in contract.output_ports_dict.items()]
+
+        else:
+            str_out_ports = ['<%s> %s' % (base_name, base_name) for base_name, port in contract.output_ports_dict.items()
+                             if port.unique_name not in set(self.parameters_values.keys())]
+            str_out_ports += ['<%s> %s = %s' % (base_name, base_name, str(self.parameters_values[port.unique_name]))
+                              for base_name, port in contract.output_ports_dict.items()
+                             if port.unique_name in set(self.parameters_values.keys())]
 
         output_port_str = '|'.join(str_out_ports)
 

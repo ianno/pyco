@@ -646,7 +646,7 @@ def process_model(spec_list, output_port_names,
     spec_contract = unconnected_spec.copy()
     working_specs = {s.unique_name: s.copy() for s in spec_list}
     spec_dict = {s.unique_name: s for s in spec_list}
-    parameters = {x.literal for c in relevant_contracts for x in c.output_ports_dict.values() if isinstance(x.l_type, FrozenVar)}
+    parameters = {x.literal for c in relevant_contracts for x in c.output_ports_dict.values() if isinstance(x.l_type, FrozenVar) and x in c.relevant_ports}
 
     partial_spec = False
     if len(output_port_names) != len(spec_contract.output_ports_dict):
@@ -654,6 +654,17 @@ def process_model(spec_list, output_port_names,
 
     # composition mapping to define new names
     # mapping = CompositionMapping(contracts| set([working_spec]))
+
+    parameters_by_contract = {}
+    for c in relevant_contracts:
+        p_set = set()
+
+        for port in c.output_ports_dict.values():
+            if port.literal in parameters:
+                p_set.add(port.literal)
+
+        parameters_by_contract[c] = p_set
+
 
     #uniform specs
     for ws in spec_dict.values():
@@ -865,6 +876,26 @@ def process_model(spec_list, output_port_names,
         no_conn = TrueFormula()
 
 
+
+    #process parameter constraints
+    params_constr = []
+    for c, lev in component_map.items():
+        if c in parameters_by_contract:
+            p_set = parameters_by_contract[c]
+
+            p_cond = []
+            for p in p_set:
+                p_cond.append(Equivalence(p, Constant(-1)))
+
+            if len(p_cond) > 0:
+                p_cond = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), p_cond)
+                p_cond = Implication(Equivalence(lev, Constant(-1)), p_cond)
+                params_constr.append(p_cond)
+    if len(params_constr) > 0:
+        params_f = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), params_constr)
+    else:
+        params_f = TrueFormula()
+
     # #process distinct ports
     # for p1, p2, in manager.library.distinct_ports_set:
     #     temp = process_distinct_lib_ports(p1, p2, var_map)
@@ -893,6 +924,7 @@ def process_model(spec_list, output_port_names,
     encoded_connections = preamble
     no_conn = Conjunction(no_conn, all_cond, merge_literals=False)
     preamble = Conjunction(preamble, no_conn, merge_literals=False)
+    preamble = Conjunction(preamble, params_f, merge_literals=False)
 
 
 
@@ -1371,13 +1403,17 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             if terminate_evt.is_set():
                 return False, None, None
 
-            cex_str_list = ['(%s)' % cex.generate(symbol_set=NusmvSymbolSet, prefix='%s.'%m.unique_name)
+            cex_str_list = ['(%s)' % cex.generate(symbol_set=NusmvSymbolSet,
+                                                  prefix='%s.'%m.unique_name,
+                                                  ignore_precedence=True)
                                     for m, cex in in_cex_dict.items()]
 
 
             cex_str = ' & '.join(cex_str_list)
 
-            checks_list = ['(%s)' % all_f.generate(symbol_set=NusmvSymbolSet, prefix='%s.'%m.unique_name)
+            checks_list = ['(%s)' % all_f.generate(symbol_set=NusmvSymbolSet,
+                                                   prefix='%s.'%m.unique_name,
+                                                  ignore_precedence=True)
                         for m in in_cex_dict]
 
             checks_str = ' | '.join(checks_list)
@@ -1392,7 +1428,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             if loc_c is not None:
                 left = Conjunction(loc_c, left, merge_literals=False)
 
-            left = left.generate(symbol_set=NusmvSymbolSet)
+            left = left.generate(symbol_set=NusmvSymbolSet, ignore_precedence=True)
 
             base_spec_str = '((' + left + ') & (%s))' % cex_str
             base_spec_str = base_spec_str + ' -> (%s)' % checks_str
@@ -1448,14 +1484,13 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             LOG.debug(param_assign)
 
 
-            locs = detect_reject_list(all_locs, location_vars, location_map,
+            locs, used_contracts = detect_reject_list(all_locs, location_vars, location_map,
                                       set(spec_contract.output_ports_dict.values()) & rel_spec_ports)
             LOG.debug(locs)
 
             LOG.debug(location_map)
 
             #which components are really used?
-            used_contracts = {inverse_location_vars[loc_var].contract for loc_var in locs}
             #remove spec from list
             used_contracts = used_contracts - {spec_contract}
 
@@ -1484,6 +1519,11 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                     connected_p = location_map[var][val]
                     constr.append(Globally(Equivalence(port.literal, connected_p.literal, merge_literals=False)))
 
+            # process parameters
+            for p, v in param_assign.items():
+                lconstr.append(Equivalence(p, Constant(v), merge_literals=False))
+                constr.append(Equivalence(p, Constant(v), merge_literals=False))
+            #done
 
             conn = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), constr)
             lconn = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), lconstr)
@@ -1496,30 +1536,21 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                 LOG.debug(all_cex)
                 conn = Conjunction(conn, all_cex, merge_literals=False)
 
-            conn = Conjunction(used_f, conn, merge_literals=False)
+            left = Conjunction(used_f, conn, merge_literals=False)
             # LOG.debug(conn)
             # LOG.debug(all_specs_formula)
 
-
-            #process parameters
-            param_constr = [TrueFormula()]
-            for p, v in param_assign.items():
-                param_constr.append(Equivalence(p, Constant(v), merge_literals=False))
-            param_f = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), param_constr)
-            # TODO: add tried parameter in the list of used connections in the next loop
-
-            #put it all together
-            left = Conjunction(conn, param_f, merge_literals=False)
-            passed, trace = verify_candidate(left, all_specs_formula)
-
+            # # TODO: print is destructive!
             # print_model(locs, inverse_location_vars, location_map, spec_contract, relevant_contracts, manager)
+
+            passed, trace = verify_candidate(left, all_specs_formula)
 
             if not passed:
                 # LOG.debug(trace)
                 # LOG.debug(input_variables)
                 # get counterexample for inputs
-                cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND*2)
-                fullcex, _ = derive_inputs_from_trace(trace, all_s_variables, max_horizon=NUXMV_BOUND*2)
+                cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
+                fullcex, _ = derive_inputs_from_trace(trace, all_s_variables, max_horizon=NUXMV_BOUND)
                 #full_in_cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
                 LOG.debug(cex)
                 LOG.debug(fullcex)
@@ -1569,7 +1600,6 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
                     if valid:
                         for c in in_cex_dict.values():
-                            LOG.debug(c)
                             cex_check = Implication(c, cex, merge_literals=False)
                             cex_p = verify_tautology(cex_check, return_trace=False)
                             if cex_p:
@@ -1633,11 +1663,8 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                     all_candidates = Disjunction(all_candidates, lconn, merge_literals=False)
 
 
-
-
             else:
-                just_conn = Conjunction(used_f, just_conn, merge_literals=False)
-                left = Conjunction(just_conn, param_f, merge_literals=False)
+                left = Conjunction(used_f, just_conn, merge_literals=False)
                 passed, trace = verify_candidate(left, all_specs_formula)
 
                 if not passed:
@@ -1682,6 +1709,7 @@ def detect_reject_list(location_vals, location_vars, location_map, spec_vars):
     port_list = set(spec_vars)
     seen = set()
     var_dict = {}
+    used_contracts = set()
 
     while len(port_list) > 0:
         port = port_list.pop()
@@ -1698,7 +1726,7 @@ def detect_reject_list(location_vals, location_vars, location_map, spec_vars):
                 other_p = location_map[l][val]
                 contract = other_p.contract
 
-                #connected_contracts.add(contract)
+                used_contracts.add(contract)
 
                 for iport in contract.input_ports_dict.values():
                     if iport not in var_dict:
@@ -1707,7 +1735,7 @@ def detect_reject_list(location_vals, location_vars, location_map, spec_vars):
         #     LOG.debug(port.unique_name)
         #     LOG.debug(port.contract)
 
-    return var_dict
+    return (var_dict, used_contracts)
 
 def verify_candidate(candidate, spec):
     '''verify whether a candidate is a good one'''

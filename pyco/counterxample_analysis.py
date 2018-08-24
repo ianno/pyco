@@ -15,7 +15,8 @@ from pycolite.formula import (Globally, Equivalence, Disjunction, Implication,
 from pycolite.symbol_sets import NusmvSymbolSet
 from pycolite.types import FrozenInt, Int, FrozenBool, FrozenVar
 from pycolite.nuxmv import (NuxmvRefinementStrategy, verify_tautology, verify_tautology_smv,
-                            ltl2smv, _process_var_decl, MODULE_TEMPLATE)
+                            ltl2smv, _process_var_decl, MODULE_TEMPLATE, derive_valuation_from_trace,
+                            trace_analysis_for_loc, build_module_from_trace)
 from pycolite.parser.parser import LTL_PARSER
 from pycolite.util.util import NUXMV_BOUND
 from multiprocessing import *
@@ -1251,13 +1252,14 @@ def build_smv_module(module_formula, parameters, prefix=None, include_formula=Tr
 
     return autsign, aut
 
-def build_smv_program(neg_autsign, neg_aut, pos_autsign, pos_aut, neg_ca_autsign, neg_ca_aut,
-                      variables, neg_module_instances, pos_module_instances,
-                      neg_ca_module_instances, spec_str):
+def build_smv_program(neg_autsign, neg_aut,
+                      variables, neg_module_instances, spec_str, cex_modules='', cex_name_list=None):
 
 
     lvars_str = _process_var_decl(variables)
 
+    if cex_name_list is None:
+        cex_name_list = []
 
     for v in neg_module_instances:
         inst = 'VAR %s: %s;' % (v.unique_name, neg_autsign)
@@ -1265,14 +1267,20 @@ def build_smv_program(neg_autsign, neg_aut, pos_autsign, pos_aut, neg_ca_autsign
         #inst = 'JUSTICE %s.%s;' % (v.unique_name, check_var.unique_name)
         #lvars_str = lvars_str + '\n' + inst
 
-    for v in pos_module_instances:
-        inst = 'VAR %s: %s;' % (v.unique_name, pos_autsign)
+
+    #create a one time use var
+    for c, v in zip(cex_name_list, neg_module_instances):
+        inst = 'VAR %s: %s(%s);' % (Literal('c').unique_name, c, v.unique_name)
         lvars_str = lvars_str + '\n' + inst
 
-
-    for v in neg_ca_module_instances:
-        inst = 'VAR %s: %s;' % (v.unique_name, neg_ca_autsign)
-        lvars_str = lvars_str + '\n' + inst
+    # for v in pos_module_instances:
+    #     inst = 'VAR %s: %s;' % (v.unique_name, pos_autsign)
+    #     lvars_str = lvars_str + '\n' + inst
+    #
+    #
+    # for v in neg_ca_module_instances:
+    #     inst = 'VAR %s: %s;' % (v.unique_name, neg_ca_autsign)
+    #     lvars_str = lvars_str + '\n' + inst
 
 
     #check formula
@@ -1281,13 +1289,13 @@ def build_smv_program(neg_autsign, neg_aut, pos_autsign, pos_aut, neg_ca_autsign
 
     base_module = MODULE_TEMPLATE % (lvars_str, spec_str)
 
-    module = neg_aut + '\n' + base_module
+    module = cex_modules + neg_aut + '\n' + base_module
 
     #module = pos_aut + '\n' + module
 
     #module = neg_ca_aut + '\n' + module
 
-    #LOG.debug(module)
+    LOG.debug(module)
 
     return module
 
@@ -1317,7 +1325,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
     candidate = None
     l_passed = False
-    in_cex_dict = {Literal('m'): TrueFormula()}
+    spec_instance_dict = {Literal('m'): TrueFormula()}
     # full_cex_dict = {Literal('w'): Negation(spec_contract.guarantee_formula)}
     full_cex_dict = {}
     full_neg_ca_cex_dict = {}
@@ -1331,6 +1339,8 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
     all_s_variables = all_s_variables & rel_spec_ports
     ntrace = trace = None
     param_list = [x for x in parameters]
+    all_cex_modules = ''
+    all_cex_names = set()
 
     total = 1
     for p in var_map:
@@ -1403,18 +1413,18 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             if terminate_evt.is_set():
                 return False, None, None
 
-            cex_str_list = ['(%s)' % cex.generate(symbol_set=NusmvSymbolSet,
-                                                  prefix='%s.'%m.unique_name,
-                                                  ignore_precedence=True)
-                                    for m, cex in in_cex_dict.items()]
-
-
-            cex_str = ' & '.join(cex_str_list)
+            # cex_str_list = ['(%s)' % cex.generate(symbol_set=NusmvSymbolSet,
+            #                                       prefix='%s.'%m.unique_name,
+            #                                       ignore_precedence=True)
+            #                         for m, cex in spec_instance_dict.items()]
+            #
+            #
+            # cex_str = ' & '.join(cex_str_list)
 
             checks_list = ['(%s)' % all_f.generate(symbol_set=NusmvSymbolSet,
                                                    prefix='%s.'%m.unique_name,
                                                   ignore_precedence=True)
-                        for m in in_cex_dict]
+                        for m in spec_instance_dict]
 
             checks_str = ' | '.join(checks_list)
 
@@ -1430,8 +1440,9 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
             left = left.generate(symbol_set=NusmvSymbolSet, ignore_precedence=True)
 
-            base_spec_str = '((' + left + ') & (%s))' % cex_str
-            base_spec_str = base_spec_str + ' -> (%s)' % checks_str
+            # base_spec_str = '((' + left + ') & (%s))' % cex_str
+            # base_spec_str = base_spec_str + ' -> (%s)' % checks_str
+            base_spec_str = "(%s) -> (%s)" % (left, checks_str)
 
 
             # #positive checks
@@ -1458,8 +1469,11 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             #
             #     base_spec_str = '(%s) | %s' % (base_spec_str, neg_ca_cex_str)
 
-            smv = build_smv_program(autsign, aut, None, None, None, None, location_vars.values()+lev_map.values()+param_list,
-                                    in_cex_dict.keys(), full_cex_dict.keys(), full_neg_ca_cex_dict.keys(), base_spec_str)
+            # smv = build_smv_program(autsign, aut, location_vars.values()+lev_map.values()+param_list,
+            #                         spec_instance_dict.keys(), base_spec_str)
+
+            smv = build_smv_program(autsign, aut, location_vars.values()+lev_map.values()+param_list,
+                                    spec_instance_dict.keys(), base_spec_str, all_cex_modules, all_cex_names)
 
             LOG.debug(smv)
             #l_passed, ntrace = verify_candidate(left, neg_formula)
@@ -1546,11 +1560,25 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             passed, trace = verify_candidate(left, all_specs_formula)
 
             if not passed:
-                # LOG.debug(trace)
+                LOG.debug(trace)
                 # LOG.debug(input_variables)
                 # get counterexample for inputs
-                cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
-                fullcex, _ = derive_inputs_from_trace(trace, all_s_variables, max_horizon=NUXMV_BOUND)
+                cex, _ = derive_valuation_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
+                fullcex, _ = derive_valuation_from_trace(trace, all_s_variables, max_horizon=NUXMV_BOUND)
+
+                cex_name = Literal('cex_inst').unique_name
+                cex_mod = build_module_from_trace(trace, input_variables, cex_name)
+
+                LOG.debug(cex_mod)
+                all_cex_modules += cex_mod
+                all_cex_names.add(cex_name)
+                if len(spec_instance_dict) == 1 and type(spec_instance_dict.values()[0]) is TrueFormula:
+                    spec_instance_dict[spec_instance_dict.keys()[0]] = cex
+                else:
+                    spec_instance_dict[Literal('m')] = cex
+
+                LOG.debug(trace)
+                LOG.debug(cex_mod)
                 #full_in_cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
                 LOG.debug(cex)
                 LOG.debug(fullcex)
@@ -1591,34 +1619,34 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
                 #DONE: add check to make sure cex is agreeing with spec assumptions. Sometimes it does not work...
 
-                #TODO: check what happens sometimes with recurrent cex. it should not happen to see the same cex multiple times
-                if cex is not None:
-                    cex_p = False
-                    #check this is not a spurious cex
-                    cex_check = Implication(cex, spec_contract.assume_formula, merge_literals=False)
-                    valid = verify_tautology(cex_check, return_trace=False)
-
-                    if valid:
-                        for c in in_cex_dict.values():
-                            cex_check = Implication(c, cex, merge_literals=False)
-                            cex_p = verify_tautology(cex_check, return_trace=False)
-                            if cex_p:
-                                LOG.debug('CEX already encoded')
-                                #assert False
-                                break
-                        if not cex_p and do_cex_checks:
-                            #if we have only the initial case, replace TRUE with the current CEX
-                            if len(in_cex_dict) == 1 and type(in_cex_dict.values()[0]) is TrueFormula:
-                                in_cex_dict[in_cex_dict.keys()[0]] = cex
-                            else:
-                                in_cex_dict[Literal('m')] = cex
-                            #in_cex_dict[Literal('m')] = cex
-                            generated_cex.add(cex)
-                            LOG.debug(len(in_cex_dict))
-                    else:
-                        LOG.debug('Spurious CEX')
-                        LOG.debug(cex)
-                        # cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND*2)
+                # #TODO: check what happens sometimes with recurrent cex. it should not happen to see the same cex multiple times
+                # if cex is not None:
+                #     cex_p = False
+                #     #check this is not a spurious cex
+                #     cex_check = Implication(cex, spec_contract.assume_formula, merge_literals=False)
+                #     valid = verify_tautology(cex_check, return_trace=False)
+                #
+                #     if valid:
+                #         for c in spec_instance_dict.values():
+                #             cex_check = Implication(c, cex, merge_literals=False)
+                #             cex_p = verify_tautology(cex_check, return_trace=False)
+                #             if cex_p:
+                #                 LOG.debug('CEX already encoded')
+                #                 #assert False
+                #                 break
+                #         if not cex_p and do_cex_checks:
+                #             #if we have only the initial case, replace TRUE with the current CEX
+                #             if len(spec_instance_dict) == 1 and type(spec_instance_dict.values()[0]) is TrueFormula:
+                #                 spec_instance_dict[spec_instance_dict.keys()[0]] = cex
+                #             else:
+                #                 spec_instance_dict[Literal('m')] = cex
+                #             #spec_instance_dict[Literal('m')] = cex
+                #             generated_cex.add(cex)
+                #             LOG.debug(len(spec_instance_dict))
+                #     else:
+                #         LOG.debug('Spurious CEX')
+                #         LOG.debug(cex)
+                #         # cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND*2)
 
                 # #check full check is false for spec
                 # fcex_check = Implication(fullcex, spec_contract.guarantee_formula, merge_literals=False)
@@ -1746,269 +1774,7 @@ def verify_candidate(candidate, spec):
 
     return l_passed, trace
 
-def derive_inputs_from_trace(trace, input_variables, max_horizon=None):
-    """
-    Derives a formula encoding the input sequence used in the trace
-    :param trace:
-    :param input_variables:
-    :return:
-    """
 
-    time_sequence = []
-    i = -1
-
-    unique_names = {p.unique_name: p for p in input_variables}
-
-    # LOG.debug(trace)
-    # LOG.debug(monitored_vars)
-
-    #create structure to record values
-
-    # #process only the first one
-    # p = monitored_vars.keys()[0]
-    # for p in input_variables:
-    #     # LOG.debug(p.base_name)
-    #     # LOG.debug(p.unique_name)
-    #     c_vars[p.unique_name]= None
-    #     var_assign[p] = set()
-    #
-    #     for v_p in input_variables[p]['ports']:
-    #         # LOG.debug(v_p.base_name)
-    #         # LOG.debug(v_p.unique_name)
-    #         c_vars[v_p.unique_name] = None
-    #         var_assign[p].add(v_p)
-
-
-    # LOG.debug(c_vars)
-    lines = trace.split('\n')
-
-    after_preamble = False
-    pre_trace = True
-    lasso_index = -1
-
-    for line in lines:
-        line = line.strip()
-
-        # LOG.debug(line)
-
-        ## Only if with coi
-        # if pre_trace:
-        #     if not line.startswith('-- Trace was successfully completed.'):
-        #         continue
-        #     else:
-        #         pre_trace = False
-        if not after_preamble:
-            if line.startswith('Trace Type: Counterexample'):
-                after_preamble = True
-                continue
-                # LOG.debug('after preamble')
-            continue
-        # done with the preamble
-        # analyze state by state
-        if line.startswith('->'):
-            i = i + 1
-            #time_sequence.append({})
-            if i == 0:
-                time_sequence.append({x: None for x in unique_names})
-            else:
-                time_sequence.append({x: time_sequence[i-1][x] for x in unique_names})
-
-            # new state, check consistency among vars
-            # LOG.debug(c_vars)
-            # for p in input_variables:
-            #
-            #     if i > 0:
-            #         time_sequence[i][p.unique_name] = time_sequence[i-1][p.unique_name]
-            #     else:
-            #         time_sequence[i][p.unique_name] = Constant(0)
-
-            # LOG.debug(diff)
-
-
-        elif line.startswith('--'):
-            if lasso_index > -1:
-                continue #already have a loop
-            # indicates loop in trace, skip line
-            lasso_index = i+1
-        else:
-            line_elems = line.split('=')
-            line_elems = [l.strip() for l in line_elems]
-
-            # LOG.debug(line_elems)
-            # LOG.debug(c_vars)
-
-            if line_elems[0] in unique_names:
-                # base_n = monitored_vars[line_elems[0]]
-
-                if line_elems[1] == 'TRUE':
-                    val = TrueFormula()
-                elif line_elems[1] == 'FALSE':
-                    val = FalseFormula()
-                else:
-                    try:
-                        val = int(line_elems[1])
-                    except ValueError:
-                        val = float(line_elems[1])
-
-                    val = Constant(val)
-
-                time_sequence[i][line_elems[0]] = val
-
-    # time_sequence = time_sequence[:-1]
-
-    formula_bits = []
-    for i in range(len(time_sequence)):
-
-        inner = []
-
-        for u_name, val in time_sequence[i].items():
-            inner.append(Equivalence(unique_names[u_name].literal, val, merge_literals=False))
-
-        if len(inner) > 0:
-            inner = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), inner)
-
-            for j in range(i):
-                inner = Next(inner)
-
-            formula_bits.append(inner)
-
-    # formula_bits has i elements. We need to replicate the lasso sequence
-    diff = len(formula_bits) - lasso_index
-    horizon = len(formula_bits)
-    # LOG.debug(trace)
-    LOG.debug(diff)
-
-    #include full loops. use max_horizon to figure out how many loops you need.
-    while diff > 0 and max_horizon is not None and horizon <= max_horizon:
-        partial = []
-        for j in range(diff, 0, -1):
-            partial.append(formula_bits[-j])
-        #add horizons
-
-        for j in range(len(partial)):
-            for h in range(diff):
-                partial[j] = Next(partial[j])
-
-        formula_bits += partial
-        horizon = len(formula_bits)
-
-        # if horizon > max_horizon+1:
-        #     formula_bits = formula_bits[:max_horizon+1]
-
-
-    try:
-        conj = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), formula_bits)
-    except TypeError:
-        formula = None
-    else:
-        # formula = Globally(Eventually(conj))
-        formula = conj
-
-
-    return formula, i
-
-def trace_analysis_for_loc(trace, vars):
-    """
-    Analyize the counterexample do derive location vars
-    :return:
-    :param trace:
-    :param checked_variables:
-    :return:
-    """
-    # diff = set()
-    # c_vars = {p.base_name: {} for p in monitored_vars.keys()}
-    #
-    # for u_name, b_name in monitored_vars.items():
-    #     c_vars[b_name][u_name] = None
-
-    c_vars = {}
-    var_assign = {}
-
-
-    for p in vars:
-        # LOG.debug(p.base_name)
-        # LOG.debug(p.unique_name)
-        c_vars[p.unique_name]= None
-
-
-
-
-    # LOG.debug(c_vars)
-    lines = trace.split('\n')
-
-    after_preamble = False
-    pre_trace = True
-
-    #seen = {p_name for p_name in c_vars}
-
-    for line in lines:
-        line = line.strip()
-        #
-        # LOG.debug(line)
-        # LOG.debug(seen)
-        if not pre_trace:
-            if not line.startswith('-- Trace was successfully completed.'):
-                continue
-            else:
-                pre_trace = True
-
-        if not after_preamble:
-            if not line.startswith('->'):
-                continue
-            else:
-                after_preamble = True
-                continue
-                # LOG.debug('after preamble')
-
-        # done with the preamble
-        # analyze state by state
-        if line.startswith('->'):
-            break
-        elif line.startswith('--'):
-            # indicates loop in trace, skip line
-            pass
-        else:
-            line_elems = line.split('=')
-            line_elems = [l.strip() for l in line_elems]
-
-            # LOG.debug(line_elems)
-            # LOG.debug(c_vars)
-
-            if line_elems[0] in c_vars:
-                # seen.add(line_elems[0])
-                # base_n = monitored_vars[line_elems[0]]
-
-                val = int(line_elems[1])
-                c_vars[line_elems[0]] = val
-
-
-    for v in vars:
-        var_assign[v] = c_vars[v.unique_name]
-
-    # for c in var_assign:
-    #     LOG.debug('**')
-    #     LOG.debug(c.base_name)
-    #     LOG.debug(c.unique_name)
-    #     assert len(var_assign[c])==1
-    #     for v in var_assign[c]:
-    #         LOG.debug('.')
-    #         LOG.debug(v.base_name)
-    #         LOG.debug(v.unique_name)
-
-
-    # #return assignement
-    # ret_assign = {}
-    #
-    # for p in var_assign:
-    #     orig_level, orig_port = monitored_vars[p]['orig']
-    #     ret_assign[(orig_level, orig_port)] = set()
-    #
-    #     for v in var_assign[p]:
-    #         origv_level, origv_port = monitored_vars[p]['ports'][v]
-    #         ret_assign[(orig_level, orig_port)].add((origv_level, origv_port))
-    #         break
-
-    return var_assign
 
 
 def assemble_checked_vars(trace_diff, monitored_vars, checked_vars):

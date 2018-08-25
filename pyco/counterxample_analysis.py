@@ -1373,7 +1373,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                 break
         LOG.debug("no preamble")
         LOG.debug(l_passed)
-        return l_passed, None, None
+        return l_passed, None, None, None
     else:
 
         # left = Conjunction(preamble, left_sides, merge_literals=False)
@@ -1408,10 +1408,26 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
         ##build neg assumpt automaton
         #neg_ca_autsign, neg_ca_aut = build_smv_module(neg_ca_formula, location_vars.values()+lev_map.values(), prefix='2')
 
+        # use_constraints = []
+        # for var in lev_map.values():
+        #     use_constraints.append(Equivalence(var, Constant(-1)))
+        #
+        # while len(use_constraints) > 0:
+        #     # start with only one
+        #     use_constraints = use_constraints[:-1]
+        #
+        #     if len(use_constraints) > 0:
+        #         use_cf = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), use_constraints)
+        #     else:
+        #         use_cf = None
+        #
+        #     LOG.debug("INCREASE SET")
+        #     LOG.debug(use_constraints)
+
 
         while True:
             if terminate_evt.is_set():
-                return False, None, None
+                return False, None, None, None
 
             # cex_str_list = ['(%s)' % cex.generate(symbol_set=NusmvSymbolSet,
             #                                       prefix='%s.'%m.unique_name,
@@ -1560,25 +1576,20 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
             passed, trace = verify_candidate(left, all_specs_formula)
 
             if not passed:
-                LOG.debug(trace)
+                # LOG.debug(trace)
                 # LOG.debug(input_variables)
                 # get counterexample for inputs
                 cex, _ = derive_valuation_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
                 fullcex, _ = derive_valuation_from_trace(trace, all_s_variables, max_horizon=NUXMV_BOUND)
 
-                cex_name = Literal('cex_inst').unique_name
-                cex_mod = build_module_from_trace(trace, input_variables, cex_name)
 
-                LOG.debug(cex_mod)
-                all_cex_modules += cex_mod
-                all_cex_names.add(cex_name)
-                if len(spec_instance_dict) == 1 and type(spec_instance_dict.values()[0]) is TrueFormula:
-                    spec_instance_dict[spec_instance_dict.keys()[0]] = cex
-                else:
-                    spec_instance_dict[Literal('m')] = cex
+                # if len(spec_instance_dict) == 1 and type(spec_instance_dict.values()[0]) is TrueFormula:
+                #     spec_instance_dict[spec_instance_dict.keys()[0]] = cex
+                # else:
+                #     spec_instance_dict[Literal('m')] = cex
 
-                LOG.debug(trace)
-                LOG.debug(cex_mod)
+                # LOG.debug(trace)
+                # LOG.debug(cex_mod)
                 #full_in_cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
                 LOG.debug(cex)
                 LOG.debug(fullcex)
@@ -1619,34 +1630,40 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
                 #DONE: add check to make sure cex is agreeing with spec assumptions. Sometimes it does not work...
 
-                # #TODO: check what happens sometimes with recurrent cex. it should not happen to see the same cex multiple times
-                # if cex is not None:
-                #     cex_p = False
-                #     #check this is not a spurious cex
-                #     cex_check = Implication(cex, spec_contract.assume_formula, merge_literals=False)
-                #     valid = verify_tautology(cex_check, return_trace=False)
-                #
-                #     if valid:
-                #         for c in spec_instance_dict.values():
-                #             cex_check = Implication(c, cex, merge_literals=False)
-                #             cex_p = verify_tautology(cex_check, return_trace=False)
-                #             if cex_p:
-                #                 LOG.debug('CEX already encoded')
-                #                 #assert False
-                #                 break
-                #         if not cex_p and do_cex_checks:
-                #             #if we have only the initial case, replace TRUE with the current CEX
-                #             if len(spec_instance_dict) == 1 and type(spec_instance_dict.values()[0]) is TrueFormula:
-                #                 spec_instance_dict[spec_instance_dict.keys()[0]] = cex
-                #             else:
-                #                 spec_instance_dict[Literal('m')] = cex
-                #             #spec_instance_dict[Literal('m')] = cex
-                #             generated_cex.add(cex)
-                #             LOG.debug(len(spec_instance_dict))
-                #     else:
-                #         LOG.debug('Spurious CEX')
-                #         LOG.debug(cex)
-                #         # cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND*2)
+                #TODO: check what happens sometimes with recurrent cex. it should not happen to see the same cex multiple times
+                if cex is not None:
+                    cex_p = False
+                    #check this is not a spurious cex
+                    cex_check = Implication(cex, spec_contract.assume_formula, merge_literals=False)
+                    valid = verify_tautology(cex_check, return_trace=False)
+
+                    if valid:
+                        for c in spec_instance_dict.values():
+                            cex_check = Implication(c, cex, merge_literals=False)
+                            cex_p = verify_tautology(cex_check, return_trace=False)
+                            if cex_p:
+                                LOG.debug('CEX already encoded')
+                                #assert False
+                                break
+                        if not cex_p and do_cex_checks:
+                            #if we have only the initial case, replace TRUE with the current CEX
+                            if len(spec_instance_dict) == 1 and type(spec_instance_dict.values()[0]) is TrueFormula:
+                                spec_instance_dict[spec_instance_dict.keys()[0]] = cex
+                            else:
+                                spec_instance_dict[Literal('m')] = cex
+                            #spec_instance_dict[Literal('m')] = cex
+                            generated_cex.add(cex)
+                            LOG.debug(len(spec_instance_dict))
+                            cex_name = Literal('cex_inst').unique_name
+                            cex_mod = build_module_from_trace(trace, input_variables, cex_name)
+
+                            LOG.debug(cex_mod)
+                            all_cex_modules += cex_mod
+                            all_cex_names.add(cex_name)
+                    else:
+                        LOG.debug('Spurious CEX')
+                        LOG.debug(cex)
+                        # cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND*2)
 
                 # #check full check is false for spec
                 # fcex_check = Implication(fullcex, spec_contract.guarantee_formula, merge_literals=False)

@@ -39,6 +39,7 @@ class SinglePortSolver(multiprocessing.Process):
         # set_option(proof=False)
 
         self.z3_interface = z3_interface
+        self.max_depth = z3_interface.max_depth
 
         self.semaphore = semaphore
 

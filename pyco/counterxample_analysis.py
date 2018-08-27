@@ -330,7 +330,9 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
                                                           preamble, left_sides,
                                                         var_map, lev_map, input_variables,
                                                           location_vars, location_map,
-                                                          terminate_evt, manager, relevant_contracts, parameters)
+                                                          terminate_evt, manager,
+                                                        relevant_contracts, parameters,
+                                                            max_depth=manager.max_depth)
     # LOG.debug(passed)
     # while not passed:
     #     #check again if terminate is set
@@ -807,8 +809,8 @@ def process_model(spec_list, output_port_names,
                     if port.contract in relevant_contracts:
                         if p.contract in relevant_contracts:
                             #add level vars
-                            #lev_c = Lt(component_map[p.contract], component_map[port.contract])
-                            lev_c = Geq(component_map[p.contract], Constant(0))
+                            lev_c = Lt(component_map[p.contract], component_map[port.contract]) #no loops
+                            # lev_c = Geq(component_map[p.contract], Constant(0)) #yes loops
                             #lev_c = Conjunction(lev_c, min_c, merge_literals=False)
                         # else:
                         #     #it's the spec
@@ -1312,8 +1314,9 @@ def reject_all_equivalent(locs, relevant_contracts, location_vars):
 def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                           ref_formulas, all_specs_formula, neg_formula, neg_check,
                           pos_formula, pos_check, neg_ca_formula, neg_ca_check,
-                          preamble, left_sides, var_map, lev_map, input_variables,
-                          location_vars, location_map, terminate_evt, manager, relevant_contracts, parameters):
+                          preamble, left_sides, var_map, component_map, input_variables,
+                          location_vars, location_map, terminate_evt, manager,
+                          relevant_contracts, parameters, max_depth=None):
     """
     verify refinement formula according to preamble
     :param ref_formula:
@@ -1378,18 +1381,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
         # left = Conjunction(preamble, left_sides, merge_literals=False)
         # autf = Conjunction(left, neg_formula, merge_literals=False)
-        LOG.debug(preamble)
-        LOG.debug(neg_formula)
 
-        left = Conjunction(preamble, left_sides, merge_literals=False)
-        all_f = Implication(left, neg_formula, merge_literals=False)
-        #all_f = Implication(left_sides, neg_formula, merge_literals=False)
-
-        # t,_ = verify_tautology(neg_formula)
-
-        #LOG.debug(all_f)
-        autsign, aut = build_smv_module(all_f, location_vars.values()+lev_map.values()+param_list,
-                                        prefix='0')
 
         loc_limits = []
         for loc, lmap in location_map.items():
@@ -1425,317 +1417,356 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
         #     LOG.debug(use_constraints)
 
 
-        while True:
-            if terminate_evt.is_set():
-                return False, None, None, None
+        curr_depth = 0
+        first_loop = True
 
-            # cex_str_list = ['(%s)' % cex.generate(symbol_set=NusmvSymbolSet,
-            #                                       prefix='%s.'%m.unique_name,
-            #                                       ignore_precedence=True)
-            #                         for m, cex in spec_instance_dict.items()]
-            #
-            #
-            # cex_str = ' & '.join(cex_str_list)
+        while first_loop or (max_depth is not None and curr_depth < max_depth):
+            first_loop = False
+            curr_depth += 1
 
-            checks_list = ['(%s)' % all_f.generate(symbol_set=NusmvSymbolSet,
-                                                   prefix='%s.'%m.unique_name,
-                                                  ignore_precedence=True)
-                        for m in spec_instance_dict]
+            depth_constr = []
+            depth_f = None
+            # define max depth
+            if max_depth is not None:
+                for v in component_map.values():
+                    depth_constr.append(Lt(v, Constant(curr_depth)))
 
-            checks_str = ' | '.join(checks_list)
+                depth_f = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), depth_constr)
 
-            #negate solutions already tried
-            if all_candidates is not None:
-                no_repeat = Negation(all_candidates)
-            else:
-                no_repeat = TrueFormula()
-
-            left = no_repeat
-            if loc_c is not None:
-                left = Conjunction(loc_c, left, merge_literals=False)
-
-            left = left.generate(symbol_set=NusmvSymbolSet, ignore_precedence=True)
-
-            # base_spec_str = '((' + left + ') & (%s))' % cex_str
-            # base_spec_str = base_spec_str + ' -> (%s)' % checks_str
-            base_spec_str = "(%s) -> (%s)" % (left, checks_str)
+            LOG.debug(preamble)
+            LOG.debug(neg_formula)
 
 
-            # #positive checks
-            # if len(full_cex_dict) > 0:
-            #     pos_cex_str_list = [(w, cex.generate(symbol_set=NusmvSymbolSet, prefix='%s.' % w.unique_name))
-            #                     for w, cex in full_cex_dict.items()]
-            #
-            #     pos_checks_list = ['((%s) -> %s)' % (cex_str, Globally(pos_check).generate(symbol_set=NusmvSymbolSet, prefix='%s.' % w.unique_name))
-            #                    for w, cex_str in pos_cex_str_list]
-            #
-            #     pos_cex_str = ' | '.join(pos_checks_list)
-            #
-            #     base_spec_str = '(%s) | %s' % (base_spec_str, pos_cex_str)
-            #
-            # # negative comp assumption bit
-            # if len(full_neg_ca_cex_dict) > 0:
-            #     neg_ca_cex_str_list = [(x, cex.generate(symbol_set=NusmvSymbolSet, prefix='%s.' % x.unique_name))
-            #                     for x, cex in full_neg_ca_cex_dict.items()]
-            #
-            #     neg_ca_checks_list = ['((%s) -> %s)' % (cex_str, Globally(neg_ca_check).generate(symbol_set=NusmvSymbolSet, prefix='%s.' % x.unique_name))
-            #                    for x, cex_str in neg_ca_cex_str_list]
-            #
-            #     neg_ca_cex_str = ' | '.join(neg_ca_checks_list)
-            #
-            #     base_spec_str = '(%s) | %s' % (base_spec_str, neg_ca_cex_str)
 
-            # smv = build_smv_program(autsign, aut, location_vars.values()+lev_map.values()+param_list,
-            #                         spec_instance_dict.keys(), base_spec_str)
+            left = Conjunction(preamble, left_sides, merge_literals=False)
 
-            smv = build_smv_program(autsign, aut, location_vars.values()+lev_map.values()+param_list,
-                                    spec_instance_dict.keys(), base_spec_str, all_cex_modules, all_cex_names)
 
-            LOG.debug(smv)
-            #l_passed, ntrace = verify_candidate(left, neg_formula)
-            # LOG.debug(ntrace)
-            l_passed, ntrace = verify_tautology_smv(smv, return_trace=True)
-            # LOG.debug(ntrace)
-            if l_passed:
-                # LOG.debug(smv)
-                # LOG.debug(cex)
+            if max_depth is not None:
+                left = Conjunction(depth_f, left, merge_literals=False)
+                LOG.debug("SOLVING FOR DEPTH %d" % curr_depth)
+
+            all_f = Implication(left, neg_formula, merge_literals=False)
+            # all_f = Implication(left_sides, neg_formula, merge_literals=False)
+
+            # t,_ = verify_tautology(neg_formula)
+
+            # LOG.debug(all_f)
+            autsign, aut = build_smv_module(all_f, location_vars.values() + component_map.values() + param_list,
+                                            prefix='0')
+
+
+            while True:
+                if terminate_evt.is_set():
+                    return False, None, None, None
+
+                # cex_str_list = ['(%s)' % cex.generate(symbol_set=NusmvSymbolSet,
+                #                                       prefix='%s.'%m.unique_name,
+                #                                       ignore_precedence=True)
+                #                         for m, cex in spec_instance_dict.items()]
+                #
+                #
+                # cex_str = ' & '.join(cex_str_list)
+
+                checks_list = ['(%s)' % all_f.generate(symbol_set=NusmvSymbolSet,
+                                                       prefix='%s.'%m.unique_name,
+                                                      ignore_precedence=True)
+                            for m in spec_instance_dict]
+
+                checks_str = ' | '.join(checks_list)
+
+                #negate solutions already tried
+                if all_candidates is not None:
+                    no_repeat = Negation(all_candidates)
+                else:
+                    no_repeat = TrueFormula()
+
+                left = no_repeat
+                if loc_c is not None:
+                    left = Conjunction(loc_c, left, merge_literals=False)
+
+                left = left.generate(symbol_set=NusmvSymbolSet, ignore_precedence=True)
+
+                # base_spec_str = '((' + left + ') & (%s))' % cex_str
+                # base_spec_str = base_spec_str + ' -> (%s)' % checks_str
+                base_spec_str = "(%s) -> (%s)" % (left, checks_str)
+
+
+                # #positive checks
+                # if len(full_cex_dict) > 0:
+                #     pos_cex_str_list = [(w, cex.generate(symbol_set=NusmvSymbolSet, prefix='%s.' % w.unique_name))
+                #                     for w, cex in full_cex_dict.items()]
+                #
+                #     pos_checks_list = ['((%s) -> %s)' % (cex_str, Globally(pos_check).generate(symbol_set=NusmvSymbolSet, prefix='%s.' % w.unique_name))
+                #                    for w, cex_str in pos_cex_str_list]
+                #
+                #     pos_cex_str = ' | '.join(pos_checks_list)
+                #
+                #     base_spec_str = '(%s) | %s' % (base_spec_str, pos_cex_str)
+                #
+                # # negative comp assumption bit
+                # if len(full_neg_ca_cex_dict) > 0:
+                #     neg_ca_cex_str_list = [(x, cex.generate(symbol_set=NusmvSymbolSet, prefix='%s.' % x.unique_name))
+                #                     for x, cex in full_neg_ca_cex_dict.items()]
+                #
+                #     neg_ca_checks_list = ['((%s) -> %s)' % (cex_str, Globally(neg_ca_check).generate(symbol_set=NusmvSymbolSet, prefix='%s.' % x.unique_name))
+                #                    for x, cex_str in neg_ca_cex_str_list]
+                #
+                #     neg_ca_cex_str = ' | '.join(neg_ca_checks_list)
+                #
+                #     base_spec_str = '(%s) | %s' % (base_spec_str, neg_ca_cex_str)
+
+                # smv = build_smv_program(autsign, aut, location_vars.values()+lev_map.values()+param_list,
+                #                         spec_instance_dict.keys(), base_spec_str)
+
+                smv = build_smv_program(autsign, aut, location_vars.values() + component_map.values() + param_list,
+                                        spec_instance_dict.keys(), base_spec_str, all_cex_modules, all_cex_names)
+
+                LOG.debug(smv)
+                #l_passed, ntrace = verify_candidate(left, neg_formula)
                 # LOG.debug(ntrace)
-                # LOG.debug(trace)
-                # LOG.debug(neg_formula)
-                return False, None, None, None
+                l_passed, ntrace = verify_tautology_smv(smv, return_trace=True)
+                # LOG.debug(ntrace)
+                if l_passed:
+                    # LOG.debug(smv)
+                    # LOG.debug(cex)
+                    # LOG.debug(ntrace)
+                    # LOG.debug(trace)
+                    # LOG.debug(neg_formula)
+                    break
+                    # return False, None, None, None
 
-            # LOG.debug(ntrace)
-            #analyze trace to derive possible solution
-            all_locs = trace_analysis_for_loc(ntrace, location_vars.values())
-            uses = trace_analysis_for_loc(ntrace, lev_map.values())
-            param_assign = trace_analysis_for_loc(ntrace, param_list)
-            LOG.debug(uses)
-            LOG.debug(all_locs)
-            LOG.debug(param_assign)
-
-
-            locs, used_contracts = detect_reject_list(all_locs, location_vars, location_map,
-                                      set(spec_contract.output_ports_dict.values()) & rel_spec_ports)
-            LOG.debug(locs)
-
-            LOG.debug(location_map)
-
-            #which components are really used?
-            #remove spec from list
-            used_contracts = used_contracts - {spec_contract}
-
-            really_used = {lev_map[c] for c in used_contracts}
-            used_f = []
-            for var, use in uses.items():
-                if var in really_used:
-                    used_f.append(Equivalence(var, Constant(use)))
-                else:
-                    used_f.append(Equivalence(var, Constant(-1)))
-            #done
-
-            if len(used_f) > 0:
-                used_f = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), used_f)
-            else:
-                used_f = TrueFormula()
-
-            # now check if this is a good solution indeed
-            constr = [TrueFormula()]
-            lconstr = [TrueFormula()]
-            for var, val in locs.items():
-                lconstr.append(Equivalence(var, Constant(val), merge_literals=False))
-                if val >= 0:
-                    # LOG.debug(location_map)
-                    port = inverse_location_vars[var]
-                    connected_p = location_map[var][val]
-                    constr.append(Globally(Equivalence(port.literal, connected_p.literal, merge_literals=False)))
-
-            # process parameters
-            for p, v in param_assign.items():
-                lconstr.append(Equivalence(p, Constant(v), merge_literals=False))
-                constr.append(Equivalence(p, Constant(v), merge_literals=False))
-            #done
-
-            conn = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), constr)
-            lconn = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), lconstr)
-            just_conn = conn
-            LOG.debug(just_conn)
-            #new cex
-            if len(generated_cex) > 0 and do_cex_checks:
-                all_cex = reduce(lambda x,y: Disjunction(x,y, merge_literals=False), generated_cex)
-                all_cex = Negation(all_cex)
-                LOG.debug(all_cex)
-                conn = Conjunction(conn, all_cex, merge_literals=False)
-
-            left = Conjunction(used_f, conn, merge_literals=False)
-            # LOG.debug(conn)
-            # LOG.debug(all_specs_formula)
-
-            # # TODO: print is destructive!
-            # print_model(locs, inverse_location_vars, location_map, spec_contract, relevant_contracts, manager)
-
-            passed, trace = verify_candidate(left, all_specs_formula)
-
-            if not passed:
-                # LOG.debug(trace)
-                # LOG.debug(input_variables)
-                # get counterexample for inputs
-                cex, _ = derive_valuation_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
-                fullcex, _ = derive_valuation_from_trace(trace, all_s_variables, max_horizon=NUXMV_BOUND)
+                # LOG.debug(ntrace)
+                #analyze trace to derive possible solution
+                all_locs = trace_analysis_for_loc(ntrace, location_vars.values())
+                uses = trace_analysis_for_loc(ntrace, component_map.values())
+                param_assign = trace_analysis_for_loc(ntrace, param_list)
+                LOG.debug(uses)
+                LOG.debug(all_locs)
+                LOG.debug(param_assign)
 
 
-                # if len(spec_instance_dict) == 1 and type(spec_instance_dict.values()[0]) is TrueFormula:
-                #     spec_instance_dict[spec_instance_dict.keys()[0]] = cex
-                # else:
-                #     spec_instance_dict[Literal('m')] = cex
+                locs, used_contracts = detect_reject_list(all_locs, location_vars, location_map,
+                                          set(spec_contract.output_ports_dict.values()) & rel_spec_ports)
+                LOG.debug(locs)
 
-                # LOG.debug(trace)
-                # LOG.debug(cex_mod)
-                #full_in_cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
-                LOG.debug(cex)
-                LOG.debug(fullcex)
-                #LOG.debug(full_in_cex)
+                LOG.debug(location_map)
 
-                # # PRINT
-                # n = 5
-                # if i >= n:
-                # #if l_passed:
-                # var_assign = {}
-                # for var, val in locs.items():
-                #     if val >= 0:
-                #         # LOG.debug(location_map)
-                #         port = inverse_location_vars[var]
-                #         connected_p = location_map[var][val]
-                #         var_assign[port.unique_name] = connected_p.unique_name
-                # LOG.debug(var_assign)
-                #
-                # composition, connected_spec, contract_inst = \
-                #     manager.build_composition_from_model(None, manager.spec_port_names,
-                #                                          relevant_contracts, var_assign)
-                #
-                # LOG.debug(connected_spec)
-                # from graphviz_converter import GraphizConverter
-                # graphviz_conv = GraphizConverter(connected_spec, composition, contract_inst,
-                #                                  filename='_'.join(manager.spec_port_names))
-                # graphviz_conv.generate_graphviz()
-                # graphviz_conv.view()
-                #
-                #     import time
-                #     time.sleep(10)
-                # if l_passed:
-                #     LOG.debug(smv)
-                #     return False, None, None
-                # #
-                # if i < n:
-                #     i += 1
+                #which components are really used?
+                #remove spec from list
+                used_contracts = used_contracts - {spec_contract}
 
-                #DONE: add check to make sure cex is agreeing with spec assumptions. Sometimes it does not work...
-
-                #TODO: check what happens sometimes with recurrent cex. it should not happen to see the same cex multiple times
-                if cex is not None:
-                    cex_p = False
-                    #check this is not a spurious cex
-                    cex_check = Implication(cex, spec_contract.assume_formula, merge_literals=False)
-                    valid = verify_tautology(cex_check, return_trace=False)
-
-                    if valid:
-                        for c in spec_instance_dict.values():
-                            cex_check = Implication(c, cex, merge_literals=False)
-                            cex_p = verify_tautology(cex_check, return_trace=False)
-                            if cex_p:
-                                LOG.debug('CEX already encoded')
-                                #assert False
-                                break
-                        if not cex_p and do_cex_checks:
-                            #if we have only the initial case, replace TRUE with the current CEX
-                            if len(spec_instance_dict) == 1 and type(spec_instance_dict.values()[0]) is TrueFormula:
-                                spec_instance_dict[spec_instance_dict.keys()[0]] = cex
-                            else:
-                                spec_instance_dict[Literal('m')] = cex
-                            #spec_instance_dict[Literal('m')] = cex
-                            generated_cex.add(cex)
-                            LOG.debug(len(spec_instance_dict))
-                            cex_name = Literal('cex_inst').unique_name
-                            cex_mod = build_module_from_trace(trace, input_variables, cex_name)
-
-                            LOG.debug(cex_mod)
-                            all_cex_modules += cex_mod
-                            all_cex_names.add(cex_name)
+                really_used = {component_map[c] for c in used_contracts}
+                used_f = []
+                for var, use in uses.items():
+                    if var in really_used:
+                        used_f.append(Equivalence(var, Constant(use)))
                     else:
-                        LOG.debug('Spurious CEX')
-                        LOG.debug(cex)
-                        # cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND*2)
+                        used_f.append(Equivalence(var, Constant(-1)))
+                #done
 
-                # #check full check is false for spec
-                # fcex_check = Implication(fullcex, spec_contract.guarantee_formula, merge_literals=False)
-                # fcex_p = verify_tautology(fcex_check, return_trace=False)
-                #
-                # if not fcex_p:
-                #     cex_p = False
-                #     for c in full_cex_dict.values():
-                #         cex_check = Implication(c, fullcex, merge_literals=False)
-                #         cex_p = verify_tautology(cex_check, return_trace=False)
-                #         if cex_p:
-                #             LOG.debug('redundant negative example')
-                #             break
-                #     if not cex_p:
-                #         full_cex_dict[Literal('w')] = fullcex
-                #         LOG.debug('adding negative example')
-                #         # LOG.debug(ft)
-                # # else:
-                # #     full_neg_ca_cex_dict[Literal('x')] = fullcex
-                # #     LOG.debug('adding positive input example')
-                #     # LOG.debug(ft)
-                # #generated_cex.add(cex)
-
-                    # #double check
-                    # if len(generated_cex) > 1:
-                    #     tt = lconn
-                    #
-                    #     for c in generated_cex - {cex}:
-                    #         tt = Conjunction(tt, c, merge_literals=False)
-                    #
-                    #     tt = Implication(tt, all_specs_formula, merge_literals=False)
-                    #
-                    #     p,t = verify_tautology(tt, return_trace=True)
-                    #
-                    #     LOG.debug(p)
-                    #     LOG.debug(t)
-                    #     assert p
-
-                if all_candidates is None:
-                    all_candidates = lconn
+                if len(used_f) > 0:
+                    used_f = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), used_f)
                 else:
-                    all_candidates = Disjunction(all_candidates, lconn, merge_literals=False)
+                    used_f = TrueFormula()
 
+                # now check if this is a good solution indeed
+                constr = [TrueFormula()]
+                lconstr = [TrueFormula()]
+                for var, val in locs.items():
+                    lconstr.append(Equivalence(var, Constant(val), merge_literals=False))
+                    if val >= 0:
+                        # LOG.debug(location_map)
+                        port = inverse_location_vars[var]
+                        connected_p = location_map[var][val]
+                        constr.append(Globally(Equivalence(port.literal, connected_p.literal, merge_literals=False)))
 
-            else:
-                left = Conjunction(used_f, just_conn, merge_literals=False)
+                # process parameters
+                for p, v in param_assign.items():
+                    lconstr.append(Equivalence(p, Constant(v), merge_literals=False))
+                    constr.append(Equivalence(p, Constant(v), merge_literals=False))
+                #done
+
+                conn = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), constr)
+                lconn = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), lconstr)
+                just_conn = conn
+                LOG.debug(just_conn)
+                #new cex
+                if len(generated_cex) > 0 and do_cex_checks:
+                    all_cex = reduce(lambda x,y: Disjunction(x,y, merge_literals=False), generated_cex)
+                    all_cex = Negation(all_cex)
+                    LOG.debug(all_cex)
+                    conn = Conjunction(conn, all_cex, merge_literals=False)
+
+                left = Conjunction(used_f, conn, merge_literals=False)
+                # LOG.debug(conn)
+                # LOG.debug(all_specs_formula)
+
+                # # TODO: print is destructive!
+                # print_model(locs, inverse_location_vars, location_map, spec_contract, relevant_contracts, manager)
+
                 passed, trace = verify_candidate(left, all_specs_formula)
 
                 if not passed:
-                    #do_cex_checks = False
-                    LOG.debug('No CEXs')
+                    # LOG.debug(trace)
+                    # LOG.debug(input_variables)
+                    # get counterexample for inputs
+                    cex, _ = derive_valuation_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
+                    fullcex, _ = derive_valuation_from_trace(trace, all_s_variables, max_horizon=NUXMV_BOUND)
+
+
+                    # if len(spec_instance_dict) == 1 and type(spec_instance_dict.values()[0]) is TrueFormula:
+                    #     spec_instance_dict[spec_instance_dict.keys()[0]] = cex
+                    # else:
+                    #     spec_instance_dict[Literal('m')] = cex
+
+                    # LOG.debug(trace)
+                    # LOG.debug(cex_mod)
+                    #full_in_cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
+                    LOG.debug(cex)
+                    LOG.debug(fullcex)
+                    #LOG.debug(full_in_cex)
+
+                    # # PRINT
+                    # n = 5
+                    # if i >= n:
+                    # #if l_passed:
+                    # var_assign = {}
+                    # for var, val in locs.items():
+                    #     if val >= 0:
+                    #         # LOG.debug(location_map)
+                    #         port = inverse_location_vars[var]
+                    #         connected_p = location_map[var][val]
+                    #         var_assign[port.unique_name] = connected_p.unique_name
+                    # LOG.debug(var_assign)
+                    #
+                    # composition, connected_spec, contract_inst = \
+                    #     manager.build_composition_from_model(None, manager.spec_port_names,
+                    #                                          relevant_contracts, var_assign)
+                    #
+                    # LOG.debug(connected_spec)
+                    # from graphviz_converter import GraphizConverter
+                    # graphviz_conv = GraphizConverter(connected_spec, composition, contract_inst,
+                    #                                  filename='_'.join(manager.spec_port_names))
+                    # graphviz_conv.generate_graphviz()
+                    # graphviz_conv.view()
+                    #
+                    #     import time
+                    #     time.sleep(10)
+                    # if l_passed:
+                    #     LOG.debug(smv)
+                    #     return False, None, None
+                    # #
+                    # if i < n:
+                    #     i += 1
+
+                    #DONE: add check to make sure cex is agreeing with spec assumptions. Sometimes it does not work...
+
+                    #TODO: check what happens sometimes with recurrent cex. it should not happen to see the same cex multiple times
+                    if cex is not None:
+                        cex_p = False
+                        #check this is not a spurious cex
+                        cex_check = Implication(cex, spec_contract.assume_formula, merge_literals=False)
+                        valid = verify_tautology(cex_check, return_trace=False)
+
+                        if valid:
+                            for c in spec_instance_dict.values():
+                                cex_check = Implication(c, cex, merge_literals=False)
+                                cex_p = verify_tautology(cex_check, return_trace=False)
+                                if cex_p:
+                                    LOG.debug('CEX already encoded')
+                                    #assert False
+                                    break
+                            if not cex_p and do_cex_checks:
+                                #if we have only the initial case, replace TRUE with the current CEX
+                                if len(spec_instance_dict) == 1 and type(spec_instance_dict.values()[0]) is TrueFormula:
+                                    spec_instance_dict[spec_instance_dict.keys()[0]] = cex
+                                else:
+                                    spec_instance_dict[Literal('m')] = cex
+                                #spec_instance_dict[Literal('m')] = cex
+                                generated_cex.add(cex)
+                                LOG.debug(len(spec_instance_dict))
+                                cex_name = Literal('cex_inst').unique_name
+                                cex_mod = build_module_from_trace(trace, input_variables, cex_name)
+
+                                LOG.debug(cex_mod)
+                                all_cex_modules += cex_mod
+                                all_cex_names.add(cex_name)
+                        else:
+                            LOG.debug('Spurious CEX')
+                            LOG.debug(cex)
+                            # cex, _ = derive_inputs_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND*2)
+
+                    # #check full check is false for spec
+                    # fcex_check = Implication(fullcex, spec_contract.guarantee_formula, merge_literals=False)
+                    # fcex_p = verify_tautology(fcex_check, return_trace=False)
+                    #
+                    # if not fcex_p:
+                    #     cex_p = False
+                    #     for c in full_cex_dict.values():
+                    #         cex_check = Implication(c, fullcex, merge_literals=False)
+                    #         cex_p = verify_tautology(cex_check, return_trace=False)
+                    #         if cex_p:
+                    #             LOG.debug('redundant negative example')
+                    #             break
+                    #     if not cex_p:
+                    #         full_cex_dict[Literal('w')] = fullcex
+                    #         LOG.debug('adding negative example')
+                    #         # LOG.debug(ft)
+                    # # else:
+                    # #     full_neg_ca_cex_dict[Literal('x')] = fullcex
+                    # #     LOG.debug('adding positive input example')
+                    #     # LOG.debug(ft)
+                    # #generated_cex.add(cex)
+
+                        # #double check
+                        # if len(generated_cex) > 1:
+                        #     tt = lconn
+                        #
+                        #     for c in generated_cex - {cex}:
+                        #         tt = Conjunction(tt, c, merge_literals=False)
+                        #
+                        #     tt = Implication(tt, all_specs_formula, merge_literals=False)
+                        #
+                        #     p,t = verify_tautology(tt, return_trace=True)
+                        #
+                        #     LOG.debug(p)
+                        #     LOG.debug(t)
+                        #     assert p
+
                     if all_candidates is None:
                         all_candidates = lconn
                     else:
                         all_candidates = Disjunction(all_candidates, lconn, merge_literals=False)
 
-                    continue
 
-                LOG.debug('FOUND')
-                var_assign = {}
-                for var, val in locs.items():
-                    if val >= 0:
-                        # LOG.debug(location_map)
-                        port = inverse_location_vars[var]
-                        connected_p = location_map[var][val]
-                        var_assign[port.unique_name] = connected_p.unique_name
-                LOG.debug(var_assign)
-                LOG.debug(param_assign)
-                return passed, conn, var_assign, param_assign
+                else:
+                    left = Conjunction(used_f, just_conn, merge_literals=False)
+                    passed, trace = verify_candidate(left, all_specs_formula)
+
+                    if not passed:
+                        #do_cex_checks = False
+                        LOG.debug('No CEXs')
+                        if all_candidates is None:
+                            all_candidates = lconn
+                        else:
+                            all_candidates = Disjunction(all_candidates, lconn, merge_literals=False)
+
+                        continue
+
+                    LOG.debug('FOUND')
+                    var_assign = {}
+                    for var, val in locs.items():
+                        if val >= 0:
+                            # LOG.debug(location_map)
+                            port = inverse_location_vars[var]
+                            connected_p = location_map[var][val]
+                            var_assign[port.unique_name] = connected_p.unique_name
+                    LOG.debug(var_assign)
+                    LOG.debug(param_assign)
+                    return passed, conn, var_assign, param_assign
 
 
-
+    return  False, None, None, None
     # return (l_passed, trace, checked_variables, monitored, model_map, contracts, composition,
     #         spec_contract, last_iteration)
 

@@ -245,7 +245,7 @@ class Z3Interface(object):
     def synthesize(self, specs,
                    distinct_spec_port_set=None,
                    limit=None,
-                   depth=4,
+                   max_depth=None,
                    minimize_components=False,
                    minimize_cost=False,
                    fixed_components=None,
@@ -286,8 +286,9 @@ class Z3Interface(object):
         else:
             self.max_components = limit
 
-        if depth is None:
-            depth = min(int(3* limit/spec_outs), limit)
+        # if depth is None:
+        #     depth = min(int(3* limit/spec_outs), limit)
+        self.max_depth = max_depth
 
 
         self.balance_max_types = set()

@@ -101,11 +101,27 @@ class FlipFlopOut(DigitalSignal):
     FlipFlop output
     '''
 
+class FlipFlopIn(DigitalSignal):
+    '''
+    FlipFlop output
+    '''
+
+class FlipFlopEn(DigitalSignal):
+    '''
+    FlipFlop output
+    '''
+
 class InternalCounter(IntegerSignal):
     '''
     FlipFlop output
     '''
 
+
+class CounterSignal(IntegerSignal):
+    '''
+    just an integer parameter
+    '''
+    pass
 
 #first spec
 class Spec(Contract):
@@ -138,14 +154,54 @@ class Spec1bit(Contract):
                    ('req', Req), ('clk', Clk),
                    ]
     OUTPUT_PORTS = [('adcbit_0', AdcBusLine),
-                    ('ready', FlipFlopOut)]
-    ASSUMPTIONS = '''!req & G(req -> (X !req & X2 !req & X3 !req & X4 !req & X5 !req  ))'''
-    GUARANTEES = '''G(req -> (X2 ! ready &  X3 !ready & X4 !ready & X5 ready ) &
+                    ('ready', DigitalSignal)]
+    ASSUMPTIONS = '''!req & G(req -> (X !req & X2 !req & X3 !req & X4 !req   ))'''
+    GUARANTEES = '''G(req -> (  X2 !ready & X3 !ready & X4 ready ) &
                     G(req -> (
-                              ( ((X5 adcbit_0) <-> anbit_0))  |
-                              ( ((X5 adcbit_0) <-> X anbit_0)  ) |
-                              ( ((X5 adcbit_0) <-> X2 anbit_0)  ) |
-                              ( ((X5 adcbit_0) <-> X3 anbit_0) ) 
+                              ( ((X4 adcbit_0) <-> anbit_0))  |
+                              ( ((X4 adcbit_0) <-> X anbit_0)  ) |
+                              ( ((X4 adcbit_0) <-> X2 anbit_0)  ) |
+                              ( ((X4 adcbit_0) <-> X3 anbit_0) ) 
+                             )
+                     )
+                     )
+                    '''
+    # ASSUMPTIONS = '''(req ) & G(req -> (!( X req))) & G(X!req -> X2(!req))'''
+    # GUARANTEES = '''G(req -> (X ! ready &  X2 !ready & X3ready ))
+    #               & G(req -> (
+    #                           ( ((X3 adcbit_0) <-> anbit_0))  |
+    #                           ( ((X3 adcbit_0) <-> X anbit_0)  ) |
+    #                           ( ((X3 adcbit_0) <-> X2 anbit_0)  )
+    #                          )
+    #                  )
+    #
+    #                 '''
+
+
+class Spec2bit(Contract):
+    '''
+    1 bit ADC
+    '''
+    INPUT_PORTS = [('anbit_0', AnalogDataBit),('anbit_1', AnalogDataBit),
+                   ('req', Req), ('clk', Clk),
+                   ]
+    OUTPUT_PORTS = [('adcbit_0', AdcBusLine),
+                    ('adcbit_1', AdcBusLine),
+                    ('ready', DigitalSignal)]
+    ASSUMPTIONS = '''!req & G(req -> (X !req & X2 !req & X3 !req & X4 !req   ))'''
+    GUARANTEES = '''G(req -> (  X2 !ready & X3 !ready & X4 ready ) &
+                    G(req -> (
+                              ( ((X4 adcbit_0) <-> anbit_0))  |
+                              ( ((X4 adcbit_0) <-> X anbit_0)  ) |
+                              ( ((X4 adcbit_0) <-> X2 anbit_0)  ) |
+                              ( ((X4 adcbit_0) <-> X3 anbit_0) ) 
+                             )
+                     )&
+                    G(req -> (
+                              ( ((X4 adcbit_1) <-> anbit_1))  |
+                              ( ((X4 adcbit_1) <-> X anbit_1)  ) |
+                              ( ((X4 adcbit_1) <-> X2 anbit_1)  ) |
+                              ( ((X4 adcbit_1) <-> X3 anbit_1) ) 
                              )
                      )
                      )
@@ -189,7 +245,7 @@ class Counter(Contract):
     N Counter
     '''
     INPUT_PORTS = [('reset', DigitalSignal), ('clk', Clk), ]
-    OUTPUT_PORTS = [('value', IntegerSignal), ('n', IntegerParameter),]
+    OUTPUT_PORTS = [('value', CounterSignal), ('n', IntegerParameter),]
     ASSUMPTIONS = '''true'''
     GUARANTEES = '''value = 0 &
                     G(reset -> X (value = 0)) &
@@ -252,7 +308,7 @@ class Comparator(Contract):
     '''
     N-based comparator
     '''
-    INPUT_PORTS = [('val_in', IntegerSignal), ('clk', Clk)]
+    INPUT_PORTS = [('val_in', CounterSignal), ('clk', Clk)]
     OUTPUT_PORTS = [('is_eq', DigitalSignal), ('n', IntegerParameter)]
     ASSUMPTIONS = '''true'''
     GUARANTEES = ''' G((val_in = n) -> is_eq) &
@@ -277,7 +333,7 @@ class Invert(Contract):
     INPUT_PORTS = [('in', DigitalSignal),]
     OUTPUT_PORTS = [('out', DigitalSignal),]
     ASSUMPTIONS = '''true'''
-    GUARANTEES = ''' G((out) <-> !in)'''
+    GUARANTEES = '''G((out) <-> !in)'''
     # GUARANTEES = ''' out = !in'''
 
 class FlipFlop(Contract):

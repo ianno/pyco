@@ -87,18 +87,22 @@ def spi_lib(counter, comparator, adc, flipflop, invert, counter_piece, accumulat
 
     library.add(counter, number_of_instances=2)
     library.add(comparator, number_of_instances=2)
-    library.add(adc, number_of_instances=1)
+    library.add(adc, number_of_instances=4)
     library.add(flipflop, number_of_instances=2)
-    library.add(invert, number_of_instances=1)
+    library.add(invert, number_of_instances=2)
     # library.add(counter_piece, number_of_instances=1)
     # library.add(accumulator, number_of_instances=1)
 
     # add type compatibilities
     library.add_type(FlipFlopOut)
+    # library.add_type(FlipFlopIn)
     library.add_type(AdcBusLine)
+    # library.add_type(Req)
     library.add_type(SPIMiso)
 
     library.add_type_compatibility(FlipFlopOut, AdcBusLine)
+    # library.add_type_compatibility(FlipFlopIn, Req)
+    # library.add_type_compatibility(FlipFlopIn, SPIMiso)
     library.add_type_compatibility(SPIMiso, AdcBusLine)
 
     return library
@@ -109,7 +113,8 @@ def test_adc1(spi_lib):
     Performs simple synthesis
     '''
 
-    spec1 = Spec1bit('G1')
+    # spec1 = Spec1bit('G1')
+    spec1 = Spec2bit('G1')
     # spec1 = Spec('G1')
     # spec1 = SpecIncremental('G1')
 
@@ -120,4 +125,5 @@ def test_adc1(spi_lib):
     # interface.use_connected_spec(adc, 'anbit_0', 'anbit_0')
 
 
-    interface.synthesize(limit=8, library_max_redundancy=1, decompose=False)
+    # interface.synthesize(limit=8, library_max_redundancy=1)
+    interface.synthesize(max_depth=4, library_max_redundancy=1, decompose=False)

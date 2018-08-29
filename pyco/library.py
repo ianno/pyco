@@ -10,7 +10,7 @@ from pycolite.attribute import Attribute
 
 from pyco.contract import (RefinementMapping, PortMappingError, PortMapping,
                            CompositionMapping, NotARefinementError, BaseTypeBool, BaseTypeInt,
-                            BaseTypeFloat, NotATypeError, ParameterInt)
+                            BaseTypeFloat, NotATypeError, ParameterInt, NotDeterministicError)
 from pyco import LOG
 from pyco.solver_interface import SMTManager
 
@@ -224,6 +224,24 @@ class ContractLibrary(object):
                 LOG.debug('in verify_library')
                 LOG.debug(error)
                 raise error
+
+
+    def verify_determinism(self, stop_if_fails=False):
+        '''
+        checks that all the contracts are deterministic
+        :return:
+        '''
+        for comp, c_list in self.components.items():
+            c = c_list[0]
+            passed, trace = c.is_deterministic(return_trace=True)
+
+            if passed:
+                LOG.debug("%s is deterministic" % c.base_name)
+            else:
+                LOG.debug("%s is NOT deterministic" % c.base_name)
+                LOG.debug(trace)
+                if stop_if_fails:
+                    raise NotDeterministicError(c)
 
     def __contains__(self, item):
         '''

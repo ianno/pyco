@@ -8,10 +8,11 @@
 '''
 
 from pycolite.contract import (Contract as BaseContract, PortMapping, CompositionMapping,
-                           RefinementMapping, NotARefinementError)
+                           RefinementMapping, NotARefinementError, NotDeterministicError)
 from pycolite.parser.lexer import BaseSymbolSet
 from pycolite.types import Bool, Int, Float, FrozenInt, FrozenBool
 from pyco import LOG
+import inspect
 
 LOG.debug('In contract.py')
 
@@ -77,8 +78,12 @@ class Contract(BaseContract):
                 else:
                     self.OUTPUT_PORTS[index] = (item, BaseTypeBool)
 
-        self.port_type = {t_elems[0]: t_elems[1] for t_elems
-                          in self.INPUT_PORTS + self.OUTPUT_PORTS}
+        self.port_type = {}
+        for t_elems in self.INPUT_PORTS + self.OUTPUT_PORTS:
+            if inspect.isclass(t_elems[1]):
+                self.port_type[t_elems[0]] = t_elems[1]
+            else:
+                self.port_type[t_elems[0]] = type(t_elems[1])
 
         # LOG.debug(self.port_type)
 

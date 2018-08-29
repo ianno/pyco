@@ -533,7 +533,7 @@ class SinglePortSolver(multiprocessing.Process):
         return dep
 
 
-    def build_composition_from_model(self, model, output_port_names, relevant_contracts, var_assign):
+    def build_composition_from_model(self, model, output_port_names, relevant_contracts, var_assign, build_copy=False):
         '''
         builds a contract composition out of a model
         :param output_port_name:
@@ -545,6 +545,36 @@ class SinglePortSolver(multiprocessing.Process):
 
         processed_ports = set()
         used_contracts = set()
+
+        #used for copies, maps to itself if not a copy
+        relevant_map = {c: c for c in relevant_contracts}
+
+        if build_copy:
+            relevant_copies = {x:x.copy() for x in relevant_contracts}
+            relevant_map = {p:c for c,p in relevant_copies.items()}
+
+            relevant_contracts = { c for c in relevant_copies.values()}
+
+            uname_map = {p.unique_name: relevant_copies[c].ports_dict[p.base_name].unique_name
+                         for c in relevant_copies for p in c.ports_dict.values()}
+
+            var_c = var_assign
+            var_assign = copy.deepcopy(var_c)
+
+            for un in var_c:
+                name = un
+                if un in uname_map:
+                    name = uname_map[un]
+                    var_assign[name] = var_c[un]
+                    del var_assign[un]
+
+
+                uun = var_c[un]
+                if uun in uname_map:
+                    var_assign[name] = uname_map[uun]
+
+
+
 
         mapping = CompositionMapping(relevant_contracts| {working_spec})
 
@@ -616,8 +646,8 @@ class SinglePortSolver(multiprocessing.Process):
                                 break
 
                     else:
-                        for conf in self.library.connection_map[c1]:
-                            if c2 in conf:
+                        for conf in self.library.connection_map[relevant_map[c1]]:
+                            if relevant_map[c2] in conf:
                                 for n2, p2 in c2.output_ports_dict.items():
                                     u2 = p2.unique_name
                                     if self.library.check_connectivity(p1, p2):

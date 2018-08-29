@@ -410,7 +410,7 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
     return passed
 
 
-def extract_model_connections(spec_contract, relevant_contracts, output_port_names, library):
+def extract_model_connections(spec_contract, relevant_contracts, output_port_names, library, manager):
     '''
     Extract possible connections form model
     :return:
@@ -439,6 +439,7 @@ def extract_model_connections(spec_contract, relevant_contracts, output_port_nam
 
     #now inter contract connections
     for ci in relevant_contracts:
+        # lev_map[ci] = Literal(ci.unique_name, l_type=FrozenInt(-1, manager.max_depth))
         lev_map[ci] = Literal(ci.unique_name, l_type=FrozenInt())
         for iport in ci.input_ports_dict.values():
             var_map[iport] = set()
@@ -717,7 +718,7 @@ def process_model(spec_list, output_port_names,
 
 
     var_map, component_map = extract_model_connections(spec_contract, relevant_contracts,
-                                                 output_port_names, library)
+                                                 output_port_names, library, manager)
 
 
 
@@ -776,6 +777,7 @@ def process_model(spec_list, output_port_names,
         p_map = []
 
         if port in port.contract.relevant_ports | rel_spec_ports:
+            # location_vars[port] = Literal('l', l_type=FrozenInt(-1, len(var_map[port])))
             location_vars[port] = Literal('l', l_type=FrozenInt())
             location_map[location_vars[port]] = {}
             if port.contract not in loc_by_contract:
@@ -809,7 +811,8 @@ def process_model(spec_list, output_port_names,
                     if port.contract in relevant_contracts:
                         if p.contract in relevant_contracts:
                             #add level vars
-                            lev_c = Lt(component_map[p.contract], component_map[port.contract]) #no loops
+                            # lev_c = Negation(Equivalence(component_map[p.contract], component_map[port.contract], merge_literals=False)) #no loops
+                            lev_c = Lt(component_map[p.contract], component_map[port.contract], merge_literals=False) #no loops
                             # lev_c = Geq(component_map[p.contract], Constant(0)) #yes loops
                             #lev_c = Conjunction(lev_c, min_c, merge_literals=False)
                         # else:
@@ -1601,7 +1604,6 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                 # LOG.debug(conn)
                 # LOG.debug(all_specs_formula)
 
-                # # TODO: print is destructive!
                 # print_model(locs, inverse_location_vars, location_map, spec_contract, relevant_contracts, manager)
 
                 passed, trace = verify_candidate(left, all_specs_formula)
@@ -1610,8 +1612,8 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                     # LOG.debug(trace)
                     # LOG.debug(input_variables)
                     # get counterexample for inputs
-                    cex, _ = derive_valuation_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND)
-                    fullcex, _ = derive_valuation_from_trace(trace, all_s_variables, max_horizon=NUXMV_BOUND)
+                    cex, _ = derive_valuation_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND*2)
+                    fullcex, _ = derive_valuation_from_trace(trace, all_s_variables, max_horizon=NUXMV_BOUND*2)
 
 
                     # if len(spec_instance_dict) == 1 and type(spec_instance_dict.values()[0]) is TrueFormula:
@@ -1852,6 +1854,7 @@ def print_model(locs, inverse_location_vars, location_map, spec_contract, releva
     calls graphviz and generate a graphical representation of the model
     :return:
     '''
+
     var_assign = {}
     for var, val in locs.items():
         if val >= 0:
@@ -1876,7 +1879,7 @@ def print_model(locs, inverse_location_vars, location_map, spec_contract, releva
 
     composition, connected_spec, contract_inst = \
         manager.build_composition_from_model(None, manager.spec_port_names,
-                                             relevant_contracts, var_assign)
+                                             relevant_contracts, var_assign, build_copy=True)
 
     LOG.debug(connected_spec)
     from graphviz_converter import GraphizConverter

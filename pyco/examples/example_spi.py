@@ -191,17 +191,40 @@ class Spec2bit(Contract):
     ASSUMPTIONS = '''!req & G(req -> (X !req & X2 !req & X3 !req & X4 !req   ))'''
     GUARANTEES = '''G(req -> (  X2 !ready & X3 !ready & X4 ready ) &
                     G(req -> (
-                              ( ((X4 adcbit_0) <-> anbit_0))  |
-                              ( ((X4 adcbit_0) <-> X anbit_0)  ) |
-                              ( ((X4 adcbit_0) <-> X2 anbit_0)  ) |
-                              ( ((X4 adcbit_0) <-> X3 anbit_0) ) 
+
+                              ( ((X4 adcbit_0) <-> X2 anbit_0) & ((X4 adcbit_1) <-> X2 anbit_1) )
                              )
-                     )&
+                     )
+                     )
+                     '''
+    # GUARANTEES = '''G(req -> (  X2 !ready & X3 !ready & X4 ready ) &
+    #                 G(req -> (
+    #                           ( ((X4 adcbit_0) <-> anbit_0) & ((X4 adcbit_1) <-> anbit_1) ) |
+    #                           ( ((X4 adcbit_0) <-> X anbit_0) & ((X4 adcbit_1) <-> X anbit_1) ) |
+    #                           ( ((X4 adcbit_0) <-> X2 anbit_0) & ((X4 adcbit_1) <-> X2 anbit_1) ) |
+    #                           ( ((X4 adcbit_0) <-> X3 anbit_0) & ((X4 adcbit_1) <-> X3 anbit_1) )
+    #                          )
+    #                  )
+    #                  )
+    #                 '''
+
+
+class Spec3bit(Contract):
+    '''
+    1 bit ADC
+    '''
+    INPUT_PORTS = [('anbit_0', AnalogDataBit), ('anbit_1', AnalogDataBit),
+                   ('anbit_2', AnalogDataBit), ('req', Req), ('clk', Clk),
+                   ]
+    OUTPUT_PORTS = [('adcbit_0', AdcBusLine),
+                    ('adcbit_1', AdcBusLine),
+                    ('adcbit_2', AdcBusLine),
+                    ('ready', DigitalSignal)]
+    ASSUMPTIONS = '''!req & G(req -> (X !req & X2 !req & X3 !req & X4 !req & X5 !req   ))'''
+    GUARANTEES = '''G(req -> (  X2 !ready & X3 !ready & X4 !ready  & X5 ready ) &
                     G(req -> (
-                              ( ((X4 adcbit_1) <-> anbit_1))  |
-                              ( ((X4 adcbit_1) <-> X anbit_1)  ) |
-                              ( ((X4 adcbit_1) <-> X2 anbit_1)  ) |
-                              ( ((X4 adcbit_1) <-> X3 anbit_1) ) 
+
+                              ( ((X5 adcbit_0) <-> X4 anbit_0) & ((X5 adcbit_1) <-> X4 anbit_1) & ((X5 adcbit_2) <-> X4 anbit_2))  
                              )
                      )
                      )
@@ -219,22 +242,24 @@ class SpecCounter(Contract):
                     '''
 
 #counter block
-class SpecIncremental(Contract):
-    '''
-    incremental spec
-    '''
+class Spec3Incr(Contract):
     '''
     1 bit ADC
     '''
-    INPUT_PORTS = [('anbit_0', AnalogDataBit),
-                   ('req', Req), ('clk', Clk),
+    INPUT_PORTS = [('anbit_0', AnalogDataBit), ('anbit_1', AnalogDataBit),
+                   ('anbit_2', AnalogDataBit), ('req', Req), ('clk', Clk),
                    ]
     OUTPUT_PORTS = [('adcbit_0', AdcBusLine),
+                    ('adcbit_1', AdcBusLine),
+                    ('adcbit_2', AdcBusLine),
                     ('ready', DigitalSignal)]
-    ASSUMPTIONS = ''' G(req -> (X !req & X2 !req & X3 !req & X4 !req  ) )'''
-    GUARANTEES = '''G(req ->   X3 !ready & X4 ready) &
-                    G( req -> ((X4 (adcbit_0) <->  anbit_0) 
-                              ) )
+    ASSUMPTIONS = '''!req & G(req -> (X !req & X2 !req & X3 !req & X4 !req    ))'''
+    GUARANTEES = '''G(req -> (  X2 !ready & X3 !ready & X4 ready ) &
+                    G(req -> (
+                              ( ((X4 adcbit_0) <-> X2 anbit_0) & ((X4 adcbit_1) <-> X2 anbit_1) & ((X4 adcbit_2) <-> X2 anbit_2))  
+                             )
+                     )
+                     )
                     '''
 
 
@@ -348,16 +373,52 @@ class FlipFlop(Contract):
                      G(!en -> (q <-> X q))
                     '''
 
+# class ADC2(Contract):
+#     '''
+#     an AD converter
+#     '''
+#     INPUT_PORTS = [('cs', DigitalSignal), ('clk', SPIClk), ('anbit_0', AnalogDataBit), ('anbit_1', AnalogDataBit)]
+#     OUTPUT_PORTS = [('miso', SPIMiso)]
+#     ASSUMPTIONS = '''G(cs -> (X !cs & X2 !cs ))'''
+#     GUARANTEES = ''' !miso &  (!cs -> X !miso) & G(cs -> ( anbit_0 <-> X miso)) &
+#                      G(cs -> ( anbit_1 <-> X2 miso))
+#                      & G((!cs & X!cs) -> (X2 ! miso))
+#                     '''
+
 class ADC2(Contract):
     '''
     an AD converter
     '''
     INPUT_PORTS = [('cs', DigitalSignal), ('clk', SPIClk), ('anbit_0', AnalogDataBit), ('anbit_1', AnalogDataBit)]
     OUTPUT_PORTS = [('miso', SPIMiso)]
-    ASSUMPTIONS = '''G(cs -> (X !cs & X2 !cs & X3 !cs & X4 !cs))'''
-    GUARANTEES = ''' !miso & G(cs -> ( anbit_0 <-> X miso)) &
-                     G(cs -> ( anbit_1 <-> X2 miso)) 
-                    '''
+    ASSUMPTIONS = '''!cs '''
+    GUARANTEES = ''' !miso & X !miso &
+                     G((!cs & X cs & X2 cs & X3 cs) -> ( X2 (miso) <-> X anbit_0)) &
+                     G((!cs & X cs & X2 cs & X3 cs) -> ( X3 (miso) <-> X anbit_1)) &
+                     G((!cs) -> (X(! miso) )) &
+                     G((!cs & X !cs & X2 !cs) -> (X2 (! miso) & X3 (! miso))) &
+                     G((cs & X cs & X2 cs & X3 cs) -> (X3 ( !miso))) &
+                     G((cs & (X !cs | X2 !cs | X3 !cs)) -> (X ( !miso)))
+                     '''
+
+class ADC3(Contract):
+    '''
+    an AD converter
+    '''
+    INPUT_PORTS = [('cs', DigitalSignal), ('clk', SPIClk),
+                   ('anbit_0', AnalogDataBit), ('anbit_1', AnalogDataBit), ('anbit_2', AnalogDataBit)]
+    OUTPUT_PORTS = [('miso', SPIMiso)]
+    ASSUMPTIONS = '''!cs '''
+    GUARANTEES = ''' !miso & X !miso &
+                     G((!cs & X cs & X2 cs & X3 cs & X4 cs) -> ( X2 (miso) <-> X anbit_0)) &
+                     G((!cs & X cs & X2 cs & X3 cs & X4 cs) -> ( X3 (miso) <-> X anbit_1)) &
+                     G((!cs & X cs & X2 cs & X3 cs & X4 cs) -> ( X4 (miso) <-> X anbit_2)) &
+                     G((!cs) -> (X(! miso) )) &
+                     G((!cs & X4 !cs) -> (X2 (! miso) & X3 (! miso) & X4 (! miso))) &
+                     G((cs & X cs & X2 cs & X3 cs & X4 cs) -> (X4 ( !miso))) &
+                     G((cs & (X !cs | X2 !cs | X3 !cs | X4 !cs)) -> (X ( !miso)))
+                     '''
+
 
 class ADC1(Contract):
     '''
@@ -365,8 +426,22 @@ class ADC1(Contract):
     '''
     INPUT_PORTS = [('cs', DigitalSignal), ('clk', SPIClk), ('anbit_0', AnalogDataBit)]
     OUTPUT_PORTS = [('miso', SPIMiso)]
-    ASSUMPTIONS = '''!cs & G(cs -> (X !cs & X2 !cs ))'''
-    GUARANTEES = ''' !miso & X !miso & 
-                     G(cs -> ( X2 (miso) <-> anbit_0)) &
-                     G(!cs -> (X2 (! miso)))
+    ASSUMPTIONS = '''!cs '''
+    GUARANTEES = ''' !miso & X !miso &
+                     G((!cs & X cs & X2 cs) -> ( X2 (miso) <-> X anbit_0)) &
+                     G((!cs) -> (X (! miso)))&
+                     G((!cs & X2 !cs) -> (X2 (! miso)))&
+                     G((cs & X cs) -> (X2 ( !miso)))
                     '''
+
+# class ADC1(Contract):
+#     '''
+#     an 1bit AD converter
+#     '''
+#     INPUT_PORTS = [('cs', DigitalSignal), ('clk', SPIClk), ('anbit_0', AnalogDataBit)]
+#     OUTPUT_PORTS = [('miso', SPIMiso)]
+#     ASSUMPTIONS = '''!cs & G(cs -> (X !cs & X2 !cs ))'''
+#     GUARANTEES = ''' !miso & X !miso &
+#                      G(cs -> ( X2 (miso) <-> anbit_0)) &
+#                      G(!cs -> (X2 (! miso)))
+#                     '''

@@ -37,6 +37,7 @@ class ContractLibrary(object):
         self.typeset.add(BaseTypeBool)
 
         self._type_compatibility_set = set()
+        self._type_incompatibility_set = set()
 
         self.hierarchy = {}
         self.refines = {}
@@ -123,6 +124,16 @@ class ContractLibrary(object):
             return set([(BaseTypeBool, BaseTypeBool)])
         else:
             return self._type_compatibility_set
+
+    @property
+    def type_incompatibility_set(self):
+        '''
+        Returns BaseTypeBool-BaseTypeBool if the set is empty
+        '''
+        if not self._type_incompatibility_set:
+            return set()
+        else:
+            return self._type_incompatibility_set
 
     def add(self, library_component, number_of_instances=2):
         '''
@@ -212,6 +223,25 @@ class ContractLibrary(object):
                 # self._type_compatibility_set.add((p_type, output_type))
                 self._type_compatibility_set.add((output_type, p_type))
 
+
+    def add_type_incompatibility(self, output_type, input_type):
+        '''
+        add a pair of incompatible types
+        '''
+        if (output_type not in self.typeset or
+            input_type not in self.typeset):
+            raise UndefinedTypeError((output_type, input_type))
+
+        self._type_incompatibility_set.add((output_type, input_type))
+        # self._type_compatibility_set.add((input_type, output_type))
+
+        #add incompatibility also for subclasses
+        for p_type in self.typeset:
+            if issubclass(p_type, output_type):
+                self._type_incompatibility_set.add((p_type, input_type))
+
+            # if issubclass(input_type, p_type):
+            #     self._type_incompatibility_set.add((output_type, p_type))
 
     def verify_library(self):
         '''
@@ -385,7 +415,8 @@ class ContractLibrary(object):
         '''
         if (((otype, itype) in self.type_compatibility_set)
                 or (otype == itype)
-                or (issubclass(otype, itype))):
+                or (issubclass(otype, itype))
+            and ((otype, itype) not in self.type_incompatibility_set)):
             return True
         else:
             return False

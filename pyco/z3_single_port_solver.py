@@ -33,13 +33,22 @@ class SinglePortSolver(multiprocessing.Process):
     def __init__(self, z3_interface, assertions,
                  context,
                  spec_port_names, semaphore, spec,
-                 minimize_components=False):
+                 minimize_components=False,
+                 distinct_spec_port_set=None,
+                 fixed_components=None,
+                 fixed_connections=None,
+                 fixed_connections_spec=None,
+                 result_queue=None,
+                 ):
 
         # set_option(verbose=15)
         # set_option(proof=False)
 
         self.z3_interface = z3_interface
         self.max_depth = z3_interface.max_depth
+
+        self.type_compatibility_set = z3_interface.type_compatibility_set
+        self.type_incompatibility_set = z3_interface.type_incompatibility_set
 
         self.semaphore = semaphore
 
@@ -60,6 +69,21 @@ class SinglePortSolver(multiprocessing.Process):
         self.specification_list = self.z3_interface.specification_list
 
         optimize = minimize_components
+
+        self.distinct_spec_port_set = {}
+        if distinct_spec_port_set is not None:
+            self.distinct_spec_port_set = distinct_spec_port_set
+
+        self.fixed_components = {}
+        if fixed_components is not None:
+            self.fixed_components = fixed_components
+
+        self.fixed_connections = {}
+        if fixed_connections is not None:
+            self.fixed_connections = fixed_connections
+        self.fixed_connections_spec = {}
+        if fixed_connections_spec is not None:
+            self.fixed_connections_spec = fixed_connections_spec
 
 
         self.solver = Solver(ctx=self.context)
@@ -83,6 +107,7 @@ class SinglePortSolver(multiprocessing.Process):
             self.obj_c = self.solver.minimize(Sum(self.lib_model.use_flags.values()))
 
 
+        self.result_queue = result_queue
         # set seed
         # self.solver.set('seed', 12345)
 
@@ -122,6 +147,7 @@ class SinglePortSolver(multiprocessing.Process):
                 (model, composition,
                  spec, contract_list, params_assign) = thread_manager.synthesize()
             except NotSynthesizableError:
+                self.result_queue.put(None)
                 raise
             else:
                 # LOG.info(model)
@@ -129,10 +155,20 @@ class SinglePortSolver(multiprocessing.Process):
                 #     LOG.debug(c)
                 # LOG.info(spec)
                 # LOG.info(composition)
-                from graphviz_converter import GraphizConverter
-                graphviz_conv = GraphizConverter(spec, composition, contract_list, parameters_values=params_assign, filename='_'.join(self.spec_port_names))
-                graphviz_conv.generate_graphviz()
-                graphviz_conv.view()
+
+                # from graphviz_converter import GraphizConverter
+                # graphviz_conv = GraphizConverter(spec, composition, contract_list, parameters_values=params_assign, filename='_'.join(self.spec_port_names))
+                # graphviz_conv.generate_graphviz()
+                # graphviz_conv.view()
+
+                from graphviz_converter import GraphCreator, GraphizConverter
+                graph = GraphCreator(spec, composition, contract_list, parameters_values=params_assign, filename='_'.join(self.spec_port_names))
+                graph = graph.generate_graph()
+
+                self.result_queue.put(graph)
+                gv = GraphizConverter.generate_graphviz_from_generic_graph(graph)
+                gv.view()
+
                 return model, composition, spec, contract_list, params_assign
 
                 # return model, composition, spec, contract_list
@@ -533,7 +569,7 @@ class SinglePortSolver(multiprocessing.Process):
         return dep
 
 
-    def build_composition_from_model(self, model, output_port_names, relevant_contracts, var_assign, build_copy=False):
+    def build_composition_from_model(self, model, output_port_names, relevant_contracts, var_assign, params=None, build_copy=False):
         '''
         builds a contract composition out of a model
         :param output_port_name:
@@ -572,6 +608,9 @@ class SinglePortSolver(multiprocessing.Process):
                 uun = var_c[un]
                 if uun in uname_map:
                     var_assign[name] = uname_map[uun]
+
+            if params is not None:
+                params = {uname_map[uname]: params[uname] for uname in params}
 
 
 
@@ -675,7 +714,11 @@ class SinglePortSolver(multiprocessing.Process):
                             processed_ports.add(p2)
                             break
 
-        relevant_contracts = used_contracts | self.retrieve_fixed_components()
+        if build_copy:
+            relevant_contracts = used_contracts | {relevant_copies[x] for x in self.retrieve_fixed_components()}
+        else:
+            relevant_contracts = used_contracts | self.retrieve_fixed_components()
+
         for c in relevant_contracts:
             for p in c.ports_dict.values():
                 if p not in processed_ports:
@@ -760,7 +803,11 @@ class SinglePortSolver(multiprocessing.Process):
         LOG.debug(composition)
         for c in relevant_contracts:
             LOG.debug(c)
-        return composition, spec, relevant_contracts
+
+        if params is None:
+            return composition, spec, relevant_contracts
+        else:
+            return composition, spec, relevant_contracts, params
 
 
 

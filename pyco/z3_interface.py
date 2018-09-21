@@ -19,6 +19,7 @@ from pyco.smt_factory import SMTModelFactory
 from pyco.z3_library_conversion import Z3Library
 from pyco.z3_single_port_solver import SinglePortSolver, NotSynthesizableError, OptimizationError
 from pyco.spec_decomposition import decompose_spec
+from pyco.graphviz_converter import GraphCreator, GraphizConverter
 
 # LOG = logging.getLogger()
 LOG.debug('in z3_interface')
@@ -39,6 +40,7 @@ class Z3Interface(object):
         self.library = library
         # selfeset = library.typeset
         self.type_compatibility_set = library.type_compatibility_set
+        self.type_incompatibility_set = library.type_incompatibility_set
 
         # constraints by components
         self.distinct_ports_by_component = {}
@@ -342,6 +344,8 @@ class Z3Interface(object):
         #create parallel solvers
         solvers = []
 
+        result_queue = multiprocessing.Queue()
+
         semaphore = multiprocessing.Semaphore(MAX_THREADS)
         for cluster in clusters:
         # for cluster in [['o1', 'o2', 'o3']]:
@@ -362,7 +366,13 @@ class Z3Interface(object):
             solver_p = SinglePortSolver(self, new_assertions, context,
                                         cluster, semaphore,
                                         self.spec,
-                                        minimize_components)
+                                        minimize_components=minimize_components,
+                                        distinct_spec_port_set=None,
+                                        fixed_components=self.fixed_components,
+                                        fixed_connections=self.fixed_connections,
+                                        fixed_connections_spec=self.fixed_connections_spec,
+                                        result_queue=result_queue,
+                                        )
 
             solvers.append(solver_p)
 

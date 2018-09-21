@@ -13,10 +13,10 @@ from pycolite.formula import (Globally, Equivalence, Disjunction, Implication,
                                 Constant, DoubleImplication, Eventually, Until, Le as Lt, Literal,
                                 Geq, Leq, Ge as Gt, Addition)
 from pycolite.symbol_sets import NusmvSymbolSet
-from pycolite.types import FrozenInt, Int, FrozenBool, FrozenVar
+from pycolite.types import FrozenInt, Int, FrozenBool, FrozenVar, Bool
 from pycolite.nuxmv import (NuxmvRefinementStrategy, verify_tautology, verify_tautology_smv,
                             ltl2smv, _process_var_decl, MODULE_TEMPLATE, derive_valuation_from_trace,
-                            trace_analysis_for_loc, build_module_from_trace)
+                            trace_analysis_for_loc, build_module_from_trace, NuxmvPathLoader)
 from pycolite.parser.parser import LTL_PARSER
 from pycolite.util.util import NUXMV_BOUND
 from multiprocessing import *
@@ -421,14 +421,14 @@ def extract_model_connections(spec_contract, relevant_contracts, output_port_nam
     var_map = {}
 
     #create contract level variables(use contract names)
-    lev_map = {}
+    component_map = {}
 
     #let's start with the spec
     for name in output_port_names:
         s_port = spec_contract.ports_dict[name]
         var_map[s_port] = set()
         #only output for spec
-        # lev_map[s_port] = Literal(s_port.contract.unique_name, l_type=FrozenInt())
+        # component_map[s_port] = Literal(s_port.contract.unique_name, l_type=FrozenInt())
 
         for c in relevant_contracts:
             for oport in c.output_ports_dict.values():
@@ -439,8 +439,8 @@ def extract_model_connections(spec_contract, relevant_contracts, output_port_nam
 
     #now inter contract connections
     for ci in relevant_contracts:
-        # lev_map[ci] = Literal(ci.unique_name, l_type=FrozenInt(-1, manager.max_depth))
-        lev_map[ci] = Literal(ci.unique_name, l_type=FrozenInt())
+        # component_map[ci] = Literal(ci.unique_name, l_type=FrozenInt(-1, manager.max_depth))
+        component_map[ci] = Literal(ci.unique_name.lower(), l_type=FrozenInt())
         for iport in ci.input_ports_dict.values():
             var_map[iport] = set()
 
@@ -458,17 +458,17 @@ def extract_model_connections(spec_contract, relevant_contracts, output_port_nam
 
         # #only for levels
         # for oport in ci.output_ports_dict.values():
-        #     lev_map[oport] = Literal(oport.contract.unique_name, l_type=FrozenInt())
+        #     component_map[oport] = Literal(oport.contract.unique_name, l_type=FrozenInt())
 
     # #merge all the lev vars for ports in the same contract
-    # l = lev_map.values()
+    # l = component_map.values()
     # for v in l:
     #     for v1 in l:
     #         if v.base_name == v1.base_name:
     #             v.merge(v1)
 
     #LOG.debug(var_map)
-    return var_map, lev_map
+    return var_map, component_map
 
 
 def process_distinct_lib_ports(port1, port2, var_map):
@@ -720,6 +720,10 @@ def process_model(spec_list, output_port_names,
     var_map, component_map = extract_model_connections(spec_contract, relevant_contracts,
                                                  output_port_names, library, manager)
 
+    all_components = {type(comp): [] for comp in component_map.keys()}
+
+    for c in component_map.keys():
+        all_components[type(c)].append(c)
 
 
     #composition names
@@ -766,6 +770,43 @@ def process_model(spec_list, output_port_names,
 
     # neg_formula = Negation(reduce(lambda x, y: Conjunction(x, y, merge_literals=False), ref_formulas))
 
+
+    #process use components:
+    #retrieve_component
+    alwais_use = {spec_contract: {}}
+    for inst, l in manager.fixed_components:
+        c = all_components[type(inst.contract)][l]
+
+        alwais_use[c] = {}
+
+    # connections to spec
+    for (inst, port_name, level, specport_name) in manager.fixed_connections_spec:
+        c = all_components[type(inst.contract)][level]
+
+        port = c.ports_dict[port_name]
+        s_port = spec_contract.ports_dict[specport_name]
+
+        if port.is_input and s_port.is_input:
+            alwais_use[c][port] = s_port
+        elif port.is_output and s_port.is_output and s_port.base_name in output_port_names:
+            alwais_use[spec_contract][s_port] = port
+
+    #connections among components
+    for (comp1, port1_name, level1, comp2, port2_name, level2) in manager.fixed_connections:
+        c1 = all_components[type(comp1.contract)][level1]
+        c2 = all_components[type(comp2.contract)][level2]
+
+        port1 = c1.ports_dict[port1_name]
+        port2 = c2.ports_dict[port2_name]
+
+
+        if port1.is_input and port2.is_output:
+            alwais_use[c1][port1] = port2
+        elif port1.is_output and port2.is_input:
+            alwais_use[c2][port2] = port1
+
+
+
     formulas = []
     location_vars = {}
     loc_by_contract = {}
@@ -773,6 +814,10 @@ def process_model(spec_list, output_port_names,
     inverse_location_vars = {}
 
     LOG.debug(component_map)
+
+    for c in component_map.values():
+        formulas.append(Geq(c, Constant(-1)))
+
     for port in var_map:
         p_map = []
 
@@ -786,19 +831,26 @@ def process_model(spec_list, output_port_names,
             count = 0
             #disconnected
             # #location_map[location_vars[port]][-1] = None
-            if port.contract in relevant_contracts:
-                inner = Leq(location_vars[port], Constant(-1), merge_literals=False)
-                inner = Conjunction(inner, Equivalence(component_map[port.contract], Constant(-1), merge_literals=False), merge_literals=False)
+            if port.contract in relevant_contracts and port.contract not in alwais_use:
+                inner = Equivalence(location_vars[port], Constant(-1), merge_literals=False)
+                inner = Conjunction(inner, Leq(component_map[port.contract], Constant(-1), merge_literals=False), merge_literals=False)
+
                 # #inner = Implication(inner, TrueFormula(), merge_literals=False)
                 p_map.append(inner)
+
+            if port.contract in alwais_use and port in alwais_use[port.contract]:
+                #remove all but the fix connection
+                var_map[port] = {alwais_use[port.contract][port]}
+
+
             for p in var_map[port]:
                 if p in p.contract.relevant_ports | rel_spec_ports:
                     if p.contract not in inverse_location_vars:
                         inverse_location_vars[p.contract] = {}
                     if p not in inverse_location_vars[p.contract]:
-                        inverse_location_vars[p.contract][p] = set()
+                        inverse_location_vars[p.contract][p] = {}
 
-                    inverse_location_vars[p.contract][p].add((count, location_vars[port]))
+                    inverse_location_vars[p.contract][p][location_vars[port]] = count
                     inner = Equivalence(location_vars[port], Constant(count), merge_literals=False)
 
                     if port.contract in component_map: #does not include spec
@@ -843,7 +895,7 @@ def process_model(spec_list, output_port_names,
             for p, pairs in c_map.items():
                 inner_fs = []
 
-                for count, loc in pairs:
+                for loc, count in pairs.items():
                     inner_fs.append(Negation(Equivalence(loc, Constant(count))))
 
                 if len(inner_fs) > 0:
@@ -870,9 +922,18 @@ def process_model(spec_list, output_port_names,
             for l in locs:
                 l_cond.append(Equivalence(l, Constant(-1)))
 
+            #set all ports to static
+            for port in c.ports_dict.values():
+                if isinstance(port.l_type, Int):
+                    l_cond.append(Globally(Equivalence(port.literal, Constant(0),
+                                                       merge_literals=False)))
+                elif isinstance(port.l_type, Bool):
+                    l_cond.append(Globally(Equivalence(port.literal, FalseFormula(),
+                                            merge_literals=False)))
+
             if len(l_cond) > 0:
                 l_cond = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), l_cond)
-                l_cond = Implication(Equivalence(lev, Constant(-1)), l_cond)
+                l_cond = Implication(Leq(lev, Constant(-1)), l_cond)
                 no_conn.append(l_cond)
 
 
@@ -883,24 +944,24 @@ def process_model(spec_list, output_port_names,
 
 
 
-    #process parameter constraints
-    params_constr = []
-    for c, lev in component_map.items():
-        if c in parameters_by_contract:
-            p_set = parameters_by_contract[c]
-
-            p_cond = []
-            for p in p_set:
-                p_cond.append(Equivalence(p, Constant(-1)))
-
-            if len(p_cond) > 0:
-                p_cond = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), p_cond)
-                p_cond = Implication(Equivalence(lev, Constant(-1)), p_cond)
-                params_constr.append(p_cond)
-    if len(params_constr) > 0:
-        params_f = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), params_constr)
-    else:
-        params_f = TrueFormula()
+    # #process parameter constraints
+    # params_constr = []
+    # for c, lev in component_map.items():
+    #     if c in parameters_by_contract:
+    #         p_set = parameters_by_contract[c]
+    #
+    #         p_cond = []
+    #         for p in p_set:
+    #             p_cond.append(Leq(p, Constant(0)))
+    #
+    #         if len(p_cond) > 0:
+    #             p_cond = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), p_cond)
+    #             p_cond = Implication(Equivalence(lev, Constant(-1)), p_cond)
+    #             params_constr.append(p_cond)
+    # if len(params_constr) > 0:
+    #     params_f = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), params_constr)
+    # else:
+    #     params_f = TrueFormula()
 
     # #process distinct ports
     # for p1, p2, in manager.library.distinct_ports_set:
@@ -912,6 +973,9 @@ def process_model(spec_list, output_port_names,
     #     temp = process_distinct_spec_ports(p1, p2, spec_contract, var_map)
     #     formulas.append(temp)
 
+
+
+
     left_sides = TrueFormula()
     preamble = TrueFormula()
 
@@ -922,15 +986,16 @@ def process_model(spec_list, output_port_names,
 
         left_sides = Conjunction(left_sides, composition.guarantee_formula, merge_literals=False)
 
-        for s in spec_dict.values():
-            left_sides = Conjunction(left_sides, s.assume_formula, merge_literals=False)
-            #break
+        # for s in spec_dict.values():
+        #     left_sides = Conjunction(left_sides, s.assume_formula, merge_literals=False)
+        #     #break
 
 
     encoded_connections = preamble
     no_conn = Conjunction(no_conn, all_cond, merge_literals=False)
     preamble = Conjunction(preamble, no_conn, merge_literals=False)
-    preamble = Conjunction(preamble, params_f, merge_literals=False)
+    # preamble = Conjunction(preamble, params_f, merge_literals=False)
+    # preamble = Conjunction(preamble, all_use_f, merge_literals=False)
 
 
 
@@ -960,14 +1025,14 @@ def process_model(spec_list, output_port_names,
         preamble = Conjunction(preamble, balance_f, merge_literals=False)
 
 
-    #add constraints for fixed components:
-    fix = []
-    for c in manager.retrieve_fixed_components():
-        fix.append(Geq(component_map[c], Constant(0), merge_literals=False))
-
-    if len(fix) > 0:
-        fix = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), fix)
-        preamble = Conjunction(preamble, fix, merge_literals=False)
+    # #add constraints for fixed components:
+    # fix = []
+    # for c in manager.retrieve_fixed_components():
+    #     fix.append(Geq(component_map[c], Constant(0), merge_literals=False))
+    #
+    # if len(fix) > 0:
+    #     fix = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), fix)
+    #     preamble = Conjunction(preamble, fix, merge_literals=False)
 
 
     left = Conjunction(preamble, left_sides, merge_literals=False)
@@ -1594,17 +1659,17 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                 just_conn = conn
                 LOG.debug(just_conn)
                 #new cex
-                if len(generated_cex) > 0 and do_cex_checks:
-                    all_cex = reduce(lambda x,y: Disjunction(x,y, merge_literals=False), generated_cex)
-                    all_cex = Negation(all_cex)
-                    LOG.debug(all_cex)
-                    conn = Conjunction(conn, all_cex, merge_literals=False)
+                # if len(generated_cex) > 0 and do_cex_checks:
+                #     all_cex = reduce(lambda x,y: Disjunction(x,y, merge_literals=False), generated_cex)
+                #     all_cex = Negation(all_cex)
+                #     LOG.debug(all_cex)
+                #     conn = Conjunction(conn, all_cex, merge_literals=False)
 
                 left = Conjunction(used_f, conn, merge_literals=False)
                 # LOG.debug(conn)
                 # LOG.debug(all_specs_formula)
 
-                # print_model(locs, inverse_location_vars, location_map, spec_contract, relevant_contracts, manager)
+                # print_model(locs, param_assign, inverse_location_vars, location_map, spec_contract, relevant_contracts, manager)
 
                 passed, trace = verify_candidate(left, all_specs_formula)
 
@@ -1612,8 +1677,8 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                     # LOG.debug(trace)
                     # LOG.debug(input_variables)
                     # get counterexample for inputs
-                    cex, _ = derive_valuation_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND*2)
-                    fullcex, _ = derive_valuation_from_trace(trace, all_s_variables, max_horizon=NUXMV_BOUND*2)
+                    cex, _ = derive_valuation_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND*1.5)
+                    fullcex, _ = derive_valuation_from_trace(trace, all_s_variables, max_horizon=NUXMV_BOUND*1.5)
 
 
                     # if len(spec_instance_dict) == 1 and type(spec_instance_dict.values()[0]) is TrueFormula:
@@ -1815,12 +1880,19 @@ def detect_reject_list(location_vals, location_vars, location_map, spec_vars):
 
     return (var_dict, used_contracts)
 
-def verify_candidate(candidate, spec):
+def verify_candidate(candidate, spec, no_loop=False):
     '''verify whether a candidate is a good one'''
 
     _candidate = Implication(candidate, spec, merge_literals=False)
 
-    l_passed, trace = verify_tautology(_candidate, return_trace=True)
+    if no_loop:
+        source = NuxmvPathLoader.get_source_path_noloop()
+    else:
+        source = NuxmvPathLoader.get_source_path()
+
+    l_passed, trace = verify_tautology(_candidate,
+                                       source_location=source,
+                                       return_trace=True)
 
     return l_passed, trace
 
@@ -1849,7 +1921,7 @@ def assemble_checked_vars(trace_diff, monitored_vars, checked_vars):
     return checked_vars
 
 
-def print_model(locs, inverse_location_vars, location_map, spec_contract, relevant_contracts, manager):
+def print_model(locs, param_assign, inverse_location_vars, location_map, spec_contract, relevant_contracts, manager):
     '''
     calls graphviz and generate a graphical representation of the model
     :return:
@@ -1864,6 +1936,8 @@ def print_model(locs, inverse_location_vars, location_map, spec_contract, releva
             var_assign[port.unique_name] = connected_p.unique_name
     LOG.debug(var_assign)
 
+    param_assign = {x.unique_name: v for x, v in param_assign.items()}
+
     # convert names in spec to original spec
     for name, port in spec_contract.ports_dict.items():
         uname = port.unique_name
@@ -1877,13 +1951,14 @@ def print_model(locs, inverse_location_vars, location_map, spec_contract, releva
                 if uname == var_assign[name]:
                     var_assign[name] = orig_port.base_name
 
-    composition, connected_spec, contract_inst = \
+    composition, connected_spec, contract_inst, param_assign = \
         manager.build_composition_from_model(None, manager.spec_port_names,
-                                             relevant_contracts, var_assign, build_copy=True)
+                                             relevant_contracts, var_assign, params=param_assign, build_copy=True)
 
     LOG.debug(connected_spec)
     from graphviz_converter import GraphizConverter
     graphviz_conv = GraphizConverter(connected_spec, composition, contract_inst,
+                                     parameters_values=param_assign,
                                      filename='_'.join(manager.spec_port_names))
     graphviz_conv.generate_graphviz()
     graphviz_conv.view()

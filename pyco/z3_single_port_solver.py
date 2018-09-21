@@ -166,8 +166,8 @@ class SinglePortSolver(multiprocessing.Process):
                 graph = graph.generate_graph()
 
                 self.result_queue.put(graph)
-                gv = GraphizConverter.generate_graphviz_from_generic_graph(graph)
-                gv.view()
+                # gv = GraphizConverter.generate_graphviz_from_generic_graph(graph)
+                # gv.view()
 
                 return model, composition, spec, contract_list, params_assign
 

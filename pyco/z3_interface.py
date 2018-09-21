@@ -383,6 +383,21 @@ class Z3Interface(object):
         for solv in solvers:
            solv.join()
 
+        #print
+        results = []
+        while not result_queue.empty():
+            results.append(result_queue.get_nowait())
+
+        if any([x is None for x in results]):
+            raise NotSynthesizableError
+
+
+        new_graph = GraphCreator.merge_graphs(results, '_'.join(self.spec.output_ports_dict.keys()))
+        gv = GraphizConverter.generate_graphviz_from_generic_graph(new_graph)
+        gv.view()
+
+
+
 
 
 SMTModelFactory.register(Z3Interface)

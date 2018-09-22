@@ -347,6 +347,9 @@ class Z3Interface(object):
         result_queue = multiprocessing.Queue()
 
         semaphore = multiprocessing.Semaphore(MAX_THREADS)
+
+        results = []
+
         for cluster in clusters:
         # for cluster in [['o1', 'o2', 'o3']]:
         # for cluster in [['c2','c3','c5','c6']]:
@@ -379,22 +382,27 @@ class Z3Interface(object):
             solver_p.start()
             # solver_p.join()
 
-        #wait for completion
-        for solv in solvers:
-           solv.join()
 
-        #print
-        results = []
-        while not result_queue.empty():
-            results.append(result_queue.get_nowait())
+        while len(results) < len(clusters):
+            results.append(result_queue.get())
+            if results[-1] is None:
+                break
 
         if any([x is None for x in results]):
             raise NotSynthesizableError
 
 
+        #print
+        LOG.debug("merging solutions...")
+
+
         new_graph = GraphCreator.merge_graphs(results, '_'.join(self.spec.output_ports_dict.keys()))
         gv = GraphizConverter.generate_graphviz_from_generic_graph(new_graph)
         gv.view()
+
+        #wait for clean exit
+        for solv in solvers:
+           solv.join()
 
 
 

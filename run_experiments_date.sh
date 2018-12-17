@@ -6,9 +6,9 @@ set -e
 #visualize with
 # tail -n -1 test_synth_6_10_dc_3_* | grep -Eo '[+-]?[0-9]+([.][0-9]+)+'
 
-EPS_TEST_20=false
+EPS_TEST_20=true
 EPS_TEST_40=false
-EPS_TEST_20_PLAIN=true
+EPS_TEST_20_PLAIN=false
 EPS_TEST_40_PLAIN=false
 
 START=1

@@ -160,38 +160,39 @@ class MultipleOutputProcessor(Process):
                     # (G(a1=a2 & b1!=b2 &...) | G(b1=b2 & a1!=a2 & ...)...) -> Spec ref. formula
 
 
-                    left_formula = []
-                    for pivot in unknowns:
-                        formula_l = [TrueFormula()]
-
-                        # formula_l.append(Negation(Globally(Equivalence(w_spec1.ports_dict[pivot].literal,
-                        #                                                w_spec2.ports_dict[pivot].literal,
-                        #                                                merge_literals=False)
-                        #                                    )
-                        #                           )
-                        #                  )
-
-                        for name in unknowns - {pivot}:
-                            formula_l.append(Globally(Equivalence(w_spec1.ports_dict[name].literal,
-                                                                  w_spec2.ports_dict[name].literal,
-                                                                  merge_literals=False)
-                                                      )
-                                             )
-
-                        formula = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), formula_l)
-
-                        left_formula.append(formula)
-
-                    formula = reduce(lambda x, y: Disjunction(x, y, merge_literals=False), left_formula)
+                    # left_formula = []
+                    # for pivot in unknowns:
+                    #     formula_l = [TrueFormula()]
+                    #
+                    #     # formula_l.append(Negation(Globally(Equivalence(w_spec1.ports_dict[pivot].literal,
+                    #     #                                                w_spec2.ports_dict[pivot].literal,
+                    #     #                                                merge_literals=False)
+                    #     #                                    )
+                    #     #                           )
+                    #     #                  )
+                    #
+                    #     for name in unknowns - {pivot}:
+                    #         formula_l.append(Globally(Equivalence(w_spec1.ports_dict[name].literal,
+                    #                                               w_spec2.ports_dict[name].literal,
+                    #                                               merge_literals=False)
+                    #                                   )
+                    #                          )
+                    #
+                    #     formula = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), formula_l)
+                    #
+                    #     left_formula.append(formula)
+                    #
+                    # formula = reduce(lambda x, y: Disjunction(x, y, merge_literals=False), left_formula)
 
                     # get refinement formula
                     verifier = NuxmvRefinementStrategy(composition)
 
                     ref_formula = verifier.get_refinement_formula(w_spec)
 
-                    formula = Implication(formula, ref_formula, merge_literals=False)
+                    # formula = Implication(formula, ref_formula, merge_literals=False)
+                    # l_passed, trace = verify_tautology(formula, return_trace=True)
 
-                    l_passed, trace = verify_tautology(formula, return_trace=True)
+                    l_passed, trace = verify_tautology(ref_formula, return_trace=True)
 
                     # LOG.debug(l_passed)
                     # LOG.debug(formula.generate())
@@ -212,6 +213,7 @@ class MultipleOutputProcessor(Process):
                         # LOG.debug(monitored)
                         # LOG.debug(trace)
                         diff = parse_counterexample(trace, monitored)
+                        # LOG.debug(diff)
 
                         assert len(diff) > 0
                         # LOG.debug(diff)
@@ -232,7 +234,61 @@ class MultipleOutputProcessor(Process):
         self.semaphore.release()
         return
 
-def decompose_spec(spec_list, library):
+def find_useless_inputs(contract, independent_outputs):
+    '''
+    identifies what inputs do not have any impact on the outputs.
+
+    :param contract:
+    :return:
+    '''
+
+    useless = set()
+
+    for pivot in contract.input_ports_dict:
+
+        alpha = contract.copy()
+        duplicate = contract.copy()
+
+
+        #add constraints which forces all the other ports to be the same?
+        bits = [TrueFormula()]
+        for name in independent_outputs:
+            p1 = alpha.output_ports_dict[name]
+            p2 = duplicate.output_ports_dict[name]
+
+            alpha.connect_to_port(p1, p2)
+
+        # connect all outputs
+        for name, out_port in alpha.output_ports_dict.items():
+            if name not in independent_outputs:
+                bits.append(Globally(Equivalence(out_port.literal, duplicate.output_ports_dict[name].literal, merge_literals=False)))
+
+        form = reduce(lambda x,y: Conjunction(x,y,merge_literals=False), bits)
+        print(form)
+
+        #connect all inputs - pivot
+        for name, in_port in alpha.input_ports_dict.items():
+            if name != pivot:
+                alpha.connect_to_port(in_port, duplicate.input_ports_dict[name])
+
+
+        verifier = NuxmvRefinementStrategy(duplicate)
+
+        ref_formula = verifier.get_refinement_formula(alpha)
+
+        formula = Implication(form, ref_formula, merge_literals=False)
+
+        l_passed, trace = verify_tautology(formula, return_trace=True)
+
+        if l_passed:
+            useless.add(pivot)
+
+
+    return useless
+
+
+
+def decompose_spec(spec_list, library=None):
     '''
     decompose specification in clusters of outputs
     :param spec_list:
@@ -259,31 +315,31 @@ def decompose_spec(spec_list, library):
             done.add(pivot_name)
 
 
-            for other_name in (unclustered - set([pivot_name])):
-
-                if library.check_connectivity(spec_root.ports_dict[pivot_name],
-                                              spec_root.ports_dict[other_name]):
-
-                    for spec in spec_list:
-                        w_spec = spec.copy()
-
-                        formula_r = Globally(Equivalence(w_spec.ports_dict[pivot_name].literal,
-                                                                          w_spec.ports_dict[other_name].literal,
-                                                                          merge_literals=False))
-
-                        guarantees = w_spec.guarantee_formula
-
-                        formula = Implication(guarantees, formula_r, merge_literals=False)
-
-                        l_passed = verify_tautology(formula, return_trace=False)
-
-                        if not l_passed:
-                            break
-
-
-                    if l_passed:
-                        cluster.add(other_name)
-                        done.add(other_name)
+            # for other_name in (unclustered - set([pivot_name])):
+            #
+            #     if library is None or library.check_connectivity(spec_root.ports_dict[pivot_name],
+            #                                   spec_root.ports_dict[other_name]):
+            #
+            #         for spec in spec_list:
+            #             w_spec = spec.copy()
+            #
+            #             formula_r = Globally(Equivalence(w_spec.ports_dict[pivot_name].literal,
+            #                                                               w_spec.ports_dict[other_name].literal,
+            #                                                               merge_literals=False))
+            #
+            #             guarantees = w_spec.guarantee_formula
+            #
+            #             formula = Implication(guarantees, formula_r, merge_literals=False)
+            #
+            #             l_passed = verify_tautology(formula, return_trace=False)
+            #
+            #             if not l_passed:
+            #                 break
+            #
+            #
+            #         if l_passed:
+            #             cluster.add(other_name)
+            #             done.add(other_name)
 
             init_clusters.append(cluster)
 
@@ -541,6 +597,15 @@ def decompose_spec(spec_list, library):
     clusters = [x for x in clusters if len(x) > 0]
 
     LOG.debug(clusters)
+
+    # #test useless inputs:
+    # for c in clusters:
+    #     useless = find_useless_inputs(spec_list[0], c)
+    #
+    #     print("relevant inputs for ")
+    #     print(c)
+    #     print(set(spec_list[0].input_ports_dict.keys()) - useless)
+
     # assert False
     # LOG.debug(unclustered)
     return clusters
@@ -602,8 +667,10 @@ def parse_counterexample(ctx_str, monitored_vars):
 
                 if line_elems[1] == 'TRUE':
                     val = True
-                else:
+                elif line_elems[1] == 'FALSE':
                     val = False
+                else:
+                    val = int(line_elems[1])
 
                 c_vars[base_n][line_elems[0]] = val
 

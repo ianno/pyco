@@ -1487,6 +1487,7 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
         curr_depth = 0
         first_loop = True
+        loop_counter = 0
 
         while first_loop or (max_depth is not None and curr_depth < max_depth):
             first_loop = False
@@ -1524,6 +1525,8 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
 
 
             while True:
+                loop_counter += 1
+
                 if terminate_evt.is_set():
                     return False, None, None, None
 
@@ -1821,6 +1824,10 @@ def exists_forall_learner(composition, spec_contract, rel_spec_ports,
                         continue
 
                     LOG.debug('FOUND')
+                    print('')
+                    print('loops until success:')
+                    print(loop_counter)
+
                     var_assign = {}
                     for var, val in locs.items():
                         if val >= 0:

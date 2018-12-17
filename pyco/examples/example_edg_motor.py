@@ -90,6 +90,7 @@ class PowerAdapter12V(Contract):
     '''
     INPUT_PORTS = []
     OUTPUT_PORTS = [('gnd', GND), ('vout', Voltage12V)]
+    GUARANTEES = '''G(gnd & vout)'''
 
 class PowerAdapter5V(Contract):
     '''
@@ -97,6 +98,7 @@ class PowerAdapter5V(Contract):
     '''
     INPUT_PORTS = []
     OUTPUT_PORTS = [('gnd', GND), ('vout', Voltage5V)]
+    GUARANTEES = '''G(gnd & vout)'''
 
 class DcDcConverter12_3(Contract):
     '''
@@ -104,6 +106,7 @@ class DcDcConverter12_3(Contract):
     '''
     INPUT_PORTS = [('gnd', GND), ('vin', Voltage12V)]
     OUTPUT_PORTS = [('vout', Voltage3V)]
+    GUARANTEES = '''G(vout)'''
 
 class DcDcConverter12_5(Contract):
     '''
@@ -111,6 +114,7 @@ class DcDcConverter12_5(Contract):
     '''
     INPUT_PORTS = [('gnd', GND), ('vin', Voltage12V)]
     OUTPUT_PORTS = [('vout', Voltage5V)]
+    GUARANTEES = '''G(vout)'''
 
 class SimpleMCU(Contract):
     '''
@@ -119,6 +123,26 @@ class SimpleMCU(Contract):
     INPUT_PORTS = [('gnd', GND), ('vin', Voltage3V), ('i1', IOPin3), ('i2', IOPin3)]
     OUTPUT_PORTS = [('o1', IOPin3), ('o2', IOPin3), ('o3', IOPin3), ('o4', IOPin3)]
 
+#non-deterministic
+# class SmallMCU(Contract):
+#     '''
+#     MCU
+#     '''
+#     INPUT_PORTS = [('gnd', GND), ('vin', Voltage3V), ('i1', IOPin3)]
+#     OUTPUT_PORTS = [('o1', IOPin3), ('o2', IOPin3), ('o3', IOPin3),
+#                     ('o11', IOPin3), ('o12', IOPin3), ('o13', IOPin3),
+#                     ('o21', IOPin3), ('o22', IOPin3), ('o23', IOPin3)]
+#     ASSUMPTIONS = '!i1'
+#     GUARANTEES = '''o1 & !o2 & !o3 &
+#                     G( (o1 & !i1 & X i1) -> (X !o1 & X o2 & X !o3)) &
+#                     G( (o1 & !i1 & X !i1) -> (X o1 & X !o2 & X !o3)) &
+#                     G( (o2 & !i1 & X i1) -> (X !o1 & X !o2 & X o3)) &
+#                     G( (o2 & !i1 & X !i1) -> (X !o1 & X o2 & X !o3)) &
+#                     G( (o3 & !i1 & X i1) -> (X o1 & X !o2 & X !o3)) &
+#                     G( (o3 & !i1 & X !i1) -> (X !o1 & X !o2 & X o3))
+#                  '''
+
+#deterministic
 class SmallMCU(Contract):
     '''
     MCU
@@ -129,13 +153,19 @@ class SmallMCU(Contract):
                     ('o21', IOPin3), ('o22', IOPin3), ('o23', IOPin3)]
     ASSUMPTIONS = '!i1'
     GUARANTEES = '''o1 & !o2 & !o3 &
+                    G( (i1 <-> X i1) -> ((X o1 <-> o1) & (X o2 <-> o2) & (X o3 <-> o3))) &
                     G( (o1 & !i1 & X i1) -> (X !o1 & X o2 & X !o3)) &
                     G( (o1 & !i1 & X !i1) -> (X o1 & X !o2 & X !o3)) &
+                    G( (o1 & i1 & X !i1) -> (X o1 & X !o2 & X !o3)) &
                     G( (o2 & !i1 & X i1) -> (X !o1 & X !o2 & X o3)) &
                     G( (o2 & !i1 & X !i1) -> (X !o1 & X o2 & X !o3)) &
+                    G( (o2 & i1 & X !i1) -> (X !o1 & X o2 & X !o3)) &
                     G( (o3 & !i1 & X i1) -> (X o1 & X !o2 & X !o3)) &
-                    G( (o3 & !i1 & X !i1) -> (X !o1 & X !o2 & X o3))
+                    G( (o3 & !i1 & X !i1) -> (X !o1 & X !o2 & X o3)) &
+                    G( (o3 & i1 & X !i1) -> (X !o1 & X !o2 & X o3)) &
+                    G(! (o11 | o12 | o13 | o21 | o22 | o23))
                  '''
+
 
 class MCU(Contract):
     '''

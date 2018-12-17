@@ -21,7 +21,7 @@ class ContractLibrary(object):
     Implementation of the library of contracts
     '''
 
-    def __init__(self, base_name, context=None):
+    def __init__(self, base_name, default_redundancy=None, context=None):
         '''
         initializer
         '''
@@ -31,6 +31,10 @@ class ContractLibrary(object):
         self.connection_map = {}
         self.depending_on = {}
         self.spec_out_map = {}
+
+        if default_redundancy is None:
+            default_redundancy = 1
+        self.default_redundancy = default_redundancy
 
         #type structures
         self.typeset = set()
@@ -135,10 +139,14 @@ class ContractLibrary(object):
         else:
             return self._type_incompatibility_set
 
-    def add(self, library_component, number_of_instances=2):
+    def add(self, library_component, number_of_instances=None):
         '''
         add a library_component to the library object
         '''
+
+        if number_of_instances is None:
+            number_of_instances = self.default_redundancy
+
         if library_component not in self.components:
             self.components[library_component] = []
             self.contract_map[library_component.contract.base_name] = library_component

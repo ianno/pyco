@@ -170,12 +170,12 @@ def edg_mlib_easy(simple_mcu, small_mcu,  mcu, dcdc3, dcdc5, power_generator12, 
 
 @pytest.fixture
 def edg_mlib_med(small_mcu, dcdc3, dcdc5, power_generator12, power_generator5,
-             half_bridge0, half_bridge1, half_bridge2):
+             half_bridge0, half_bridge1, half_bridge2, library_redundancy):
 
     '''
     returns a populated library
     '''
-    library = ContractLibrary('edg_motor_lib')
+    library = ContractLibrary('edg_motor_lib', default_redundancy=library_redundancy)
 
     #library.add(simple_mcu)
     library.add(small_mcu)
@@ -184,7 +184,7 @@ def edg_mlib_med(small_mcu, dcdc3, dcdc5, power_generator12, power_generator5,
     library.add(dcdc5)
     library.add(power_generator5)
     library.add(power_generator12)
-    library.add(half_bridge0, 3)
+    library.add(half_bridge0, 3*library_redundancy)
     # library.add(half_bridge1)
     # library.add(half_bridge2)
 
@@ -202,6 +202,7 @@ def edg_mlib_med(small_mcu, dcdc3, dcdc5, power_generator12, power_generator5,
     library.add_type(Voltage12V)
     library.add_type(GND)
 
+    # library.verify_determinism(stop_if_fails=True)
 
     return library
 

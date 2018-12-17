@@ -14,7 +14,7 @@ from pyco import LOG
 from counterxample_analysis import counterexample_analysis, parallel_solve
 import time
 
-MAX_THREADS = 1
+MAX_THREADS = 10
 
 #NotSynthesizableError = z3_interface.NotSynthesizableError
 
@@ -106,7 +106,16 @@ class ModelVerificationManager(object):
 
                     self.thread_pool = self.thread_pool - set([t for t in self.thread_pool if t.ident == pid])
 
-                (relevant, _) = self.solver_interface._infer_relevant_contracts(model, self.output_port_names)
+                # (relevant, _) = self.solver_interface._infer_relevant_contracts(model, self.output_port_names)
+
+                # NUXMV MOD
+                #return all contracts here
+                relevant = {x
+                 for x, m in self.solver_interface.lib_model.use_flags.items()}
+
+                print(len(relevant))
+                print(len(self.solver_interface.z3_interface.library.all_contracts))
+
                 reject_f = self.solver_interface.generate_reject_formula(relevant)
                 #new refinement checker
                 thread = RefinementChecker(model, self.output_port_names, relevant, self, self.found_refinement, self.found_refinement)
@@ -120,6 +129,10 @@ class ModelVerificationManager(object):
                 #now reject the model, to get a new candidate
                 LOG.debug(reject_f)
                 self.solver_interface.add_assertions(reject_f)
+
+                #NUXMV MOD
+                #quit
+                return self.quit(wait=True)
 
                 # with self.z3_lock:
                     #v2 works

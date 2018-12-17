@@ -145,7 +145,7 @@ class SlowGenerator(Contract):
     INPUT_PORTS = [('fail', ActiveGeneratorT)]
     OUTPUT_PORTS = [('c', ACGenContactorT)]
     ASSUMPTIONS = '!fail & G(fail -> X fail)'
-    GUARANTEES = 'c & G(fail -> X ! c) & G(!fail -> c)'
+    GUARANTEES = 'c & G(X fail -> X ! c) & G(!fail -> c)'
 
 class ACSingleBackup(Contract):
     '''

@@ -2,7 +2,7 @@ import logging
 import pdb
 
 LOG = logging.getLogger('pyco')
-LOG.setLevel(logging.DEBUG)
+LOG.setLevel(logging.WARNING)
 
 ch = logging.StreamHandler()
 #ch.setLevel(logging.DEBUG)

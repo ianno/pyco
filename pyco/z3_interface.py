@@ -335,7 +335,8 @@ class Z3Interface(object):
             clusters = decompose_spec(self.specification_list, self.library)
         else:
             clusters = [self.spec.output_ports_dict.keys()]
-            # LOG.debug(clusters)
+
+        print(clusters)
 
         if len(clusters) == 0:
             clusters.append([])
@@ -399,6 +400,7 @@ class Z3Interface(object):
         new_graph = GraphCreator.merge_graphs(results, '_'.join(self.spec.output_ports_dict.keys()))
         gv = GraphizConverter.generate_graphviz_from_generic_graph(new_graph)
         gv.view()
+        # gv.save()
 
         #wait for clean exit
         for solv in solvers:

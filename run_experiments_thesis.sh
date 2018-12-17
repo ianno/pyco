@@ -43,7 +43,6 @@ then
   eval "py.test --timeout=1000 -s pyco/tests/test_spi.py::test_adc2_int >> test_adc_int_2 2>&1" $AMP
   eval "py.test --timeout=1000 -s pyco/tests/test_spi.py::test_adc3_int >> test_adc_int_3 2>&1" $AMP
   eval "py.test --timeout=1000 -s pyco/tests/test_spi.py::test_adc4_int >> test_adc_int_4 2>&1" $AMP
-  #eval "py.test --timeout=1000 -s pyco/tests/test_spi.py::test_adc5_int >> test_adc_int_5 2>&1" $AMP
 fi
 
 if $SPI_SD

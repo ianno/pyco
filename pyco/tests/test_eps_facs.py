@@ -134,13 +134,15 @@ def dc_load():
 
 @pytest.fixture
 def ac_lib(abstr_gen, dumb_gen, std_gen, slow_gen, ac_single_back, ac_2_back,
-           ac_4_back, ac_4_back_alt, back_gen, ac_load):
+           ac_4_back, ac_4_back_alt, back_gen, ac_load, library_redundancy):
     '''
     returns a populated library with only the AC generators
     '''
-    library = ContractLibrary('gen_lib')
+    library = ContractLibrary('gen_lib', default_redundancy=library_redundancy)
 
-    #library.add(abstr_gen)
+    # library.add(abstr_gen)
+    library.add(dumb_gen) # add this instead of abstract
+
     library.add(dumb_gen)
     library.add(std_gen)
     library.add(slow_gen)
@@ -181,6 +183,8 @@ def ac_lib(abstr_gen, dumb_gen, std_gen, slow_gen, ac_single_back, ac_2_back,
 
     library.add_type_compatibility(GeneratorT, ACGenContactorT)
 
+    # library.verify_determinism(stop_if_fails=True)
+
     return library
 
 @pytest.fixture
@@ -193,6 +197,9 @@ def acdc_lib(ac_lib, dc_tie, dc_load):
     ac_lib.add(dc_tie)
 
     ac_lib.verify_library()
+
+    # print('verif')
+    # ac_lib.verify_determinism(stop_if_fails=True)
 
     return ac_lib
 

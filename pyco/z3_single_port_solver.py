@@ -150,11 +150,11 @@ class SinglePortSolver(multiprocessing.Process):
                 self.result_queue.put(None)
                 raise
             else:
-                # LOG.info(model)
-                # for c in contract_list:
-                #     LOG.debug(c)
-                # LOG.info(spec)
-                # LOG.info(composition)
+                LOG.info(model)
+                for c in contract_list:
+                    LOG.info(c)
+                LOG.info(spec)
+                LOG.info(composition)
 
                 # from graphviz_converter import GraphizConverter
                 # graphviz_conv = GraphizConverter(spec, composition, contract_list, parameters_values=params_assign, filename='_'.join(self.spec_port_names))

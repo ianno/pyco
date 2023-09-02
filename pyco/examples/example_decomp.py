@@ -61,3 +61,21 @@ class Sd(Contract):
                         ('d', BaseTypeInt), ('e', BaseTypeInt), ('f', BaseTypeInt)]
     ASSUMPTIONS = '''true'''
     GUARANTEES = '''G((a=b+1) & (b=c+1)) & G((d=e+1) & (e=f+1))'''
+
+class Sound0(Contract):
+    '''
+    base spec.
+    '''
+    INPUT_PORTS = ['p']
+    OUTPUT_PORTS = [ 'a', 'b', 'c',]
+    ASSUMPTIONS = '''true'''
+    GUARANTEES = '''G(p -> (a | (b & c)))'''
+
+class Sound1(Contract):
+    '''
+    base spec.
+    '''
+    INPUT_PORTS = ['p']
+    OUTPUT_PORTS = [ 'v', 't', 'w', 'z']
+    ASSUMPTIONS = '''true'''
+    GUARANTEES = '''G( (p -> X(v & !t) ) & (!p -> X(!v & t) ) & (v -> X(!w & z) ) & (!v -> X(w & !z) ) )'''

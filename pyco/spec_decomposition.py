@@ -11,7 +11,7 @@ from pycolite.formula import Globally, Equivalence, Disjunction, Implication, Ne
 from pycolite.nuxmv import NuxmvRefinementStrategy, verify_tautology
 from multiprocessing import Process, Queue, Semaphore
 
-MAX_PROCESSES = 10
+MAX_PROCESSES = 1
 
 
 class OutputProcessor(Process):
@@ -108,8 +108,8 @@ class MultipleOutputProcessor(Process):
             for spec in self.spec_list:
 
                 unknowns = set(spec.output_ports_dict.keys()) - done
-                # LOG.debug(unknowns)
-                # LOG.debug(cluster)
+                LOG.debug(unknowns)
+                LOG.debug(cluster)
 
                 if len(unknowns) == 0:
                     # we are done
@@ -194,7 +194,7 @@ class MultipleOutputProcessor(Process):
 
                     l_passed, trace = verify_tautology(ref_formula, return_trace=True)
 
-                    # LOG.debug(l_passed)
+                    LOG.debug(l_passed)
                     # LOG.debug(formula.generate())
 
                     if not l_passed:
@@ -207,13 +207,13 @@ class MultipleOutputProcessor(Process):
                             monitored[w_spec.ports_dict[name].unique_name] = name
 
                         # LOG.debug(composition)
-                        # LOG.debug(cluster)
-                        # LOG.debug(unknowns)
+                        LOG.debug(cluster)
+                        LOG.debug(unknowns)
                         # LOG.debug(done)
                         # LOG.debug(monitored)
-                        # LOG.debug(trace)
+                        LOG.debug(trace)
                         diff = parse_counterexample(trace, monitored)
-                        # LOG.debug(diff)
+                        LOG.debug(diff)
 
                         assert len(diff) > 0
                         # LOG.debug(diff)
@@ -437,7 +437,7 @@ def decompose_spec(spec_list, library=None):
         # everyone is done now
     while not res_queue.empty():
         (name, cluster) = res_queue.get_nowait()
-        # LOG.debug(cluster)
+        LOG.debug(cluster)
         clusters.append(set(cluster))
 
 

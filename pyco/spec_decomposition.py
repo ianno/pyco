@@ -11,7 +11,7 @@ from pycolite.formula import Globally, Equivalence, Disjunction, Implication, Ne
 from pycolite.nuxmv import NuxmvRefinementStrategy, verify_tautology
 from multiprocessing import Process, Queue, Semaphore
 
-MAX_PROCESSES = 1
+MAX_PROCESSES = 10
 
 
 class OutputProcessor(Process):
@@ -49,12 +49,6 @@ class OutputProcessor(Process):
             for name, in_port in w_spec.input_ports_dict.items():
                 w_spec.connect_to_port(in_port, w_spec1.input_ports_dict[name])
                 w_spec.connect_to_port(in_port, w_spec2.input_ports_dict[name])
-
-                # # add explicit naming
-                # mapping.add(w_spec1.input_ports_dict[name],
-                #             '1_' + name)
-                # mapping.add(w_spec2.input_ports_dict[name],
-                #             '2_' + name)
 
             # connect remaining outputs
             for name, out_port in w_spec.output_ports_dict.items():
@@ -100,7 +94,6 @@ class MultipleOutputProcessor(Process):
         # LOG.debug(pivot_name)
         cluster = {x for x in self.init_cluster}
         done = {x for x in self.init_cluster}
-        # done.add(self.pivot_name)
 
         while True:
             passed = True
@@ -114,11 +107,6 @@ class MultipleOutputProcessor(Process):
                 if len(unknowns) == 0:
                     # we are done
                     break
-                # elif len(unknowns) == 1:
-                #     # last one must go with the previous one
-                #     elem = unknowns.pop()
-                #     cluster.add(elem)
-                #     done.add(elem)
                 else:
 
                     # build composition
@@ -156,41 +144,10 @@ class MultipleOutputProcessor(Process):
                     # LOG.debug(w_spec1)
                     # LOG.debug(w_spec2)
 
-                    # add conditionals
-                    # (G(a1=a2 & b1!=b2 &...) | G(b1=b2 & a1!=a2 & ...)...) -> Spec ref. formula
-
-
-                    # left_formula = []
-                    # for pivot in unknowns:
-                    #     formula_l = [TrueFormula()]
-                    #
-                    #     # formula_l.append(Negation(Globally(Equivalence(w_spec1.ports_dict[pivot].literal,
-                    #     #                                                w_spec2.ports_dict[pivot].literal,
-                    #     #                                                merge_literals=False)
-                    #     #                                    )
-                    #     #                           )
-                    #     #                  )
-                    #
-                    #     for name in unknowns - {pivot}:
-                    #         formula_l.append(Globally(Equivalence(w_spec1.ports_dict[name].literal,
-                    #                                               w_spec2.ports_dict[name].literal,
-                    #                                               merge_literals=False)
-                    #                                   )
-                    #                          )
-                    #
-                    #     formula = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), formula_l)
-                    #
-                    #     left_formula.append(formula)
-                    #
-                    # formula = reduce(lambda x, y: Disjunction(x, y, merge_literals=False), left_formula)
-
                     # get refinement formula
                     verifier = NuxmvRefinementStrategy(composition)
 
                     ref_formula = verifier.get_refinement_formula(w_spec)
-
-                    # formula = Implication(formula, ref_formula, merge_literals=False)
-                    # l_passed, trace = verify_tautology(formula, return_trace=True)
 
                     l_passed, trace = verify_tautology(ref_formula, return_trace=True)
 
@@ -314,33 +271,6 @@ def decompose_spec(spec_list, library=None):
             cluster = {pivot_name}
             done.add(pivot_name)
 
-
-            # for other_name in (unclustered - set([pivot_name])):
-            #
-            #     if library is None or library.check_connectivity(spec_root.ports_dict[pivot_name],
-            #                                   spec_root.ports_dict[other_name]):
-            #
-            #         for spec in spec_list:
-            #             w_spec = spec.copy()
-            #
-            #             formula_r = Globally(Equivalence(w_spec.ports_dict[pivot_name].literal,
-            #                                                               w_spec.ports_dict[other_name].literal,
-            #                                                               merge_literals=False))
-            #
-            #             guarantees = w_spec.guarantee_formula
-            #
-            #             formula = Implication(guarantees, formula_r, merge_literals=False)
-            #
-            #             l_passed = verify_tautology(formula, return_trace=False)
-            #
-            #             if not l_passed:
-            #                 break
-            #
-            #
-            #         if l_passed:
-            #             cluster.add(other_name)
-            #             done.add(other_name)
-
             init_clusters.append(cluster)
 
     #done
@@ -349,77 +279,6 @@ def decompose_spec(spec_list, library=None):
     res_queue = Queue()
     pool = []
     semaphore = Semaphore(MAX_PROCESSES)
-    #
-    # for pivot_name in spec_outs_dict:
-    #     semaphore.acquire()
-    #     proc = OutputProcessor(pivot_name, spec_list, res_queue, semaphore)
-    #     proc.start()
-    #     pool.append(proc)
-    #
-    # for p in pool:
-    #     p.join()
-    #
-    # #everyone is done now
-    # while not res_queue.empty():
-    #     res = res_queue.get_nowait()
-    #     if res[1] is True:
-    #         clusters.append(set([res[0]]))
-    #     else:
-    #         unclustered.add(res[0])
-
-
-    # for pivot_name in spec_outs_dict:
-    #
-    #     print('\tprocessing port %s' % pivot_name)
-    #
-    #     passed = True
-    #     for spec in spec_list:
-    #
-    #         # build composition
-    #         w_spec = spec.copy()
-    #         w_spec1 = spec.copy()
-    #         w_spec2 = spec.copy()
-    #
-    #         mapping = CompositionMapping([w_spec1, w_spec2])
-    #
-    #         # connect pivot output port
-    #         w_spec.connect_to_port(w_spec.output_ports_dict[pivot_name],
-    #                                w_spec1.output_ports_dict[pivot_name])
-    #
-    #         # connect inputs
-    #         for name, in_port in w_spec.input_ports_dict.items():
-    #             w_spec.connect_to_port(in_port, w_spec1.input_ports_dict[name])
-    #             w_spec.connect_to_port(in_port, w_spec2.input_ports_dict[name])
-    #
-    #             # # add explicit naming
-    #             # mapping.add(w_spec1.input_ports_dict[name],
-    #             #             '1_' + name)
-    #             # mapping.add(w_spec2.input_ports_dict[name],
-    #             #             '2_' + name)
-    #
-    #         # connect remaining outputs
-    #         for name, out_port in w_spec.output_ports_dict.items():
-    #             # add explicit naming
-    #             mapping.add(w_spec1.output_ports_dict[name],
-    #                         '1_' + name)
-    #             mapping.add(w_spec2.output_ports_dict[name],
-    #                         '2_' + name)
-    #
-    #             if name != pivot_name:
-    #                 w_spec.connect_to_port(out_port, w_spec2.output_ports_dict[name])
-    #
-    #         # compose
-    #         composition = w_spec1.compose([w_spec2], composition_mapping=mapping)
-    #
-    #         passed &= composition.is_refinement(w_spec)
-    #
-    #         if not passed:
-    #             break
-    #
-    #     if passed:
-    #         clusters.append(set([pivot_name]))
-    #     else:
-    #         unclustered.add(pivot_name)
 
     # now process remaining unclustered elements, a bit slower.
     # we need to give a special input to the model checker,
@@ -440,145 +299,9 @@ def decompose_spec(spec_list, library=None):
         LOG.debug(cluster)
         clusters.append(set(cluster))
 
-
-
-        # # LOG.debug(pivot_name)
-        # cluster = set([pivot_name])
-        # done = set()
-        # done.add(pivot_name)
-        #
-        # while True:
-        #     passed = True
-        #
-        #     for spec in spec_list:
-        #
-        #         unknowns = set(spec_outs_dict.keys()) - done
-        #         # LOG.debug(unknowns)
-        #         # LOG.debug(cluster)
-        #
-        #         if len(unknowns) == 0:
-        #             # we are done
-        #             break
-        #         # elif len(unknowns) == 1:
-        #         #     # last one must go with the previous one
-        #         #     elem = unknowns.pop()
-        #         #     cluster.add(elem)
-        #         #     done.add(elem)
-        #         else:
-        #
-        #             # build composition
-        #             w_spec = spec.copy()
-        #             w_spec1 = spec.copy()
-        #             w_spec2 = spec.copy()
-        #
-        #             mapping = CompositionMapping([w_spec1, w_spec2])
-        #
-        #             # connect pivot output port
-        #             for name in cluster:
-        #                 w_spec.connect_to_port(w_spec.output_ports_dict[name],
-        #                                        w_spec1.output_ports_dict[name])
-        #
-        #             # connect inputs
-        #             for name, in_port in w_spec.input_ports_dict.items():
-        #                 w_spec.connect_to_port(in_port, w_spec1.input_ports_dict[name])
-        #                 w_spec.connect_to_port(in_port, w_spec2.input_ports_dict[name])
-        #
-        #             # connect remaining outputs
-        #             for name, out_port in w_spec.output_ports_dict.items():
-        #                 # add explicit naming
-        #                 mapping.add(w_spec1.output_ports_dict[name],
-        #                             '1_' + name)
-        #                 mapping.add(w_spec2.output_ports_dict[name],
-        #                             '2_' + name)
-        #
-        #                 if name not in cluster:
-        #                     w_spec.connect_to_port(out_port, w_spec2.output_ports_dict[name])
-        #
-        #             # compose
-        #             composition = w_spec1.compose([w_spec2], composition_mapping=mapping)
-        #
-        #             # LOG.debug(composition)
-        #             # LOG.debug(w_spec1)
-        #             # LOG.debug(w_spec2)
-        #
-        #             # add conditionals
-        #             # (G(a1=a2 & b1!=b2 &...) | G(b1=b2 & a1!=a2 & ...)...) -> Spec ref. formula
-        #
-        #
-        #             left_formula = []
-        #             for pivot in unknowns:
-        #                 formula_l = []
-        #
-        #                 formula_l.append(Negation(Globally(Equivalence(w_spec1.ports_dict[pivot].literal,
-        #                                                             w_spec2.ports_dict[pivot].literal,
-        #                                                             merge_literals=False)
-        #                                                    )
-        #                                           )
-        #                                  )
-        #
-        #                 for name in unknowns - {pivot}:
-        #                     formula_l.append(Globally(Equivalence(w_spec1.ports_dict[name].literal,
-        #                                                           w_spec2.ports_dict[name].literal,
-        #                                                           merge_literals=False)
-        #                                                   )
-        #                                      )
-        #
-        #                 formula = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), formula_l)
-        #
-        #                 left_formula.append(formula)
-        #
-        #             formula = reduce(lambda x, y: Disjunction(x, y, merge_literals=False), left_formula)
-        #
-        #             # get refinement formula
-        #             verifier = NuxmvRefinementStrategy(composition)
-        #
-        #             ref_formula = verifier.get_refinement_formula(w_spec)
-        #
-        #             formula = Implication(formula, ref_formula, merge_literals=False)
-        #
-        #             l_passed, trace = verify_tautology(formula, return_trace=True)
-        #
-        #             # LOG.debug(l_passed)
-        #             # LOG.debug(formula.generate())
-        #
-        #             if not l_passed:
-        #
-        #                 #build monitored vars dict
-        #                 monitored = {}
-        #
-        #                 for name in unknowns:
-        #                     monitored[composition.ports_dict['1_' + name].unique_name] = name
-        #                     monitored[w_spec.ports_dict[name].unique_name] = name
-        #
-        #                 # LOG.debug(composition)
-        #                 # LOG.debug(cluster)
-        #                 # LOG.debug(unknowns)
-        #                 # LOG.debug(done)
-        #                 # LOG.debug(monitored)
-        #                 # LOG.debug(trace)
-        #                 diff = parse_counterexample(trace, monitored)
-        #
-        #                 assert len(diff) > 0
-        #                 LOG.debug(diff)
-        #                 for elem in diff:
-        #                     cluster.add(elem)
-        #                     done.add(elem)
-        #
-        #             passed &= l_passed
-        #
-        #     #go out of the while loop
-        #     if passed:
-        #         break
-        #
-        # assert len(cluster) > 1
-        #
-        # # LOG.debug(cluster)
-        # clusters.append(cluster)
-
     assert set([x for cluster in clusters for x in cluster]).issuperset(unclustered)
 
     #postprocessing, merge clusters with elements in common
-
 
     mods = True
     while mods:
@@ -597,16 +320,6 @@ def decompose_spec(spec_list, library=None):
     clusters = [x for x in clusters if len(x) > 0]
 
     LOG.debug(clusters)
-
-    # #test useless inputs:
-    # for c in clusters:
-    #     useless = find_useless_inputs(spec_list[0], c)
-    #
-    #     print("relevant inputs for ")
-    #     print(c)
-    #     print(set(spec_list[0].input_ports_dict.keys()) - useless)
-
-    # assert False
     # LOG.debug(unclustered)
     return clusters
 

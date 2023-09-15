@@ -21,7 +21,7 @@ from pycolite.parser.parser import LTL_PARSER
 from pycolite.util.util import NUXMV_BOUND
 from multiprocessing import *
 
-def counterexample_analysis(spec_list, output_port_names, model, relevant_contracts, manager, pid,
+def counterexample_analysis(spec_list, output_port_names, relevant_contracts, manager, pid, 
                             found_event, result_queue, terminate_evt):
     '''
     Analyze the model thorugh a series of counterexample to infer a set of connections which satisfies
@@ -74,7 +74,8 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
         #nope, not found
         LOG.debug('nope')
         # assert False
-        return False, composition, connected_spec, contracts, model_map
+        # return False, composition, connected_spec, contracts, model_map
+        return None, None
 
     # convert names in spec to original spec
     for name, port in spec_contract.ports_dict.items():
@@ -94,18 +95,18 @@ def counterexample_analysis(spec_list, output_port_names, model, relevant_contra
     param_assign = {x.unique_name: v for x, v in param_assign.items()}
 
     # LOG.debug('spec done')
-    LOG.debug(model)
+    # LOG.debug(model)
     LOG.debug(var_assign)
     LOG.debug(candidate)
     LOG.debug(param_assign)
 
-    if passed:
-        LOG.debug('done')
-        result_queue.put((pid, frozenset(var_assign.items()), frozenset(param_assign.items())))
-        found_event.set()
-        terminate_evt.set()
+    # if passed:
+    #     LOG.debug('done')
+    #     result_queue.put((pid, frozenset(var_assign.items()), frozenset(param_assign.items())))
+    #     found_event.set()
+    #     terminate_evt.set()
 
-    return passed
+    return var_assign, param_assign
 
 
 def extract_model_connections(spec_contract, relevant_contracts, output_port_names, library, manager):
@@ -585,7 +586,7 @@ def process_model(spec_list, output_port_names, relevant_contracts, manager):
     no_conn = Conjunction(no_conn, all_cond, merge_literals=False)
     preamble = Conjunction(preamble, no_conn, merge_literals=False)
 
-    balance_f = build_balance_constraints(manager.z3_interface.balance_max_types, relevant_contracts,
+    balance_f = build_balance_constraints(manager.synthesis_interface.balance_max_types, relevant_contracts,
                                           location_vars, location_map)
     if balance_f is not None:
         preamble = Conjunction(preamble, balance_f, merge_literals=False)

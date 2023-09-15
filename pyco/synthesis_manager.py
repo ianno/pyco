@@ -12,11 +12,8 @@ import multiprocessing
 import pyco
 from pyco import LOG
 from counterxample_analysis import counterexample_analysis
-import time
 
 MAX_THREADS = 10
-
-#NotSynthesizableError = z3_interface.NotSynthesizableError
 
 class ModelVerificationManager(object):
     '''
@@ -28,7 +25,7 @@ class ModelVerificationManager(object):
         set up solver and thread status
         '''
 
-        self.solver = solver_interface.solver
+        # self.solver = solver_interface.solver
         self.solver_interface = solver_interface
         self.spec = self.solver_interface.spec
         self.spec_out_dict = self.spec.output_ports_dict
@@ -42,7 +39,6 @@ class ModelVerificationManager(object):
         self.model_map = None
 
         self.solution_lock = multiprocessing.Lock()
-        self.z3_lock = multiprocessing.Lock()
         self.constraint_queue = multiprocessing.Queue()
 
         self.thread_pool = set()
@@ -76,56 +72,59 @@ class ModelVerificationManager(object):
         picks candidates and generates threads
         '''
         while True:
-            try:
-                # with self.z3_lock:
-                model = self.solver_interface.propose_candidate()
-                LOG.debug(model)
-                    # LOG.debug(time.time()-tim)
-                    # tim = time.time()
-            except pyco.z3_interface.NotSynthesizableError as err:
-                return self.quit(wait=True)
-            else:
-                #acquire semaphore
-                self.semaphore.acquire()
+            #acquire semaphore
+            # self.semaphore.acquire()
 
-                #check if event is successful
-                if self.found_refinement.is_set():
-                    #we are done. kill all running threads and exit
-                    self.semaphore.release()
-                    return self.quit()
+            #check if event is successful
+            if self.found_refinement.is_set():
+                #we are done. kill all running threads and exit
+                self.semaphore.release()
+                return self.quit()
 
-                #else remove not successful models
-                while not self.fail_queue.empty():
-                    pid = self.fail_queue.get_nowait()
-                    self.model_dict.pop(pid)
+            #else remove not successful models
+            # while not self.fail_queue.empty():
+            #     pid = self.fail_queue.get_nowait()
+            #     self.model_dict.pop(pid)
 
-                    self.thread_pool = self.thread_pool - set([t for t in self.thread_pool if t.ident == pid])
+            #     self.thread_pool = self.thread_pool - set([t for t in self.thread_pool if t.ident == pid])
 
-                # NUXMV MOD
-                #return all contracts here
-                relevant = {x
-                 for x, m in self.solver_interface.lib_model.use_flags.items()}
+            # NUXMV MOD
+            #return all contracts here
+            # relevant = {x
+                # for x, m in self.solver_interface.lib_model.use_flags.items()}
+            relevant = set(self.solver_interface.library.all_contracts)
 
-                print(len(relevant))
-                print(len(self.solver_interface.z3_interface.library.all_contracts))
+            # print(len(relevant))
+            # print(len(self.solver_interface.library.all_contracts))
 
-                reject_f = self.solver_interface.generate_reject_formula(relevant)
-                #new refinement checker
-                thread = RefinementChecker(model, self.output_port_names, relevant, self, self.found_refinement, self.found_refinement)
-                #go
-                thread.start()
-                # with self.pool_lock:
-                self.model_dict[thread.ident] = model
-                self.relevant_contracts_pid[thread.ident] = relevant
-                self.thread_pool.add(thread)
+            # reject_f = self.solver_interface.generate_reject_formula(relevant)
+            #new refinement checker
+            checker = RefinementChecker(self.output_port_names, relevant, self, self.found_refinement, self.found_refinement)
+            #go
+            var_assign, param_assign = checker.run()
+            # self.relevant_contracts_pid[checker.ident] = relevant
+            # self.thread_pool.add(checker)
 
-                #now reject the model, to get a new candidate
-                LOG.debug(reject_f)
-                self.solver_interface.add_assertions(reject_f)
+            #now reject the model, to get a new candidate
+            # LOG.debug(reject_f)
+            # self.solver_interface.add_assertions(reject_f)
 
-                #NUXMV MOD
-                #quit
-                return self.quit(wait=True)
+            #NUXMV MOD
+            #quit
+            # return self.quit(wait=True)
+            if var_assign is None:
+                raise pyco.cegis_interface.NotSynthesizableError()
+
+            self.var_assign = var_assign
+            self.params_assign = param_assign
+            # self.relevant_contracts = self.relevant_contracts_pid[pid]
+
+            #rebuild composition
+            self.composition, self.connected_spec, self.contract_inst = \
+                    self.solver_interface.build_composition_from_model(self.output_port_names,
+                                                                    relevant, self.var_assign)
+
+            return (self.composition, self.connected_spec, self.contract_inst, self.params_assign)
 
     def quit(self, wait=False):
         '''
@@ -138,11 +137,13 @@ class ModelVerificationManager(object):
             self.terminate_event.set()
 
         # LOG.debug(self.thread_pool)
-        for thread in self.thread_pool:
-            thread.join()
+        # for thread in self.thread_pool:
+        #     thread.join()
 
         if self.found_refinement.is_set():
             LOG.debug("get solution")
+            # TODO: pids are now just references to the objects (to be verified)
+            # in fact, we might not need this at all.
             pids = []
             var_assign_pid = {}
             params_pid = {}
@@ -152,9 +153,11 @@ class ModelVerificationManager(object):
                 var_assign_pid[pid] = {k: v for (k, v) in model_map_items}
                 params_pid[pid] = {k: v for (k, v) in params_items}
 
-            pid = min(pids)
+            # pid = min(pids)
+            LOG.debug('results found: %d' % len(pids))
+            pid = pids[0]
         else:
-            raise pyco.z3_interface.NotSynthesizableError()
+            raise pyco.cegis_interface.NotSynthesizableError()
 
         self.model = self.model_dict[pid]
         self.var_assign = var_assign_pid[pid]
@@ -169,20 +172,19 @@ class ModelVerificationManager(object):
         return (self.model, self.composition, self.connected_spec, self.contract_inst, self.params_assign)
 
 
-class RefinementChecker(multiprocessing.Process):
+class RefinementChecker(object):
     '''
     this thread executes a refinement checks and dies
     '''
 
-    def __init__(self, model, output_port_names, relevant_contracts, manager, found_event, terminate_event):
+    def __init__(self, output_port_names, relevant_contracts, manager, found_event, terminate_event):
         '''
         instantiate
         '''
-        self.model = model
         self.solver_interface = manager.solver_interface
         self.found_event = found_event
         self.manager = manager
-        self.z3_lock = manager.z3_lock
+        # self.z3_lock = manager.z3_lock
         self.terminate_event = terminate_event
 
         self.output_port_names = output_port_names
@@ -194,17 +196,17 @@ class RefinementChecker(multiprocessing.Process):
         '''
         executes refinement check
         '''
-        state = \
+        var_assign, param_assign = \
             counterexample_analysis(self.solver_interface.specification_list, self.output_port_names,
-                                    self.model, self.relevant_contracts, self.solver_interface, self.pid, self.found_event,
+                                    self.relevant_contracts, self.solver_interface, self, self.found_event,
                                     self.manager.result_queue, self.terminate_event)
 
-        if not state:
-            self.manager.fail_queue.put(self.pid)
+        # if not state:
+        #     self.manager.fail_queue.put(self)
 
         #we are done, release semaphore
-        self.manager.semaphore.release()
+        # self.manager.semaphore.release()
 
         #LOG.debug('done')
 
-        return
+        return var_assign, param_assign

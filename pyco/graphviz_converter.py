@@ -181,12 +181,6 @@ class Graph(object):
             #repeat till there are no changes
             self.prune_nodes()
 
-
-
-
-
-
-
 class GraphCreator(object):
     '''
     create a generic string-based graph from the composition
@@ -333,8 +327,6 @@ class GraphCreator(object):
 
                             new_graph.add_edge(idfrom, portfrom, idto, portto, label=label)
 
-
-
         #now we need to merge replicated nodes:
         front = set()
         processing = {new_graph.root.id}
@@ -452,15 +444,11 @@ class GraphCreator(object):
                                     if c in new_graph.node_connection_map_inputs[nid]:
                                         del new_graph.node_connection_map_inputs[nid][c]
 
-
             #done
 
         #cleanup
         new_graph.prune_nodes()
         return new_graph
-
-
-
 
 class GraphizConverter(object):
     def __init__(self, spec, composed_contract, contract_list, parameters_values=None, synthesis_time=None, filename=None):

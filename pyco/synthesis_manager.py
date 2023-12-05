@@ -13,7 +13,7 @@ import pyco
 from pyco import LOG
 from counterxample_analysis import counterexample_analysis
 
-MAX_THREADS = 10
+# MAX_THREADS = 10
 
 class ModelVerificationManager(object):
     '''

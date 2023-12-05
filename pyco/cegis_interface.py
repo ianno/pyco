@@ -9,19 +9,18 @@ import itertools
 from time import time
 
 import multiprocessing
-from pyco.contract import CompositionMapping
+# from pyco.contract import CompositionMapping
 from pyco import LOG
-from pyco.synthesis_manager import ModelVerificationManager, MAX_THREADS
 # from pyco.smt_factory import SMTModelFactory
 # from pyco.z3_library_conversion import Z3Library
 from pyco.cegis_single_port_solver import SinglePortSolver, NotSynthesizableError, OptimizationError
 from pyco.spec_decomposition import decompose_spec
 from pyco.graphviz_converter import GraphCreator, GraphizConverter
 
+MAX_THREADS = 10
+
 # LOG = logging.getLogger()
 LOG.debug('in cegis_interface')
-
-
 class CegisInterface(object):
     '''
     Extends the class SMTModelFactory
@@ -248,7 +247,8 @@ class CegisInterface(object):
                    fixed_connections=None,
                    fixed_connections_spec=None,
                    balance_types=None,
-                   decompose=True):
+                   decompose=True,
+                   visualize=True):
         '''
         perform synthesis process
         '''
@@ -371,13 +371,13 @@ class CegisInterface(object):
                                         fixed_connections=self.fixed_connections,
                                         fixed_connections_spec=self.fixed_connections_spec,
                                         result_queue=result_queue,
+                                        visualize=visualize
                                         )
 
             solvers.append(solver_p)
 
             solver_p.start()
             # solver_p.join()
-
 
         while len(results) < len(clusters):
             results.append(result_queue.get())
@@ -387,19 +387,16 @@ class CegisInterface(object):
         if any([x is None for x in results]):
             raise NotSynthesizableError
 
-
         #print
-        LOG.debug("merging solutions...")
+        if visualize:
+            LOG.debug("merging solutions...")
 
-
-        new_graph = GraphCreator.merge_graphs(results, '_'.join(self.spec.output_ports_dict.keys()))
-        gv = GraphizConverter.generate_graphviz_from_generic_graph(new_graph)
-        gv.view()
-        # gv.save()
+            new_graph = GraphCreator.merge_graphs(results, '_'.join(self.spec.output_ports_dict.keys()))
+            gv = GraphizConverter.generate_graphviz_from_generic_graph(new_graph)
+            gv.view()
+            # gv.save()
 
         #wait for clean exit
         for solv in solvers:
            solv.join()
 
-
-# SMTModelFactory.register(SynthesisInterface)

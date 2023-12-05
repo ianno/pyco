@@ -12,7 +12,6 @@ from pyco.graphviz_converter import GraphizConverter
 import time
 from pyco import LOG
 
-
 class SynthesisInterface(object):
     '''
     Interface for synthesis
@@ -147,5 +146,6 @@ class SynthesisInterface(object):
                                          fixed_connections=self.fixed_connections,
                                          fixed_connections_spec=self.fixed_connections_spec,
                                          balance_types=self.balance_types,
-                                         decompose=decompose)
+                                         decompose=decompose,
+                                         visualize=visualize)
 

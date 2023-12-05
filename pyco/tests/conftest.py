@@ -21,6 +21,8 @@ def pytest_addoption(parser):
         help="output file name")
     parser.addoption("--plain", action="store_true",
         help="disable specification decomposition")
+    parser.addoption("--nograph", action="store_true",
+        help="skip the final visualization of the solution")
 
 def pytest_generate_tests(metafunc):
     name = ''
@@ -76,3 +78,12 @@ def pytest_generate_tests(metafunc):
 
         name = name + "_plain-"+str(value)
         metafunc.parametrize("plain", [value])
+
+    if 'visualize' in metafunc.fixturenames:
+        if metafunc.config.option.nograph:
+            value = False
+        else:
+            value = True
+
+        name = name + "_visualize-"+str(value)
+        metafunc.parametrize("visualize", [value])

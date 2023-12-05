@@ -1,0 +1,84 @@
+============================= test session starts ==============================
+platform linux2 -- Python 2.7.12, pytest-3.7.4, py-1.6.0, pluggy-0.7.1
+rootdir: /home/antonio/workspace/pyco/pyco, inifile:
+plugins: timeout-1.3.2
+timeout: 1000.0s
+timeout method: signal
+timeout func_only: False
+collected 1 item
+
+pyco/tests/test_eps_facs.py Decomposing Specification...
+	multiple output clusters, processing port c2
+	multiple output clusters, processing port c3
+	multiple output clusters, processing port c7
+	multiple output clusters, processing port c10
+	multiple output clusters, processing port c9
+	multiple output clusters, processing port c8
+	multiple output clusters, processing port c4
+	multiple output clusters, processing port c1
+	multiple output clusters, processing port c6
+	multiple output clusters, processing port c5
+Instantiate Solvers...
+40
+40
+40
+40
+40
+40
+40
+40
+40
+40
+40
+40
+40
+40
+40
+40
+40
+40
+40
+40
+* 
+loops until success:
+1
+
+* 
+loops until success:
+1
+
+* 
+loops until success:
+1
+
+* 
+loops until success:
+1
+* 
+loops until success:
+1
+
+* 
+loops until success:
+1
+
+
+* 
+loops until success:
+1
+
+* 
+loops until success:
+1
+
+* 
+loops until success:
+1
+
+* 
+loops until success:
+2
+
+.
+
+========================== 1 passed in 20.43 seconds ===========================

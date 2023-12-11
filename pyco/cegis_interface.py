@@ -16,8 +16,9 @@ from pyco import LOG
 from pyco.cegis_single_port_solver import SinglePortSolver, NotSynthesizableError, OptimizationError
 from pyco.spec_decomposition import decompose_spec
 from pyco.graphviz_converter import GraphCreator, GraphizConverter
-
-MAX_THREADS = 10
+from pyco import MAX_PROCESSES
+import os
+import signal
 
 # LOG = logging.getLogger()
 LOG.debug('in cegis_interface')
@@ -329,7 +330,7 @@ class CegisInterface(object):
             print('Decomposing Specification...')
             clusters = decompose_spec(self.specification_list, self.library)
         else:
-            clusters = [self.spec.output_ports_dict.keys()]
+            clusters = [list(self.spec.output_ports_dict.keys())]
 
         print(clusters)
 
@@ -342,7 +343,9 @@ class CegisInterface(object):
 
         result_queue = multiprocessing.Queue()
 
-        semaphore = multiprocessing.Semaphore(MAX_THREADS)
+
+        print("Synthesizer will use max %d processes" % MAX_PROCESSES)
+        semaphore = multiprocessing.Semaphore(MAX_PROCESSES)
 
         results = []
 
@@ -363,8 +366,9 @@ class CegisInterface(object):
             # self.base_solver.pop()
 
             solver_p = SinglePortSolver(self,
-                                        cluster, semaphore,
+                                        cluster,
                                         self.spec,
+                                        semaphore,
                                         minimize_components=minimize_components,
                                         distinct_spec_port_set=None,
                                         fixed_components=self.fixed_components,
@@ -374,6 +378,7 @@ class CegisInterface(object):
                                         visualize=visualize
                                         )
 
+            solver_p.daemon = True
             solvers.append(solver_p)
 
             solver_p.start()
@@ -382,10 +387,21 @@ class CegisInterface(object):
         while len(results) < len(clusters):
             results.append(result_queue.get())
             if results[-1] is None:
+                LOG.critical("At least one solver did not find a solution")
                 break
 
+        def quit():
+            for solv in solvers:
+                if solv.is_alive():
+                    solv.terminate()
+            for solv in solvers:
+                solv.join()
+
         if any([x is None for x in results]):
+            quit()
             raise NotSynthesizableError
+
+        assert(len(results) == len(clusters))
 
         #print
         if visualize:
@@ -396,7 +412,7 @@ class CegisInterface(object):
             gv.view()
             # gv.save()
 
+        LOG.critical("all done, exiting")
         #wait for clean exit
-        for solv in solvers:
-           solv.join()
+        quit()
 

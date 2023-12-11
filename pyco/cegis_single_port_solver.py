@@ -11,8 +11,9 @@ import itertools
 from time import time
 
 import types
-from z3 import *
 import multiprocessing
+import sys
+import traceback
 
 from pycolite.contract import CompositionMapping
 from pyco.synthesis_manager import ModelVerificationManager
@@ -20,8 +21,8 @@ from pyco.synthesis_manager import ModelVerificationManager
 # from threading import Thread
 # from multiprocessing import Pool, Process, Queue
 # from Queue import Queue
-from graphviz_converter import Graph, GraphCreator
-
+from pyco.graphviz_converter import Graph, GraphCreator
+import signal
 import time
 
 # MAX_SOLVERS = 10
@@ -31,8 +32,15 @@ class SinglePortSolver(multiprocessing.Process):
     this process synthesizes a solution for a single output port
     '''
 
+    def exit_gracefully(self, *args):
+        LOG.critical("exiting %s" % self.spec_port_names)
+        if self.started:
+            self.semaphore.release()
+        # sys.exit(0)
+
     def __init__(self, synthesis_interface,
-                 spec_port_names, semaphore, spec,
+                 spec_port_names, spec,
+                 semaphore,
                  minimize_components=False,
                  distinct_spec_port_set=None,
                  fixed_components=None,
@@ -89,38 +97,49 @@ class SinglePortSolver(multiprocessing.Process):
         self.result_queue = result_queue
         self.visualize = visualize
 
+        self.started = False
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+
         super(SinglePortSolver, self).__init__()
 
     def run(self):
 
-        model_manager = ModelVerificationManager(self, self.spec_port_names, self.semaphore)
+        with self.semaphore:
+            self.started = True
 
-        try:
-            (composition,
-                spec, contract_list, params_assign) = model_manager.synthesize()
-        except NotSynthesizableError:
-            print("No solution for spec over variables " + str(self.spec_port_names))
-            print(spec)
-            self.result_queue.put(None)
-            raise
-        else:
-            # LOG.info(model)
-            for c in contract_list:
-                LOG.info(c)
+            model_manager = ModelVerificationManager(self, self.spec_port_names)
 
-            print("For spec over variables " + str(self.spec_port_names))
-            print(spec)
-            print("Found solution ")
-            print(composition)
+            try:
+                (composition,
+                    spec, contract_list, params_assign) = model_manager.synthesize()
+            except NotSynthesizableError:
+                print("No solution for spec over variables " + str(self.spec_port_names))
+                print(spec)
+                self.result_queue.put(None)
+            except Exception as e:
+                LOG.critical("Something broke while synthesizing " + str(self.spec_port_names))
+                LOG.critical(e)
+                LOG.critical(traceback.print_exc())
+                LOG.critical("Killing processes")
+                self.result_queue.put(None)
+            else:
+                # LOG.info(model)
+                for c in contract_list:
+                    LOG.info(c)
 
-            graph = Graph()
-            if self.visualize:
-                graph = GraphCreator(spec, composition, contract_list, parameters_values=params_assign, filename='_'.join(self.spec_port_names))
-                graph = graph.generate_graph()
+                print("For spec over variables " + str(self.spec_port_names))
+                print(spec)
+                print("Found solution ")
+                print(composition)
 
-                LOG.debug('push results')
-            self.result_queue.put(graph)
+                graph = Graph()
+                if self.visualize:
+                    graph = GraphCreator(spec, composition, contract_list, parameters_values=params_assign, filename='_'.join(self.spec_port_names))
+                    graph = graph.generate_graph()
 
+                    LOG.debug('push results')
+                self.result_queue.put(graph)
+                
             return
 
     def retrieve_fixed_components(self):
@@ -203,9 +222,6 @@ class SinglePortSolver(multiprocessing.Process):
 
             if params is not None:
                 params = {uname_map[uname]: params[uname] for uname in params}
-
-
-
 
         mapping = CompositionMapping(relevant_contracts| {working_spec})
 

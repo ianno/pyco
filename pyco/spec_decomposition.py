@@ -10,9 +10,8 @@ from pyco.contract import CompositionMapping
 from pycolite.formula import Globally, Equivalence, Disjunction, Implication, Negation, Conjunction, TrueFormula
 from pycolite.nuxmv import NuxmvRefinementStrategy, verify_tautology
 from multiprocessing import Process, Queue, Semaphore
-
-MAX_PROCESSES = 10
-
+from pyco import MAX_PROCESSES
+from functools import reduce
 
 class OutputProcessor(Process):
 
@@ -46,12 +45,12 @@ class OutputProcessor(Process):
                                    w_spec1.output_ports_dict[self.pivot_name])
 
             # connect inputs
-            for name, in_port in w_spec.input_ports_dict.items():
+            for name, in_port in list(w_spec.input_ports_dict.items()):
                 w_spec.connect_to_port(in_port, w_spec1.input_ports_dict[name])
                 w_spec.connect_to_port(in_port, w_spec2.input_ports_dict[name])
 
             # connect remaining outputs
-            for name, out_port in w_spec.output_ports_dict.items():
+            for name, out_port in list(w_spec.output_ports_dict.items()):
                 # add explicit naming
                 mapping.add(w_spec1.output_ports_dict[name],
                             '1_' + name)
@@ -122,12 +121,12 @@ class MultipleOutputProcessor(Process):
                                                w_spec1.output_ports_dict[name])
 
                     # connect inputs
-                    for name, in_port in w_spec.input_ports_dict.items():
+                    for name, in_port in list(w_spec.input_ports_dict.items()):
                         w_spec.connect_to_port(in_port, w_spec1.input_ports_dict[name])
                         w_spec.connect_to_port(in_port, w_spec2.input_ports_dict[name])
 
                     # connect remaining outputs
-                    for name, out_port in w_spec.output_ports_dict.items():
+                    for name, out_port in list(w_spec.output_ports_dict.items()):
                         # add explicit naming
                         mapping.add(w_spec1.output_ports_dict[name],
                                     '1_' + name)
@@ -216,7 +215,7 @@ def find_useless_inputs(contract, independent_outputs):
             alpha.connect_to_port(p1, p2)
 
         # connect all outputs
-        for name, out_port in alpha.output_ports_dict.items():
+        for name, out_port in list(alpha.output_ports_dict.items()):
             if name not in independent_outputs:
                 bits.append(Globally(Equivalence(out_port.literal, duplicate.output_ports_dict[name].literal, merge_literals=False)))
 
@@ -224,7 +223,7 @@ def find_useless_inputs(contract, independent_outputs):
         print(form)
 
         #connect all inputs - pivot
-        for name, in_port in alpha.input_ports_dict.items():
+        for name, in_port in list(alpha.input_ports_dict.items()):
             if name != pivot:
                 alpha.connect_to_port(in_port, duplicate.input_ports_dict[name])
 
@@ -333,9 +332,9 @@ def parse_counterexample(ctx_str, monitored_vars):
     :return:
     '''
     diff = set()
-    c_vars = {name: {} for name in monitored_vars.values()}
+    c_vars = {name: {} for name in list(monitored_vars.values())}
 
-    for u_name, b_name in monitored_vars.items():
+    for u_name, b_name in list(monitored_vars.items()):
         c_vars[b_name][u_name] = None
 
 
@@ -360,8 +359,8 @@ def parse_counterexample(ctx_str, monitored_vars):
         if line.startswith('->'):
             #new state, check consistency among vars
             # LOG.debug(c_vars)
-            for b_name, pair in c_vars.items():
-                pair_v = pair.values()
+            for b_name, pair in list(c_vars.items()):
+                pair_v = list(pair.values())
                 if not pair_v[0] == pair_v[1]:
                     diff.add(b_name)
 
@@ -451,5 +450,5 @@ if __name__ == "__main__":
                  'c5_0_376': 'c5',
                  'c5_0_377': 'c5'}
 
-    print parse_counterexample(STR, monitored)
+    print(parse_counterexample(STR, monitored))
 

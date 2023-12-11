@@ -71,7 +71,7 @@ setup(
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=['ply', 'py', 'pytest', 'pycolite', 'pytest-timeout',
-                        'graphviz', 'z3-solver'],
+                        'graphviz'],
 
     # List additional groups of dependencies here (e.g. development dependencies).
     # You can install these using the following syntax, for example:

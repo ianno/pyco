@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # stop in case of errors
-set -e
+# set -e
+set +e #don't stop
+export PYTHONUNBUFFERED=1
 
 # visualize with
 # tail -n -1 test_synth_6_10_dc_3_* | grep -Eo '[+-]?[0-9]+([.][0-9]+)+'
@@ -30,7 +32,7 @@ SPI_SD=true
 IS_CONCURRENT=false
 
 START=1
-REPS=1
+REPS=30
 
 EPS_SPEC_INIT=9
 EPS_SPEC_STOP=9
@@ -55,7 +57,7 @@ then
   do
     if $SPI_PLAIN
     then
-      rm -f $RESULTS_FOLDER/test_adc_int_*_${i}
+      rm -f $RESULTS_FOLDER/scp_test_adc_int_*_${i}
       eval "(date; py.test --nograph --timeout=1000 -s pyco/tests/test_spi_scp.py::test_adc2_int) >> $RESULTS_FOLDER/scp_test_adc_int_2_${i} 2>&1" $AMP
       eval "(date; py.test --nograph --timeout=1000 -s pyco/tests/test_spi_scp.py::test_adc3_int) >> $RESULTS_FOLDER/scp_test_adc_int_3_${i} 2>&1" $AMP
       eval "(date; py.test --nograph --timeout=1000 -s pyco/tests/test_spi_scp.py::test_adc4_int) >> $RESULTS_FOLDER/scp_test_adc_int_4_${i} 2>&1" $AMP
@@ -63,13 +65,13 @@ then
     if $SPI_SD
     then
       rm -f $RESULTS_FOLDER/scp_test_adc_sd_int_*_${i}
-      eval "(date; py.test --nograph --timeout=1000 -s pyco/tests/test_spi_scp.py::test_adc2_int_sd) >> $RESULTS_FOLDER/scp_test_adc_sd_int_2_${i} 2>&1" $AMP
-      # eval "(date; py.test --nograph --timeout=1000 -s pyco/tests/test_spi_scp.py::test_adc3_int_sd) >> $RESULTS_FOLDER/scp_test_adc_sd_int_3_${i} 2>&1" $AMP
+      # eval "(date; py.test --nograph --timeout=1000 -s pyco/tests/test_spi_scp.py::test_adc2_int_sd) >> $RESULTS_FOLDER/scp_test_adc_sd_int_2_${i} 2>&1" $AMP
       # eval "(date; py.test --nograph --timeout=1000 -s pyco/tests/test_spi_scp.py::test_adc3_int_sd) >> $RESULTS_FOLDER/scp_test_adc_sd_int_3_${i} 2>&1" $AMP
       # eval "(date; py.test --nograph --timeout=1000 -s pyco/tests/test_spi_scp.py::test_adc4_int_sd) >> $RESULTS_FOLDER/scp_test_adc_sd_int_4_${i} 2>&1" $AMP
       # eval "(date; py.test --nograph --timeout=1000 -s pyco/tests/test_spi_scp.py::test_adc5_int_sd) >> $RESULTS_FOLDER/scp_test_adc_sd_int_5_${i} 2>&1" $AMP
       # eval "(date; py.test --nograph --timeout=1000 -s pyco/tests/test_spi_scp.py::test_adc6_int_sd) >> $RESULTS_FOLDER/scp_test_adc_sd_int_6_${i} 2>&1" $AMP
-      # eval "(date; py.test --nograph --timeout=1000 -s pyco/tests/test_spi_scp.py::test_adc8_int_sd) >> $RESULTS_FOLDER/scp_test_adc_sd_int_8_${i} 2>&1" $AMP
+      # eval "(date; py.test --nograph --timeout=1000 -s pyco/tests/test_spi_scp.py::test_adc7_int_sd) >> $RESULTS_FOLDER/scp_test_adc_sd_int_7_${i} 2>&1" $AMP
+      eval "(date; py.test --nograph --timeout=1000 -s pyco/tests/test_spi_scp.py::test_adc8_int_sd) >> $RESULTS_FOLDER/scp_test_adc_sd_int_8_${i} 2>&1" $AMP
     fi
    done
 fi

@@ -275,7 +275,7 @@ class Spec3bit(Contract):
 
 class Spec3int(Contract):
     '''
-    1 bit ADC
+    3 bit ADC
     '''
     INPUT_PORTS = [('analog', Analog),
                    ('req', Req),
@@ -424,7 +424,7 @@ class Spec5int(Contract):
 
 class Spec6int(Contract):
     '''
-    1 bit ADC
+    6 bit ADC
     '''
     INPUT_PORTS = [('analog', Analog),
                    ('req', Req),
@@ -433,12 +433,11 @@ class Spec6int(Contract):
                     ('adcbit_2', AdcBusLine), ('adcbit_3', AdcBusLine),
                     ('adcbit_4', AdcBusLine), ('adcbit_5', AdcBusLine),
                     ('ready', Ready)]
-    ASSUMPTIONS = '''G(analog >= 0) & G(analog < 32) &  !req & G(req -> (X !req & X2 !req & X3 !req & X4 !req & X5 !req & 
+    ASSUMPTIONS = '''G(analog >= 0) & G(analog < 64) &  !req & G(req -> (X !req & X2 !req & X3 !req & X4 !req & X5 !req & 
                                       X6 !req & X7 !req  & X8 !req ))'''
     GUARANTEES = '''G(req -> (  X !ready & X2 !ready & X3 !ready & X4 !ready & X5 !ready &
                                 X6 !ready & X7 !ready & X8 ready )) &
                     G(req -> (
-
                               ( ((X8 adcbit_0) <-> X2 (analog/1 - 2*(analog/2) = 1)) & 
                                 ((X8 adcbit_1) <-> X2 (analog/2 - 2*(analog/4) = 1)) & 
                                 ((X8 adcbit_2) <-> X2 (analog/4 - 2*(analog/8) = 1)) &
@@ -451,7 +450,35 @@ class Spec6int(Contract):
                      )
                      '''
 
+class Spec7int(Contract):
+    '''
+    7 bit ADC
+    '''
+    INPUT_PORTS = [('analog', Analog),
+                   ('req', Req),
+                   ]
+    OUTPUT_PORTS = [('adcbit_0', AdcBusLine), ('adcbit_1', AdcBusLine),
+                    ('adcbit_2', AdcBusLine), ('adcbit_3', AdcBusLine),
+                    ('adcbit_4', AdcBusLine), ('adcbit_5', AdcBusLine),
+                    ('adcbit_6', AdcBusLine), ('ready', Ready)]
+    ASSUMPTIONS = '''G(analog >= 0) & G(analog < 128) &  !req & G(req -> (X !req & X2 !req & X3 !req & X4 !req & X5 !req & 
+                                      X6 !req & X7 !req & X8 !req & X9 !req & X10 !req ))'''
+    GUARANTEES = '''G(req -> (  X !ready & X2 !ready & X3 !ready & X4 !ready & X5 !ready &
+                                X6 !ready & X7 !ready & X8 !ready & X9 !ready & X10 ready)) &
+                    G(req -> (
 
+                              ( ((X10 adcbit_0) <-> X2 (analog/1 - 2*(analog/2) = 1)) & 
+                                ((X10 adcbit_1) <-> X2 (analog/2 - 2*(analog/4) = 1)) & 
+                                ((X10 adcbit_2) <-> X2 (analog/4 - 2*(analog/8) = 1)) &
+                                ((X10 adcbit_3) <-> X2 (analog/8 - 2*(analog/16) = 1)) & 
+                                ((X10 adcbit_4) <-> X2 (analog/16 - 2*(analog/32) = 1)) & 
+                                ((X10 adcbit_5) <-> X2 (analog/32 - 2*(analog/64) = 1)) & 
+                                ((X10 adcbit_6) <-> X2 (analog/64 - 2*(analog/128) = 1))
+                                
+                              )
+                             )
+                     )
+                     '''
 
 #counter block
 class SpecCounter(Contract):
@@ -501,24 +528,6 @@ class Counter(Contract):
                     G((value >= n)& !reset -> (X (value = n))) & 
                     G(n>=0 & n<=10)
                     '''
-
-
-
-# class Constants(Contract):
-#     '''
-#         generates costants
-#         '''
-#     INPUT_PORTS = []
-#     OUTPUT_PORTS = [('i1', IntegerParameter), ('i2', IntegerParameter),
-#                     ('i3', IntegerParameter), ('i4', IntegerParameter),
-#                     ('i5', IntegerParameter), ('i6', IntegerParameter),
-#                     ('i7', IntegerParameter), ('i8', IntegerParameter),
-#                     ('i9', IntegerParameter), ('i10', IntegerParameter)]
-#     ASSUMPTIONS = '''true'''
-#     GUARANTEES = '''G(i1=1 & i2 = 2 & i3 = 3 & i4 = 4 & i5 = 5 &
-#                       i6 = 6 & i7 = 7 & i8 = 8 & i9 = 9 & i10 = 10 )
-#                         '''
-
 class Counter1(Contract):
     '''
     1- Counter
@@ -700,31 +709,6 @@ class ADC8(Contract):
                      G((!cs) -> ((! miso) )) 
                      '''
 
-
-# class ADC8_int(Contract):
-#     '''
-#     an AD converter
-#     '''
-#     INPUT_PORTS = [('cs', SPICs),('mosi', SPIMosi),
-#                    ('analog', AnalogDataBit) ]
-#     OUTPUT_PORTS = [('miso', SPIMiso)]
-#     ASSUMPTIONS = '''!cs '''
-#     GUARANTEES = ''' !miso & X !miso &
-#                      G((!cs & X cs & X2 cs ) -> ( X2 (miso) <-> X analog)) &
-#                      G((!cs & X cs & X2 cs & X3 cs ) -> ( X3 (miso) <-> X analog)) &
-#                      G((!cs & X cs & X2 cs & X3 cs & X4 cs ) -> ( X4 (miso) <-> X analog)) &
-#                      G((!cs & X cs & X2 cs & X3 cs & X4 cs & X5 cs ) -> ( X5 (miso) <-> X analog)) &
-#                      G((!cs & X cs & X2 cs & X3 cs & X4 cs & X5 cs & X6 cs ) -> ( X6 (miso) <-> X analog)) &
-#                      G((!cs & X cs & X2 cs & X3 cs & X4 cs & X5 cs & X6 cs & X7 cs ) -> ( X7 (miso) <-> X analog)) &
-#                      G((!cs & X cs & X2 cs & X3 cs & X4 cs & X5 cs & X6 cs & X7 cs & X8 cs ) -> ( X8 (miso) <-> X analog)) &
-#                      G((!cs & X cs & X2 cs & X3 cs & X4 cs & X5 cs & X6 cs & X7 cs & X8 cs & X9 cs) -> ( X9 (miso) <-> X analog)) &
-#                      G((!cs & X cs & X2 cs & X3 cs & X4 cs & X5 cs & X6 cs & X7 cs & X8 cs & X9 cs) -> ( X10 (!miso) )) &
-#                      G((cs & X cs & X2 cs & X3 cs & X4 cs & X5 cs & X6 cs & X7 cs & X8 cs & X9 cs) -> ( X10 (!miso) )) &
-#                      G((!cs) -> (X(! miso) )) &
-#                      G((!cs) -> ((! miso) ))
-#                      '''
-
-
 class ADC2int(Contract):
     '''
     an AD converter
@@ -840,6 +824,26 @@ class ADC6int(Contract):
                      G((cs & X cs & X2 cs & X3 cs & X4 cs & X5 cs & X6 cs & X7 cs ) -> ( X8 (!miso) ))
                      '''
 
+class ADC7int(Contract):
+    '''
+    an AD converter
+    '''
+    INPUT_PORTS = [('cs', SPICs),  ('analog', Analog)]
+    OUTPUT_PORTS = [('miso', SPIMiso)]
+    ASSUMPTIONS = '''!cs '''
+    GUARANTEES = ''' !miso & X !miso &
+                     G((!cs) -> (X(! miso) )) &
+                     G((!cs) -> ((! miso) )) &
+                     G((!cs & X cs & X2 cs) -> ( X2 (miso) <-> X (analog/1 - 2*(analog/2) = 1) )) &
+                     G((!cs & X cs & X2 cs & X3 cs) -> ( X3 (miso) <-> X (analog/2 - 2*(analog/4) = 1) )) &
+                     G((!cs & X cs & X2 cs & X3 cs & X4 cs) -> ( X4 (miso) <-> X (analog/4 - 2*(analog/8) = 1) )) &
+                     G((!cs & X cs & X2 cs & X3 cs & X4 cs & X5 cs) -> ( X5 (miso) <-> X (analog/8 - 2*(analog/16) = 1) )) &
+                     G((!cs & X cs & X2 cs & X3 cs & X4 cs & X5 cs & X6 cs) -> ( X6 (miso) <-> X (analog/16 - 2*(analog/32) = 1) )) &
+                     G((!cs & X cs & X2 cs & X3 cs & X4 cs & X5 cs & X6 cs & X7 cs) -> ( X7 (miso) <-> X (analog/32 - 2*(analog/64) = 1) )) &
+                     G((!cs & X cs & X2 cs & X3 cs & X4 cs & X5 cs & X6 cs & X7 cs & X8 cs) -> ( X8 (miso) <-> X (analog/64 - 2*(analog/128) = 1) )) &
+                     G((!cs & X cs & X2 cs & X3 cs & X4 cs & X5 cs & X6 cs & X7 cs & X8 cs) -> ( X9 (!miso) )) &
+                     G((cs & X cs & X2 cs & X3 cs & X4 cs & X5 cs & X6 cs & X7 cs & X8 cs) -> ( X9 (!miso) ))
+                     '''
 
 class ADC1(Contract):
     '''

@@ -13,6 +13,7 @@ from pyco.contract import (RefinementMapping, PortMappingError, PortMapping,
                             BaseTypeFloat, NotATypeError, ParameterInt, NotDeterministicError)
 from pyco import LOG
 from pyco.solver_interface import SMTManager
+from functools import reduce
 
 LOG.debug('in library')
 
@@ -760,9 +761,10 @@ class LibraryComponent(object):
         IF it is present, returns the
         requested port, otherwise raises a AttributeError exception
         '''
-
-        if port_name in self.contract.ports_dict:
-            return self.contract.ports_dict[port_name]
+        if 'contract' not in self.__dict__:
+            raise AttributeError
+        if port_name in self.__dict__['contract'].ports_dict:
+            return self.__dict__['contract'].ports_dict[port_name]
         else:
             raise AttributeError
 

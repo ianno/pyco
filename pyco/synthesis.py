@@ -9,8 +9,10 @@ import itertools
 from pyco.contract import EmptyContract
 from pyco.cegis_interface import CegisInterface, NotSynthesizableError, OptimizationError
 from pyco.graphviz_converter import GraphizConverter
-import time
+import os
+import signal
 from pyco import LOG
+
 
 class SynthesisInterface(object):
     '''
@@ -134,18 +136,24 @@ class SynthesisInterface(object):
         if filename is None:
             filename = 'out'
 
-        time1 = time.time()
+        # time1 = time.time()
 
-        self.solver_interface.synthesize(self.spec_contract_list,
-                                         distinct_spec_port_set=self.distinct_map,
-                                         limit=limit,
-                                         max_depth=max_depth,
-                                         minimize_components=minimize_components,
-                                         minimize_cost=minimize_cost,
-                                         fixed_components=self.fixed_components,
-                                         fixed_connections=self.fixed_connections,
-                                         fixed_connections_spec=self.fixed_connections_spec,
-                                         balance_types=self.balance_types,
-                                         decompose=decompose,
-                                         visualize=visualize)
+        # set os group to make sure we kill all the subprocesses on exit
+        os.setpgrp()
+
+        try:
+            self.solver_interface.synthesize(self.spec_contract_list,
+                                            distinct_spec_port_set=self.distinct_map,
+                                            limit=limit,
+                                            max_depth=max_depth,
+                                            minimize_components=minimize_components,
+                                            minimize_cost=minimize_cost,
+                                            fixed_components=self.fixed_components,
+                                            fixed_connections=self.fixed_connections,
+                                            fixed_connections_spec=self.fixed_connections_spec,
+                                            balance_types=self.balance_types,
+                                            decompose=decompose,
+                                            visualize=visualize)
+        finally:
+            os.killpg(0, signal.SIGTERM)
 

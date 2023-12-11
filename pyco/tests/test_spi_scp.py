@@ -95,6 +95,14 @@ def adc6int():
     return LibraryComponent('ADC6int', comp)
 
 @pytest.fixture
+def adc7int():
+    '''
+    adc
+    '''
+    comp = ADC7int('ADC7int')
+    return LibraryComponent('ADC7int', comp)
+
+@pytest.fixture
 def adc8():
     '''
     adc
@@ -465,6 +473,47 @@ def spi_lib6_int_sd(counter, comparator, adc6int, flipflop, invert, trigger):
     return library
 
 @pytest.fixture
+def spi_lib7_int_sd(counter, comparator, adc7int, flipflop, invert, trigger):
+    '''
+    library
+    :param counter:
+    :param comparator:
+    :param adc:
+    :param flipflop:
+    :return:
+    '''
+
+    library = ContractLibrary('spilib')
+
+    library.add(counter, number_of_instances=2)
+    library.add(comparator, number_of_instances=2)
+    library.add(adc7int, number_of_instances=1)
+    library.add(flipflop, number_of_instances=2)
+    library.add(invert, number_of_instances=2)
+    library.add(trigger, number_of_instances=2)
+
+    # add type compatibilities
+    library.add_type(FlipFlopOut)
+    library.add_type(FlipFlopIn)
+    library.add_type(AdcBusLine)
+    library.add_type(SPIMiso)
+    library.add_type(DelayedSignal)
+    library.add_type(ControlSignal)
+    library.add_type(SPICs)
+    library.add_type(Ready)
+    library.add_type(DataSignal)
+
+    library.add_type_compatibility(DataSignal, AdcBusLine)
+    library.add_type_compatibility(SPIMiso, AdcBusLine)
+    library.add_type_compatibility(SPIMiso, FlipFlopIn)
+    library.add_type_compatibility(ControlSignal, SPICs)
+    library.add_type_compatibility(ControlSignal, Ready)
+    library.add_type_incompatibility(DelayedSignal, ControlSignal)
+
+    # library.verify_determinism(stop_if_fails=True)
+    return library
+
+@pytest.fixture
 def spi_lib8_int(counter, comparator, adc8int, flipflop, invert, trigger):
     '''
     library
@@ -621,6 +670,7 @@ def test_adc4_int(spi_lib4_int, visualize):
 
 
 
+# def test_adc4_int_sd(spi_lib4_int_sd, visualize):
 def test_adc4_int_sd(spi_lib4_int_sd, visualize):
     '''
     Performs simple synthesis
@@ -701,6 +751,18 @@ def test_adc8_int(spi_lib8_int, visualize):
     interface.use_connected_spec(adc, 'analog', 'analog')
     interface.synthesize(max_depth=4, library_max_redundancy=1, decompose=False, visualize=visualize)
 
+def test_adc7_int_sd(spi_lib7_int_sd, visualize):
+    '''
+    Performs simple synthesis
+    '''
+
+    spec = Spec7int('G1')
+
+    interface = SynthesisInterface(spi_lib7_int_sd, [spec])
+
+    adc = interface.get_component('ADC7int')
+    interface.use_connected_spec(adc, 'analog', 'analog')
+    interface.synthesize(max_depth=4, library_max_redundancy=1, decompose=True, visualize=visualize)
 
 def test_adc8_int_sd(spi_lib8_int_sd, visualize):
     '''

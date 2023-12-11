@@ -6,7 +6,7 @@ Author: Antonio Iannopollo
 
 import graphviz
 import textwrap
-import cPickle
+import pickle
 from pyco import LOG
 
 LINE_LENGTH = 80
@@ -25,6 +25,8 @@ class Node(object):
 
         return self.id == other.id
 
+    def __hash__(self):
+        return hash(repr(self))
 
 
 class Graph(object):
@@ -292,11 +294,11 @@ class GraphCreator(object):
         if self.graph.root is None:
             self.generate_graph()
 
-        return cPickle.dumps(self.graph, cPickle.HIGHEST_PROTOCOL)
+        return pickle.dumps(self.graph, pickle.HIGHEST_PROTOCOL)
 
     @staticmethod
     def load_pickle(pickled_graph):
-        return cPickle.loads(pickled_graph)
+        return pickle.loads(pickled_graph)
 
 
     @staticmethod

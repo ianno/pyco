@@ -11,16 +11,14 @@ import multiprocessing
 # from Queue import Queue, Empty
 import pyco
 from pyco import LOG
-from counterxample_analysis import counterexample_analysis
-
-# MAX_THREADS = 10
+from pyco.counterxample_analysis import counterexample_analysis
 
 class ModelVerificationManager(object):
     '''
     manages refinement threads
     '''
 
-    def __init__(self, solver_interface, output_port_names, semaphore):
+    def __init__(self, solver_interface, output_port_names):
         '''
         set up solver and thread status
         '''
@@ -29,7 +27,6 @@ class ModelVerificationManager(object):
         self.solver_interface = solver_interface
         self.spec = self.solver_interface.spec
         self.spec_out_dict = self.spec.output_ports_dict
-        self.semaphore = semaphore
         self.found_refinement = multiprocessing.Event()
 
         self.composition = None
@@ -71,15 +68,15 @@ class ModelVerificationManager(object):
         '''
         picks candidates and generates threads
         '''
-        while True:
+        # while True:
             #acquire semaphore
             # self.semaphore.acquire()
 
             #check if event is successful
-            if self.found_refinement.is_set():
+            # if self.found_refinement.is_set():
                 #we are done. kill all running threads and exit
-                self.semaphore.release()
-                return self.quit()
+                # self.semaphore.release()
+                # return self.quit()
 
             #else remove not successful models
             # while not self.fail_queue.empty():
@@ -88,88 +85,88 @@ class ModelVerificationManager(object):
 
             #     self.thread_pool = self.thread_pool - set([t for t in self.thread_pool if t.ident == pid])
 
-            # NUXMV MOD
-            #return all contracts here
-            # relevant = {x
-                # for x, m in self.solver_interface.lib_model.use_flags.items()}
-            relevant = set(self.solver_interface.library.all_contracts)
+        # NUXMV MOD
+        #return all contracts here
+        # relevant = {x
+            # for x, m in self.solver_interface.lib_model.use_flags.items()}
+        relevant = set(self.solver_interface.library.all_contracts)
 
-            # print(len(relevant))
-            # print(len(self.solver_interface.library.all_contracts))
+        # print(len(relevant))
+        # print(len(self.solver_interface.library.all_contracts))
 
-            # reject_f = self.solver_interface.generate_reject_formula(relevant)
-            #new refinement checker
-            checker = RefinementChecker(self.output_port_names, relevant, self, self.found_refinement, self.found_refinement)
-            #go
-            var_assign, param_assign = checker.run()
-            # self.relevant_contracts_pid[checker.ident] = relevant
-            # self.thread_pool.add(checker)
+        # reject_f = self.solver_interface.generate_reject_formula(relevant)
+        #new refinement checker
+        checker = RefinementChecker(self.output_port_names, relevant, self, self.found_refinement, self.found_refinement)
+        #go
+        var_assign, param_assign = checker.run()
+        # self.relevant_contracts_pid[checker.ident] = relevant
+        # self.thread_pool.add(checker)
 
-            #now reject the model, to get a new candidate
-            # LOG.debug(reject_f)
-            # self.solver_interface.add_assertions(reject_f)
+        #now reject the model, to get a new candidate
+        # LOG.debug(reject_f)
+        # self.solver_interface.add_assertions(reject_f)
 
-            #NUXMV MOD
-            #quit
-            # return self.quit(wait=True)
-            if var_assign is None:
-                raise pyco.cegis_interface.NotSynthesizableError()
-
-            self.var_assign = var_assign
-            self.params_assign = param_assign
-            # self.relevant_contracts = self.relevant_contracts_pid[pid]
-
-            #rebuild composition
-            self.composition, self.connected_spec, self.contract_inst = \
-                    self.solver_interface.build_composition_from_model(self.output_port_names,
-                                                                    relevant, self.var_assign)
-
-            return (self.composition, self.connected_spec, self.contract_inst, self.params_assign)
-
-    def quit(self, wait=False):
-        '''
-        close up nicely
-        '''
-
-        print('')
-        if not wait:
-            LOG.debug('terminating')
-            self.terminate_event.set()
-
-        # LOG.debug(self.thread_pool)
-        # for thread in self.thread_pool:
-        #     thread.join()
-
-        if self.found_refinement.is_set():
-            LOG.debug("get solution")
-            # TODO: pids are now just references to the objects (to be verified)
-            # in fact, we might not need this at all.
-            pids = []
-            var_assign_pid = {}
-            params_pid = {}
-            while not self.result_queue.empty():
-                pid, model_map_items, params_items = self.result_queue.get()
-                pids.append(pid)
-                var_assign_pid[pid] = {k: v for (k, v) in model_map_items}
-                params_pid[pid] = {k: v for (k, v) in params_items}
-
-            # pid = min(pids)
-            LOG.debug('results found: %d' % len(pids))
-            pid = pids[0]
-        else:
+        #NUXMV MOD
+        #quit
+        # return self.quit(wait=True)
+        if var_assign is None:
             raise pyco.cegis_interface.NotSynthesizableError()
 
-        self.model = self.model_dict[pid]
-        self.var_assign = var_assign_pid[pid]
-        self.params_assign = params_pid[pid]
-        self.relevant_contracts = self.relevant_contracts_pid[pid]
+        self.var_assign = var_assign
+        self.params_assign = param_assign
+        # self.relevant_contracts = self.relevant_contracts_pid[pid]
 
         #rebuild composition
         self.composition, self.connected_spec, self.contract_inst = \
-                self.solver_interface.build_composition_from_model(self.model, self.output_port_names,
-                                                                   self.relevant_contracts, self.var_assign)
+                self.solver_interface.build_composition_from_model(self.output_port_names,
+                                                                relevant, self.var_assign)
 
-        return (self.model, self.composition, self.connected_spec, self.contract_inst, self.params_assign)
+        return (self.composition, self.connected_spec, self.contract_inst, self.params_assign)
+
+    # def quit(self, wait=False):
+    #     '''
+    #     close up nicely
+    #     '''
+
+    #     print('')
+    #     if not wait:
+    #         LOG.debug('terminating')
+    #         self.terminate_event.set()
+
+    #     # LOG.debug(self.thread_pool)
+    #     # for thread in self.thread_pool:
+    #     #     thread.join()
+
+    #     if self.found_refinement.is_set():
+    #         LOG.debug("get solution")
+    #         # TODO: pids are now just references to the objects (to be verified)
+    #         # in fact, we might not need this at all.
+    #         pids = []
+    #         var_assign_pid = {}
+    #         params_pid = {}
+    #         while not self.result_queue.empty():
+    #             pid, model_map_items, params_items = self.result_queue.get()
+    #             pids.append(pid)
+    #             var_assign_pid[pid] = {k: v for (k, v) in model_map_items}
+    #             params_pid[pid] = {k: v for (k, v) in params_items}
+
+    #         # pid = min(pids)
+    #         LOG.debug('results found: %d' % len(pids))
+    #         pid = pids[0]
+    #     else:
+    #         raise pyco.cegis_interface.NotSynthesizableError()
+
+    #     self.model = self.model_dict[pid]
+    #     self.var_assign = var_assign_pid[pid]
+    #     self.params_assign = params_pid[pid]
+    #     self.relevant_contracts = self.relevant_contracts_pid[pid]
+
+    #     #rebuild composition
+    #     self.composition, self.connected_spec, self.contract_inst = \
+    #             self.solver_interface.build_composition_from_model(self.model, self.output_port_names,
+    #                                                                self.relevant_contracts, self.var_assign)
+
+    #     return (self.model, self.composition, self.connected_spec, self.contract_inst, self.params_assign)
 
 
 class RefinementChecker(object):

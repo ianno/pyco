@@ -1,4 +1,5 @@
 import logging
+import multiprocessing
 import pdb
 
 LOG = logging.getLogger('pyco')
@@ -14,6 +15,8 @@ ch.setFormatter(formatter)
 # add the handlers to the logger
 LOG.addHandler(ch)
 
-LOG.debug('PYCO INIT')
+# LOG.debug('PYCO INIT')
+
+MAX_PROCESSES = multiprocessing.cpu_count()
 
 #pdb.set_trace()

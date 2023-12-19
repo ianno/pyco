@@ -114,7 +114,6 @@ class SinglePortSolver(multiprocessing.Process):
                     spec, contract_list, params_assign) = model_manager.synthesize()
             except NotSynthesizableError:
                 print("No solution for spec over variables " + str(self.spec_port_names))
-                print(spec)
                 self.result_queue.put(None)
             except Exception as e:
                 LOG.critical("Something broke while synthesizing " + str(self.spec_port_names))

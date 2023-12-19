@@ -7,7 +7,7 @@ Author: Antonio Iannopollo
 '''
 
 
-from pyco.contract import Contract, BaseTypeBool, BaseTypeInt, BaseTypeFloat
+from pyco.contract import Contract, BaseTypeBool, BaseTypeInt, BaseTypeFloat, ParameterInt
 from pyco.library import (ContractLibrary, LibraryComponent,
                           LibraryPortMapping, LibraryCompositionMapping)
 from pyco.synthesis import SynthesisInterface
@@ -16,6 +16,16 @@ from pyco import LOG
 
 #let's start with types
 class IntT(BaseTypeInt):
+    '''
+     type
+    '''
+
+class ParamIntT(ParameterInt):
+    '''
+     type
+    '''
+
+class BoolT(BaseTypeBool):
     '''
      type
     '''
@@ -91,3 +101,59 @@ class SpecAlt(Contract):
     OUTPUT_PORTS = [('o1', IntT)]
     ASSUMPTIONS = 'G(i1>=1)'
     GUARANTEES = '''G(i1=4 -> o1=5)''' #& G(i1=4 -> o1=5)
+
+
+class SpecNext(Contract):
+    '''
+    test
+    '''
+    INPUT_PORTS = [('i', IntT)]
+    OUTPUT_PORTS = [('o', BoolT)]
+    ASSUMPTIONS = '''G(i>=1)'''
+    GUARANTEES = '''(i>=1) -> (  X !o & X2 !o & X3 o)
+                     '''
+
+class ElemNext(Contract):
+    '''
+    elem with param
+    '''
+    INPUT_PORTS = [('i', IntT)]
+    OUTPUT_PORTS = [('o', BoolT), ('n', ParamIntT)]
+    ASSUMPTIONS = '''G(i>=1)'''
+    GUARANTEES = ''' ((n = 0) -> (X o)) &
+                       ((n = 1) -> (X !o & X2 o)) &
+                       ((n = 2) -> (X !o & X2 !o & X3 o)) &
+                       (n>=0 & n<10)
+                     '''
+    
+
+class SCPExampleElemA(Contract):
+    '''
+    elem with param
+    '''
+    INPUT_PORTS = [('i', BoolT)]
+    OUTPUT_PORTS = [('o', BoolT)]
+    ASSUMPTIONS = '''true'''
+    GUARANTEES = ''' !o & G(i <-> Xo)
+                     '''
+    
+class SCPExampleElemB(Contract):
+    '''
+    elem with param
+    '''
+    INPUT_PORTS = []
+    OUTPUT_PORTS = [('ob', BoolT)]
+    ASSUMPTIONS = '''true'''
+    GUARANTEES = ''' !ob & G(ob <-> X!ob)
+                     '''
+
+    
+class SCPExampleSpec(Contract):
+    '''
+    elem with param
+    '''
+    INPUT_PORTS = [('i', BoolT)]
+    OUTPUT_PORTS = [('o', BoolT)]
+    ASSUMPTIONS = '''true'''
+    GUARANTEES = ''' !o & X!o & G(i <-> X2o)
+                     '''

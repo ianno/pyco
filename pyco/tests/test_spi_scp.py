@@ -282,9 +282,9 @@ def spi_lib4_int_sd(counter, comparator, adc4int, flipflop, invert, trigger):
     library.add(counter, number_of_instances=2)
     library.add(comparator, number_of_instances=2)
     library.add(adc4int, number_of_instances=1)
-    library.add(flipflop, number_of_instances=2)
-    library.add(invert, number_of_instances=2)
-    library.add(trigger, number_of_instances=2)
+    library.add(flipflop, number_of_instances=3)
+    library.add(invert, number_of_instances=3)
+    library.add(trigger, number_of_instances=3)
 
     # add type compatibilities
     library.add_type(FlipFlopOut)
@@ -364,9 +364,9 @@ def spi_lib5_int_sd(counter, comparator, adc5int, flipflop, invert, trigger):
     library.add(counter, number_of_instances=2)
     library.add(comparator, number_of_instances=2)
     library.add(adc5int, number_of_instances=1)
-    library.add(flipflop, number_of_instances=2)
-    library.add(invert, number_of_instances=2)
-    library.add(trigger, number_of_instances=2)
+    library.add(flipflop, number_of_instances=3)
+    library.add(invert, number_of_instances=3)
+    library.add(trigger, number_of_instances=3)
 
     # add type compatibilities
     library.add_type(FlipFlopOut)
@@ -447,9 +447,9 @@ def spi_lib6_int_sd(counter, comparator, adc6int, flipflop, invert, trigger):
     library.add(counter, number_of_instances=2)
     library.add(comparator, number_of_instances=2)
     library.add(adc6int, number_of_instances=1)
-    library.add(flipflop, number_of_instances=2)
-    library.add(invert, number_of_instances=2)
-    library.add(trigger, number_of_instances=2)
+    library.add(flipflop, number_of_instances=3)
+    library.add(invert, number_of_instances=3)
+    library.add(trigger, number_of_instances=3)
 
     # add type compatibilities
     library.add_type(FlipFlopOut)
@@ -488,9 +488,9 @@ def spi_lib7_int_sd(counter, comparator, adc7int, flipflop, invert, trigger):
     library.add(counter, number_of_instances=2)
     library.add(comparator, number_of_instances=2)
     library.add(adc7int, number_of_instances=1)
-    library.add(flipflop, number_of_instances=2)
-    library.add(invert, number_of_instances=2)
-    library.add(trigger, number_of_instances=2)
+    library.add(flipflop, number_of_instances=3)
+    library.add(invert, number_of_instances=3)
+    library.add(trigger, number_of_instances=3)
 
     # add type compatibilities
     library.add_type(FlipFlopOut)
@@ -571,9 +571,9 @@ def spi_lib8_int_sd(counter, comparator, adc8int, flipflop, invert, trigger):
     library.add(counter, number_of_instances=2)
     library.add(comparator, number_of_instances=2)
     library.add(adc8int, number_of_instances=1)
-    library.add(flipflop, number_of_instances=2)
-    library.add(invert, number_of_instances=2)
-    library.add(trigger, number_of_instances=2)
+    library.add(flipflop, number_of_instances=3)
+    library.add(invert, number_of_instances=3)
+    library.add(trigger, number_of_instances=3)
 
     # add type compatibilities
     library.add_type(FlipFlopOut)

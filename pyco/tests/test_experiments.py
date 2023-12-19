@@ -130,3 +130,118 @@ def test_manual(lib):
                              filename='exp',
                              visualize=True,
                              decompose=False)
+    
+
+@pytest.fixture
+def elemNext():
+    '''
+    abstract generator
+    '''
+    comp = ElemNext('elem')
+    return LibraryComponent('elem', comp)
+
+@pytest.fixture
+def lib_next(elemNext):
+    '''
+    returns a populated library with only the AC generators
+    '''
+    library = ContractLibrary('elemNext_lib')
+
+    library.add(elemNext)
+
+    library.verify_library()
+
+    #add type compatibilities
+    library.add_type(IntT)
+    library.add_type(BoolT)
+    library.add_type(ParamIntT)
+
+    # library.add_type_compatibility(GeneratorT, ACGenContactorT)
+
+    return library
+
+@pytest.fixture
+def lib_next2(elemNext):
+    '''
+    returns a populated library with only the AC generators
+    '''
+    library = ContractLibrary('elemNext_lib')
+
+    library.add(elemNext)
+    library.add(elemNext)
+
+    library.verify_library()
+
+    #add type compatibilities
+    library.add_type(IntT)
+    library.add_type(BoolT)
+    library.add_type(ParamIntT)
+
+    # library.add_type_compatibility(GeneratorT, ACGenContactorT)
+
+    return library
+
+@pytest.mark.parametrize("libname", ["lib_next", "lib_next2"])
+def test_next(libname, request):
+    '''
+    Manual check
+    '''
+
+    lib = request.getfixturevalue(libname)
+
+    spec1 = SpecNext('G1')
+
+    interface = SynthesisInterface(lib, [spec1])
+
+    interface.synthesize(library_max_redundancy=1,
+                             visualize=True,
+                             decompose=False)
+    
+@pytest.fixture
+def SCPElemA():
+    '''
+    '''
+    comp = SCPExampleElemA('A')
+    return LibraryComponent('A', comp)
+
+@pytest.fixture
+def SCPElemB():
+    '''
+    '''
+    comp = SCPExampleElemA('B')
+    return LibraryComponent('B', comp)
+
+@pytest.fixture
+def lib_scp(SCPElemA, SCPElemB):
+    '''
+    returns a populated library with only the AC generators
+    '''
+    library = ContractLibrary('lib_scp')
+
+    library.add(SCPElemA, 2)
+    library.add(SCPElemB)
+
+    library.verify_library()
+
+    #add type compatibilities
+    library.add_type(BoolT)
+    library.add_type(BoolT)
+
+    # library.add_type_compatibility(GeneratorT, ACGenContactorT)
+
+    return library
+
+def test_scp(lib_scp):
+    '''
+    Manual check
+    '''
+
+    spec1 = SCPExampleSpec('G1')
+
+    interface = SynthesisInterface(lib_scp, [spec1])
+
+    interface.synthesize(library_max_redundancy=1,
+                             visualize=True,
+                             decompose=False)
+# run with
+# pytest pyco/tests/test_experiments.py -s -k scp

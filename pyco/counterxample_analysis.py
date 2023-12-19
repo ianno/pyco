@@ -1115,6 +1115,7 @@ def exists_forall_learner(spec_contract, rel_spec_ports,
                             LOG.debug('Spurious CEX')
                             LOG.debug(cex)
 
+                    LOG.critical(lconn)
                     if all_candidates is None:
                         all_candidates = lconn
                     else:
@@ -1124,15 +1125,15 @@ def exists_forall_learner(spec_contract, rel_spec_ports,
                     left = Conjunction(used_f, just_conn, merge_literals=False)
                     passed, trace = verify_candidate(left, all_specs_formula)
 
-                    if not passed:
-                        #do_cex_checks = False
-                        LOG.debug('No CEXs')
-                        if all_candidates is None:
-                            all_candidates = lconn
-                        else:
-                            all_candidates = Disjunction(all_candidates, lconn, merge_literals=False)
+                    # if not passed:
+                    #     #do_cex_checks = False
+                    #     LOG.debug('No CEXs')
+                    #     if all_candidates is None:
+                    #         all_candidates = lconn
+                    #     else:
+                    #         all_candidates = Disjunction(all_candidates, lconn, merge_literals=False)
 
-                        continue
+                    #     continue
 
                     LOG.debug('FOUND')
                     print('')

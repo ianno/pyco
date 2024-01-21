@@ -608,7 +608,7 @@ def test_adc2_int(spi_lib2_int, visualize):
     adc = interface.get_component('ADC2int')
     interface.use_connected_spec(adc, 'analog', 'analog')
 
-    interface.synthesize(max_depth=4, library_max_redundancy=1, decompose=False, visualize=visualize)
+    interface.synthesize(max_depth=4, decompose=False, visualize=visualize)
 
 
 #uses same library
@@ -624,7 +624,7 @@ def test_adc2_int_sd(spi_lib2_int, visualize):
     adc = interface.get_component('ADC2int')
     interface.use_connected_spec(adc, 'analog', 'analog')
 
-    interface.synthesize(max_depth=4, library_max_redundancy=1, decompose=True, visualize=visualize)
+    interface.synthesize(max_depth=4, decompose=True, visualize=visualize)
 
 
 def test_adc3_int(spi_lib3_int, visualize):
@@ -638,7 +638,7 @@ def test_adc3_int(spi_lib3_int, visualize):
 
     adc = interface.get_component('ADC3int')
     interface.use_connected_spec(adc, 'analog', 'analog')
-    interface.synthesize(max_depth=4, library_max_redundancy=1, decompose=False, visualize=visualize)
+    interface.synthesize(max_depth=4, decompose=False, visualize=visualize)
 
 
 def test_adc3_int_sd(spi_lib3_int, visualize):
@@ -652,7 +652,7 @@ def test_adc3_int_sd(spi_lib3_int, visualize):
 
     adc = interface.get_component('ADC3int')
     interface.use_connected_spec(adc, 'analog', 'analog')
-    interface.synthesize(max_depth=4, library_max_redundancy=1, decompose=True, visualize=visualize)
+    interface.synthesize(max_depth=4, decompose=True, visualize=visualize)
 
 
 def test_adc4_int(spi_lib4_int, visualize):
@@ -666,7 +666,7 @@ def test_adc4_int(spi_lib4_int, visualize):
 
     adc = interface.get_component('ADC4int')
     interface.use_connected_spec(adc, 'analog', 'analog')
-    interface.synthesize(max_depth=4, library_max_redundancy=1, decompose=False, visualize=visualize)
+    interface.synthesize(max_depth=4, decompose=False, visualize=visualize)
 
 
 
@@ -682,7 +682,7 @@ def test_adc4_int_sd(spi_lib4_int_sd, visualize):
 
     adc = interface.get_component('ADC4int')
     interface.use_connected_spec(adc, 'analog', 'analog')
-    interface.synthesize(max_depth=4, library_max_redundancy=1, decompose=True, visualize=visualize)
+    interface.synthesize(max_depth=4, decompose=True, visualize=visualize)
 
 
 def test_adc5_int(spi_lib5_int, visualize):
@@ -696,7 +696,7 @@ def test_adc5_int(spi_lib5_int, visualize):
 
     adc = interface.get_component('ADC5int')
     interface.use_connected_spec(adc, 'analog', 'analog')
-    interface.synthesize(max_depth=4, library_max_redundancy=1, decompose=False, visualize=visualize)
+    interface.synthesize(max_depth=4, decompose=False, visualize=visualize)
 
 def test_adc5_int_sd(spi_lib5_int_sd, visualize):
     '''
@@ -709,7 +709,7 @@ def test_adc5_int_sd(spi_lib5_int_sd, visualize):
 
     adc = interface.get_component('ADC5int')
     interface.use_connected_spec(adc, 'analog', 'analog')
-    interface.synthesize(max_depth=4, library_max_redundancy=1, decompose=True, visualize=visualize)
+    interface.synthesize(max_depth=4, decompose=True, visualize=visualize)
 
 def test_adc6_int(spi_lib6_int, visualize):
     '''
@@ -722,7 +722,7 @@ def test_adc6_int(spi_lib6_int, visualize):
 
     adc = interface.get_component('ADC6int')
     interface.use_connected_spec(adc, 'analog', 'analog')
-    interface.synthesize(max_depth=4, library_max_redundancy=1, decompose=False, visualize=visualize)
+    interface.synthesize(max_depth=4, decompose=False, visualize=visualize)
 
 
 def test_adc6_int_sd(spi_lib6_int_sd, visualize):
@@ -736,7 +736,7 @@ def test_adc6_int_sd(spi_lib6_int_sd, visualize):
 
     adc = interface.get_component('ADC6int')
     interface.use_connected_spec(adc, 'analog', 'analog')
-    interface.synthesize(max_depth=4, library_max_redundancy=1, decompose=True, visualize=visualize)
+    interface.synthesize(max_depth=4, decompose=True, visualize=visualize)
 
 def test_adc8_int(spi_lib8_int, visualize):
     '''
@@ -749,7 +749,7 @@ def test_adc8_int(spi_lib8_int, visualize):
 
     adc = interface.get_component('ADC8int')
     interface.use_connected_spec(adc, 'analog', 'analog')
-    interface.synthesize(max_depth=4, library_max_redundancy=1, decompose=False, visualize=visualize)
+    interface.synthesize(max_depth=4, decompose=False, visualize=visualize)
 
 def test_adc7_int_sd(spi_lib7_int_sd, visualize):
     '''
@@ -762,7 +762,7 @@ def test_adc7_int_sd(spi_lib7_int_sd, visualize):
 
     adc = interface.get_component('ADC7int')
     interface.use_connected_spec(adc, 'analog', 'analog')
-    interface.synthesize(max_depth=4, library_max_redundancy=1, decompose=True, visualize=visualize)
+    interface.synthesize(max_depth=4, decompose=True, visualize=visualize)
 
 def test_adc8_int_sd(spi_lib8_int_sd, visualize):
     '''
@@ -775,4 +775,4 @@ def test_adc8_int_sd(spi_lib8_int_sd, visualize):
 
     adc = interface.get_component('ADC8int')
     interface.use_connected_spec(adc, 'analog', 'analog')
-    interface.synthesize(max_depth=4, library_max_redundancy=1, decompose=True, visualize=visualize)
+    interface.synthesize(max_depth=4, decompose=True, visualize=visualize)

@@ -3,7 +3,7 @@ import multiprocessing
 import pdb
 
 LOG = logging.getLogger('pyco')
-LOG.setLevel(logging.DEBUG)
+LOG.setLevel(logging.CRITICAL)
 
 ch = logging.StreamHandler()
 #ch.setLevel(logging.DEBUG)

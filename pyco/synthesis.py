@@ -140,6 +140,7 @@ class SynthesisInterface(object):
 
         # set os group to make sure we kill all the subprocesses on exit
         os.setpgrp()
+        LOG.critical(f"Lib Size {len(self.library.all_contracts)}")
 
         try:
             self.solver_interface.synthesize(self.spec_contract_list,

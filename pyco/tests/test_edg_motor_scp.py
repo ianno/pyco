@@ -170,7 +170,7 @@ def edg_mlib_easy(simple_mcu, small_mcu,  mcu, dcdc3, dcdc5, power_generator12, 
 
 @pytest.fixture
 def edg_mlib_med(small_mcu, dcdc3, dcdc5, power_generator12, power_generator5,
-             half_bridge0, half_bridge1, half_bridge2, library_redundancy):
+             half_bridge0, library_redundancy):
 
     '''
     returns a populated library
@@ -389,7 +389,7 @@ def test_ltl_spec(edg_mlib):
 
     interface.synthesize(limit=8)
 
-def test_ltl_spec_med(edg_mlib_med, min_comps, min_ports, library_redundancy, filename):
+def test_ltl_spec_med(edg_mlib_med, plain, filename, visualize):
     '''
     Simple test including spec with only 1 half bridge and higher redundancy
 
@@ -413,11 +413,10 @@ def test_ltl_spec_med(edg_mlib_med, min_comps, min_ports, library_redundancy, fi
     interface.distinct_ports_constraints([spec.o1, spec.o2, spec.o3])
 
 
-    interface.synthesize(limit=8, library_max_redundancy=library_redundancy,
-                         minimize_components=min_comps,
-                         minimize_ports=min_ports,
+    interface.synthesize(limit=8,
+                         decompose=(not plain),
                          filename=filename,
-                         visualize=False
+                         visualize=visualize
                          )
 
 def test_ltl_spec_single(edg_mlib_single):

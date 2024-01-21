@@ -131,13 +131,23 @@ class SCPExampleElemA(Contract):
     '''
     elem with param
     '''
-    INPUT_PORTS = [('i', BoolT)]
-    OUTPUT_PORTS = [('o', BoolT)]
+    INPUT_PORTS = [('x', BoolT)]
+    OUTPUT_PORTS = [('y', BoolT)]
     ASSUMPTIONS = '''true'''
-    GUARANTEES = ''' !o & G(i <-> Xo)
+    GUARANTEES = ''' !y & G(x <-> Xy)
                      '''
-    
+
 class SCPExampleElemB(Contract):
+    '''
+    elem with param
+    '''
+    INPUT_PORTS = [('v', BoolT)]
+    OUTPUT_PORTS = [('w', BoolT), ('z', BoolT)]
+    ASSUMPTIONS = '''true'''
+    GUARANTEES = ''' !w & G(v <-> Xw) & G(!z <-> w)
+                     '''
+
+class SCPExampleElemC(Contract):
     '''
     elem with param
     '''
@@ -155,5 +165,5 @@ class SCPExampleSpec(Contract):
     INPUT_PORTS = [('i', BoolT)]
     OUTPUT_PORTS = [('o', BoolT)]
     ASSUMPTIONS = '''true'''
-    GUARANTEES = ''' !o & X!o & G(i <-> X2o)
-                     '''
+    GUARANTEES = ''' !o & X!o & G(i <-> X2o)'''
+    # GUARANTEES = ''' G(i <-> X2o)'''

@@ -208,28 +208,52 @@ def SCPElemA():
 def SCPElemB():
     '''
     '''
-    comp = SCPExampleElemA('B')
+    comp = SCPExampleElemB('B')
     return LibraryComponent('B', comp)
 
 @pytest.fixture
-def lib_scp(SCPElemA, SCPElemB):
+def SCPElemC():
     '''
-    returns a populated library with only the AC generators
     '''
+    comp = SCPExampleElemC('C')
+    return LibraryComponent('C', comp)
+
+@pytest.fixture
+def lib_scp_minimal(SCPElemA, SCPElemB):
     library = ContractLibrary('lib_scp')
 
-    library.add(SCPElemA, 2)
+    library.add(SCPElemA)
     library.add(SCPElemB)
 
     library.verify_library()
 
     #add type compatibilities
     library.add_type(BoolT)
-    library.add_type(BoolT)
-
-    # library.add_type_compatibility(GeneratorT, ACGenContactorT)
 
     return library
+
+@pytest.fixture
+def lib_scp(lib_scp_minimal, SCPElemC):
+
+    lib_scp_minimal.add(SCPElemC)
+
+    lib_scp_minimal.verify_library()
+
+
+    return lib_scp_minimal
+
+def test_scp_minimal(lib_scp_minimal):
+    '''
+    Manual check
+    '''
+
+    spec1 = SCPExampleSpec('G1')
+
+    interface = SynthesisInterface(lib_scp_minimal, [spec1])
+
+    interface.synthesize(library_max_redundancy=1,
+                             visualize=True,
+                             decompose=False)
 
 def test_scp(lib_scp):
     '''
@@ -243,5 +267,6 @@ def test_scp(lib_scp):
     interface.synthesize(library_max_redundancy=1,
                              visualize=True,
                              decompose=False)
+
 # run with
 # pytest pyco/tests/test_experiments.py -s -k scp

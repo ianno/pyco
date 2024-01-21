@@ -143,14 +143,34 @@ class SimpleMCU(Contract):
 #                  '''
 
 #deterministic
+# class SmallMCU(Contract):
+#     '''
+#     MCU
+#     '''
+#     INPUT_PORTS = [('gnd', GND), ('vin', Voltage3V), ('i1', IOPin3)]
+#     OUTPUT_PORTS = [('o1', IOPin3), ('o2', IOPin3), ('o3', IOPin3),
+#                     ('o11', IOPin3), ('o12', IOPin3), ('o13', IOPin3),
+#                     ('o21', IOPin3), ('o22', IOPin3), ('o23', IOPin3)]
+#     ASSUMPTIONS = '!i1'
+#     GUARANTEES = '''o1 & !o2 & !o3 &
+#                     G( (i1 <-> X i1) -> ((X o1 <-> o1) & (X o2 <-> o2) & (X o3 <-> o3))) &
+#                     G( (o1 & !i1 & X i1) -> (X !o1 & X o2 & X !o3)) &
+#                     G( (o1 & !i1 & X !i1) -> (X o1 & X !o2 & X !o3)) &
+#                     G( (o1 & i1 & X !i1) -> (X o1 & X !o2 & X !o3)) &
+#                     G( (o2 & !i1 & X i1) -> (X !o1 & X !o2 & X o3)) &
+#                     G( (o2 & !i1 & X !i1) -> (X !o1 & X o2 & X !o3)) &
+#                     G( (o2 & i1 & X !i1) -> (X !o1 & X o2 & X !o3)) &
+#                     G( (o3 & !i1 & X i1) -> (X o1 & X !o2 & X !o3)) &
+#                     G( (o3 & !i1 & X !i1) -> (X !o1 & X !o2 & X o3)) &
+#                     G( (o3 & i1 & X !i1) -> (X !o1 & X !o2 & X o3)) &
+#                     G(! (o11 | o12 | o13 | o21 | o22 | o23))
+#                  '''
 class SmallMCU(Contract):
     '''
     MCU
     '''
     INPUT_PORTS = [('gnd', GND), ('vin', Voltage3V), ('i1', IOPin3)]
-    OUTPUT_PORTS = [('o1', IOPin3), ('o2', IOPin3), ('o3', IOPin3),
-                    ('o11', IOPin3), ('o12', IOPin3), ('o13', IOPin3),
-                    ('o21', IOPin3), ('o22', IOPin3), ('o23', IOPin3)]
+    OUTPUT_PORTS = [('o1', IOPin3), ('o2', IOPin3), ('o3', IOPin3)]
     ASSUMPTIONS = '!i1'
     GUARANTEES = '''o1 & !o2 & !o3 &
                     G( (i1 <-> X i1) -> ((X o1 <-> o1) & (X o2 <-> o2) & (X o3 <-> o3))) &
@@ -162,10 +182,8 @@ class SmallMCU(Contract):
                     G( (o2 & i1 & X !i1) -> (X !o1 & X o2 & X !o3)) &
                     G( (o3 & !i1 & X i1) -> (X o1 & X !o2 & X !o3)) &
                     G( (o3 & !i1 & X !i1) -> (X !o1 & X !o2 & X o3)) &
-                    G( (o3 & i1 & X !i1) -> (X !o1 & X !o2 & X o3)) &
-                    G(! (o11 | o12 | o13 | o21 | o22 | o23))
+                    G( (o3 & i1 & X !i1) -> (X !o1 & X !o2 & X o3))
                  '''
-
 
 class MCU(Contract):
     '''

@@ -51,7 +51,7 @@ def counterexample_analysis(spec_list, output_port_names, relevant_contracts, ma
 
     (composition, spec_contract, rel_spec_ports,
      ref_formulas, all_specs_formula, neg_formula,
-     preamble, left_sides,
+     preamble, guaranteed_if_used,
      var_map, lev_map, location_vars, location_map,
      parameters) = process_model(spec_list, output_port_names, relevant_contracts, manager)
 
@@ -63,7 +63,7 @@ def counterexample_analysis(spec_list, output_port_names, relevant_contracts, ma
     passed, candidate, var_assign, param_assign = exists_forall_learner(spec_contract, rel_spec_ports,
                                                           ref_formulas, all_specs_formula,
                                                           neg_formula,
-                                                          preamble, left_sides,
+                                                          preamble, guaranteed_if_used,
                                                         var_map, lev_map, input_variables,
                                                           location_vars, location_map,
                                                           terminate_evt, parameters, output_port_names,
@@ -461,8 +461,8 @@ def process_model(spec_list, output_port_names, relevant_contracts, manager):
 
     LOG.debug(component_map)
 
-    for c in list(component_map.values()):
-        formulas.append(Geq(c, Constant(-1)))
+    # for c in list(component_map.values()):
+    #     formulas.append(Geq(c, Constant(-1)))
 
     for port in var_map:
         p_map = []
@@ -477,7 +477,7 @@ def process_model(spec_list, output_port_names, relevant_contracts, manager):
             #disconnected
             if port.contract in relevant_contracts and port.contract not in always_use:
                 inner = Equivalence(location_vars[port], Constant(-1), merge_literals=False)
-                inner = Conjunction(inner, Leq(component_map[port.contract], Constant(-1), merge_literals=False), merge_literals=False)
+                inner = Conjunction(inner, Equivalence(component_map[port.contract], Constant(-1), merge_literals=False), merge_literals=False)
 
                 p_map.append(inner)
 
@@ -584,14 +584,17 @@ def process_model(spec_list, output_port_names, relevant_contracts, manager):
         preamble = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), formulas)
 
         guaranteed_if_used = Conjunction(guaranteed_if_used, composition.guarantee_formula, merge_literals=False)
+        specs_asmpt = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), [s.assume_formula for s in list(spec_dict.values())])
+        guaranteed_if_used = Conjunction(guaranteed_if_used, specs_asmpt, merge_literals=False)
 
     LOG.critical(guaranteed_if_used)
     LOG.critical(preamble)
     LOG.critical(no_conn)
     LOG.critical(all_cond)
 
-    no_conn = Conjunction(no_conn, all_cond, merge_literals=False)
-    preamble = Conjunction(preamble, no_conn, merge_literals=False)
+    #TODO: This might need to come back
+    # preamble = Conjunction(preamble, no_conn, merge_literals=False)
+    preamble = Conjunction(preamble, all_cond, merge_literals=False)
 
     balance_f = build_balance_constraints(manager.synthesis_interface.balance_max_types, relevant_contracts,
                                           location_vars, location_map)
@@ -612,7 +615,7 @@ def process_model(spec_list, output_port_names, relevant_contracts, manager):
     # neg_ca_check = Literal('a')
     # neg_ca_formula = DoubleImplication(neg_ca_formula, Globally(neg_ca_check), merge_literals=False)
     
-    LOG.debug(neg_formula)
+    LOG.critical(neg_formula)
     LOG.debug(all_specs_formula)
     # LOG.debug(pos_formula)
     LOG.debug(preamble)
@@ -690,26 +693,26 @@ def build_neg_formula_for_all_specs(spec_list, composition):
 
     return Negation(Conjunction(a_check, g_check, merge_literals=False))
 
-def _check_levels(in_p, out_p, lev_map, lev_vars):
-    '''
-    makes the nect function cleaner
-    :param in_p:
-    :param out_p:
-    :param lev_map:
-    :return:
-    '''
+# def _check_levels(in_p, out_p, lev_map, lev_vars):
+#     '''
+#     makes the nect function cleaner
+#     :param in_p:
+#     :param out_p:
+#     :param lev_map:
+#     :return:
+#     '''
 
-    if lev_map is None:
-        return True
+#     if lev_map is None:
+#         return True
 
-    if not (out_p in lev_map and in_p in lev_map):
-        return True
+#     if not (out_p in lev_map and in_p in lev_map):
+#         return True
 
-    if int(lev_vars[out_p.contract.unique_name]) < int(lev_vars[in_p.contract.unique_name]):
-        return True
+#     if int(lev_vars[out_p.contract.unique_name]) < int(lev_vars[in_p.contract.unique_name]):
+#         return True
 
 
-    return False
+#     return False
 
 # def get_all_candidates(trace, var_map, relevant_allspecs_ports, lev_map=None, current_pool=None, conjoin=False):
 #     ''' return a formula indicating all candidates from a trace'''
@@ -842,7 +845,7 @@ def build_smv_program(neg_autsign, neg_aut,
 
 def exists_forall_learner(spec_contract, rel_spec_ports,
                           ref_formulas, all_specs_formula, neg_formula, 
-                          preamble, left_sides, var_map, component_map, input_variables,
+                          preamble, guaranteed_if_used, var_map, component_map, input_variables,
                           location_vars, location_map, terminate_evt,
                           parameters, output_port_names, max_depth=None):
     """
@@ -926,7 +929,7 @@ def exists_forall_learner(spec_contract, rel_spec_ports,
             LOG.debug(preamble)
             LOG.debug(neg_formula)
 
-            left = Conjunction(preamble, left_sides, merge_literals=False)
+            left = Conjunction(preamble, guaranteed_if_used, merge_literals=False)
 
             if max_depth is not None:
                 left = Conjunction(depth_f, left, merge_literals=False)
@@ -958,8 +961,8 @@ def exists_forall_learner(spec_contract, rel_spec_ports,
                     no_repeat = TrueFormula()
 
                 left = no_repeat
-                if loc_c is not None:
-                    left = Conjunction(loc_c, left, merge_literals=False)
+                # if loc_c is not None:
+                #     left = Conjunction(loc_c, left, merge_literals=False)
 
                 left = left.generate(symbol_set=NusmvSymbolSet, ignore_precedence=True)
 
@@ -967,6 +970,8 @@ def exists_forall_learner(spec_contract, rel_spec_ports,
                 # the fact that we are not renaming left will make sure that the location variables are the same
                 # across all the smv modules. For instance, the formula (l_0 >= -1) -> (m_0.l_0 >= -2) is valid in
                 # Nuxmv 1.1.1.
+                # NB here we use a bunch of implications for deriving the synthesis constraint. It is actually equivalent
+                # to what we report in the paper (negation of conjunctions) because here we negate the right-hand side
                 base_spec_str = "(%s) -> (%s)" % (left, checks_str)
 
                 LOG.critical(left)

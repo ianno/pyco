@@ -21,6 +21,9 @@ RESULTS_FOLDER="results_scp23"
 EDG_MOTOR_TEST_16=false
 EDG_MOTOR_TEST_24=false
 EDG_MOTOR_TEST_32=false
+EDG_MOTOR_TEST_16_PLAIN=false
+EDG_MOTOR_TEST_24_PLAIN=false
+EDG_MOTOR_TEST_32_PLAIN=false
 EPS_TEST_20=false
 EPS_TEST_40=false
 EPS_TEST_20_PLAIN=false
@@ -31,8 +34,8 @@ SPI_SD=true
 
 IS_CONCURRENT=false
 
-START=32
-REPS=32
+START=1
+REPS=30
 
 EPS_SPEC_INIT=9
 EPS_SPEC_STOP=9
@@ -48,7 +51,7 @@ mkdir -p $RESULTS_FOLDER
 if $SPI_PLAIN_ADC5
 then
   rm -f $RESULTS_FOLDER/scp_test_adc_int_5
-  eval "(date; py.test --timeout=1000 -s pyco/tests/test_spi_scp.py::test_adc5_int) >> $RESULTS_FOLDER/scp_test_adc_int_5 2>&1" $AMP
+  eval "(date; py.test --nograph --timeout=1000 -s pyco/tests/test_spi_scp.py::test_adc5_int) >> $RESULTS_FOLDER/scp_test_adc_int_5 2>&1" $AMP
 fi
 
 if $SPI_PLAIN || $SPI_SD
@@ -76,24 +79,47 @@ then
    done
 fi
 
-if $EDG_MOTOR_TEST
+if $EDG_MOTOR_TEST_16 || $EDG_MOTOR_TEST_24 || $EDG_MOTOR_TEST_32
 then
   for (( i=$START; i<=$REPS; i++ ))
   do
     if $EDG_MOTOR_TEST_16
     then
       rm -f $RESULTS_FOLDER/scp_test_edg_motor_lib16_${i}
-      eval "(date; py.test --lib2 --timeout=1000 -s pyco/tests/test_edg_motor_scp.py::test_ltl_spec_med) >> $RESULTS_FOLDER/scp_test_edg_motor_lib16_${i} 2>&1" $AMP
+      eval "(date; py.test --nograph --lib2 --timeout=1000 -s pyco/tests/test_edg_motor_scp.py::test_ltl_spec_med) >> $RESULTS_FOLDER/scp_test_edg_motor_lib16_${i} 2>&1" $AMP
     fi
     if $EDG_MOTOR_TEST_24
     then
       rm -f $RESULTS_FOLDER/scp_test_edg_motor_lib24_${i}
-      eval "py.test --lib3 --timeout=1000 -s pyco/tests/test_edg_motor_scp.py::test_ltl_spec_med) >> $RESULTS_FOLDER/scp_test_edg_motor_lib24_${i} 2>&1" $AMP
+      eval "(date; py.test --nograph --lib3 --timeout=1000 -s pyco/tests/test_edg_motor_scp.py::test_ltl_spec_med) >> $RESULTS_FOLDER/scp_test_edg_motor_lib24_${i} 2>&1" $AMP
     fi
     if $EDG_MOTOR_TEST_32
     then
       rm -f $RESULTS_FOLDER/scp_test_edg_motor_lib32_${i}
-      eval "(date; py.test --lib4 --timeout=1000 -s pyco/tests/test_edg_motor_scp.py::test_ltl_spec_med) >> $RESULTS_FOLDER/scp_test_edg_motor_lib32_${i} 2>&1" $AMP
+      eval "(date; py.test --nograph --lib4 --timeout=1000 -s pyco/tests/test_edg_motor_scp.py::test_ltl_spec_med) >> $RESULTS_FOLDER/scp_test_edg_motor_lib32_${i} 2>&1" $AMP
+    fi
+
+   done
+fi
+
+if $EDG_MOTOR_TEST_16_PLAIN || $EDG_MOTOR_TEST_24_PLAIN || $EDG_MOTOR_TEST_32_PLAIN
+then
+  for (( i=$START; i<=$REPS; i++ ))
+  do
+    if $EDG_MOTOR_TEST_16_PLAIN
+    then
+      rm -f $RESULTS_FOLDER/scp_test_edg_motor_plain_lib16_${i}
+      eval "(date; py.test --nograph --lib2 --plain --timeout=1000 -s pyco/tests/test_edg_motor_scp.py::test_ltl_spec_med) >> $RESULTS_FOLDER/scp_test_edg_motor_plain_lib16_${i} 2>&1" $AMP
+    fi
+    if $EDG_MOTOR_TEST_24_PLAIN
+    then
+      rm -f $RESULTS_FOLDER/scp_test_edg_motor_plain_lib24_${i}
+      eval "(date; py.test --nograph --lib3 --plain --timeout=1000 -s pyco/tests/test_edg_motor_scp.py::test_ltl_spec_med) >> $RESULTS_FOLDER/scp_test_edg_motor_plain_lib24_${i} 2>&1" $AMP
+    fi
+    if $EDG_MOTOR_TEST_32_PLAIN
+    then
+      rm -f $RESULTS_FOLDER/scp_test_edg_motor_plain_lib32_${i}
+      eval "(date; py.test --nograph --lib4 --plain --timeout=1000 -s pyco/tests/test_edg_motor_scp.py::test_ltl_spec_med) >> $RESULTS_FOLDER/scp_test_edg_motor_plain_lib32_${i} 2>&1" $AMP
     fi
 
    done

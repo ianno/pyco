@@ -514,7 +514,7 @@ def process_model(spec_list, output_port_names, relevant_contracts, manager):
                         inner2 = Conjunction(inner2, Geq(component_map[p.contract], Constant(0)))
 
                     location_space = Conjunction(inner, inner2, merge_literals=False)
-                    LOG.critical(location_space)
+                    LOG.info(location_space)
                     p_map.append(location_space)
 
             if len(p_map) > 0:
@@ -587,10 +587,10 @@ def process_model(spec_list, output_port_names, relevant_contracts, manager):
         specs_asmpt = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), [s.assume_formula for s in list(spec_dict.values())])
         guaranteed_if_used = Conjunction(guaranteed_if_used, specs_asmpt, merge_literals=False)
 
-    LOG.critical(guaranteed_if_used)
-    LOG.critical(preamble)
-    LOG.critical(no_conn)
-    LOG.critical(all_cond)
+    LOG.info(guaranteed_if_used)
+    LOG.info(preamble)
+    LOG.info(no_conn)
+    LOG.info(all_cond)
 
     #TODO: This might need to come back
     # preamble = Conjunction(preamble, no_conn, merge_literals=False)
@@ -615,7 +615,7 @@ def process_model(spec_list, output_port_names, relevant_contracts, manager):
     # neg_ca_check = Literal('a')
     # neg_ca_formula = DoubleImplication(neg_ca_formula, Globally(neg_ca_check), merge_literals=False)
     
-    LOG.critical(neg_formula)
+    LOG.info(neg_formula)
     LOG.debug(all_specs_formula)
     # LOG.debug(pos_formula)
     LOG.debug(preamble)
@@ -937,7 +937,7 @@ def exists_forall_learner(spec_contract, rel_spec_ports,
 
             all_f = Implication(left, neg_formula, merge_literals=False)
 
-            LOG.critical(all_f)
+            LOG.info(all_f)
             autsign, aut = build_smv_module(all_f, list(location_vars.values()) + list(component_map.values()) + param_list,
                                             prefix='0')
 
@@ -974,17 +974,17 @@ def exists_forall_learner(spec_contract, rel_spec_ports,
                 # to what we report in the paper (negation of conjunctions) because here we negate the right-hand side
                 base_spec_str = "(%s) -> (%s)" % (left, checks_str)
 
-                LOG.critical(left)
-                LOG.critical(checks_str)
-                LOG.critical(base_spec_str)
+                LOG.info(left)
+                LOG.info(checks_str)
+                LOG.info(base_spec_str)
 
                 smv = build_smv_program(autsign, aut, list(location_vars.values()) + list(component_map.values()) + param_list,
                                         list(spec_instance_dict.keys()), base_spec_str, all_cex_modules, all_cex_names)
 
-                LOG.critical(smv)
+                LOG.info(smv)
                 
                 l_passed, ntrace = verify_tautology_smv(smv, return_trace=True)
-                LOG.critical(ntrace)
+                LOG.info(ntrace)
                 if l_passed:
                     # LOG.debug(smv)
                     # LOG.debug(cex)
@@ -997,13 +997,13 @@ def exists_forall_learner(spec_contract, rel_spec_ports,
                 all_locs = trace_analysis_for_loc(ntrace, list(location_vars.values()))
                 uses = trace_analysis_for_loc(ntrace, list(component_map.values()))
                 param_assign = trace_analysis_for_loc(ntrace, param_list)
-                LOG.critical(uses)
-                LOG.critical(all_locs)
-                LOG.critical(param_assign)
+                LOG.info(uses)
+                LOG.info(all_locs)
+                LOG.info(param_assign)
 
                 locs, used_contracts = detect_reject_list(all_locs, location_vars, location_map,
                                           set(spec_contract.output_ports_dict.values()) & rel_spec_ports)
-                LOG.critical(locs)
+                LOG.info(locs)
 
                 LOG.debug(location_map)
 
@@ -1045,22 +1045,22 @@ def exists_forall_learner(spec_contract, rel_spec_ports,
                 conn = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), constr)
                 lconn = reduce(lambda x,y: Conjunction(x, y, merge_literals=False), lconstr)
                 just_conn = conn
-                LOG.critical(used_f)
-                LOG.critical(just_conn)
-                LOG.critical(lconn)
+                LOG.info(used_f)
+                LOG.info(just_conn)
+                LOG.info(lconn)
 
                 #new cex
                 left = Conjunction(used_f, conn, merge_literals=False)
-                LOG.critical(left)
+                LOG.info(left)
                 # LOG.debug(conn)
-                LOG.critical(all_specs_formula)
+                LOG.info(all_specs_formula)
 
                 # print_model(locs, param_assign, inverse_location_vars, location_map, spec_contract, relevant_contracts, manager)
 
                 passed, trace = verify_candidate(left, all_specs_formula)
 
                 if not passed:
-                    LOG.critical(trace)
+                    LOG.info(trace)
                     # LOG.debug(input_variables)
                     # get counterexample for inputs
                     cex, _ = derive_valuation_from_trace(trace, input_variables, max_horizon=NUXMV_BOUND*1.5)
@@ -1068,7 +1068,7 @@ def exists_forall_learner(spec_contract, rel_spec_ports,
 
                     # LOG.debug(trace)
                     # LOG.debug(cex_mod)
-                    LOG.critical(cex)
+                    LOG.info(cex)
                     # LOG.debug(fullcex)
                     #LOG.debug(full_in_cex)
 
@@ -1133,19 +1133,19 @@ def exists_forall_learner(spec_contract, rel_spec_ports,
                                 cex_name = Literal('cex_inst').unique_name
                                 cex_mod = build_module_from_trace(trace, input_variables, cex_name)
 
-                                LOG.critical(cex_mod)
+                                LOG.info(cex_mod)
                                 all_cex_modules += cex_mod
                                 all_cex_names.add(cex_name)
                         else:
                             LOG.debug('Spurious CEX')
                             LOG.debug(cex)
 
-                    LOG.critical(lconn)
+                    LOG.info(lconn)
                     if all_candidates is None:
                         all_candidates = lconn
                     else:
                         all_candidates = Disjunction(all_candidates, lconn, merge_literals=False)
-                    LOG.critical(all_candidates)
+                    LOG.info(all_candidates)
 
                 else:
                     left = Conjunction(used_f, just_conn, merge_literals=False)

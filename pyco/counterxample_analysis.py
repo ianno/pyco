@@ -100,12 +100,6 @@ def counterexample_analysis(spec_list, output_port_names, relevant_contracts, ma
     LOG.debug(candidate)
     LOG.debug(param_assign)
 
-    # if passed:
-    #     LOG.debug('done')
-    #     result_queue.put((pid, frozenset(var_assign.items()), frozenset(param_assign.items())))
-    #     found_event.set()
-    #     terminate_evt.set()
-
     return var_assign, param_assign
 
 
@@ -600,20 +594,6 @@ def process_model(spec_list, output_port_names, relevant_contracts, manager):
                                           location_vars, location_map)
     if balance_f is not None:
         preamble = Conjunction(preamble, balance_f, merge_literals=False)
-
-    # neg_check = Literal('n')
-
-    # pos_left = Conjunction(preamble, composition.assume_formula, merge_literals=False)
-    # pos_formula = Implication(pos_left, composition.guarantee_formula, merge_literals=False)
-
-    # pos_check = Literal('p')
-    # pos_formula = Implication(pos_formula, Globally(pos_check), merge_literals=False)
-
-
-    # neg_ca_formula = Implication(preamble, Negation(composition.assume_formula), merge_literals=False)
-
-    # neg_ca_check = Literal('a')
-    # neg_ca_formula = DoubleImplication(neg_ca_formula, Globally(neg_ca_check), merge_literals=False)
     
     LOG.info(neg_formula)
     LOG.debug(all_specs_formula)
@@ -692,111 +672,6 @@ def build_neg_formula_for_all_specs(spec_list, composition):
     a_check = composition.assume_formula
 
     return Negation(Conjunction(a_check, g_check, merge_literals=False))
-
-# def _check_levels(in_p, out_p, lev_map, lev_vars):
-#     '''
-#     makes the nect function cleaner
-#     :param in_p:
-#     :param out_p:
-#     :param lev_map:
-#     :return:
-#     '''
-
-#     if lev_map is None:
-#         return True
-
-#     if not (out_p in lev_map and in_p in lev_map):
-#         return True
-
-#     if int(lev_vars[out_p.contract.unique_name]) < int(lev_vars[in_p.contract.unique_name]):
-#         return True
-
-
-#     return False
-
-# def get_all_candidates(trace, var_map, relevant_allspecs_ports, lev_map=None, current_pool=None, conjoin=False):
-#     ''' return a formula indicating all candidates from a trace'''
-#     var_assign, lev_vars = trace_analysis(trace, var_map, lev_map)
-#     #LOG.debug(var_assign)
-#     v_assign = []
-
-#     num = 1
-#     candidate_connection = None
-#     te_be_removed = set()
-
-#     for p in var_assign:
-#         p_opt = []
-
-#         if current_pool is not None and p not in current_pool:
-#             te_be_removed.add(p)
-#             continue
-
-#         if p not in p.contract.relevant_ports | relevant_allspecs_ports:
-#             continue
-
-#         num = num * len(var_assign[p])
-#         inner_remove = set()
-#         for v_p in var_assign[p]:
-#             if current_pool is not None and v_p not in current_pool[p]:
-#                 #remove
-#                 # TODO: this is wrong, it doesn't have to divide now, but just remove one
-#                 num = num / len(var_assign[p])
-#                 inner_remove.add(v_p)
-#                 continue
-#             if not _check_levels(p, v_p, lev_map, lev_vars):
-#                 continue
-
-#             if v_p not in v_p.contract.relevant_ports | relevant_allspecs_ports:
-#                 continue
-
-#             p_opt.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
-
-#         if len(p_opt) > 0:
-#             if conjoin:
-#                 temp = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), p_opt)
-#             else:
-#                 temp = reduce(lambda x, y: Disjunction(x, y, merge_literals=False), p_opt)
-#             v_assign.append(temp)
-
-#         for x in inner_remove:
-#             var_assign[p].remove(x)
-#     if len(v_assign) > 0:
-#         candidate_connection = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), v_assign)
-
-#     for x in te_be_removed:
-#         var_assign.pop(x)
-
-#     return candidate_connection, var_assign, num
-
-# def pick_one_candidate(trace, var_map, relevant_allspecs_ports, manager, lev_map=None, current_pool=None):
-#     ''' return a formula indicating all candidates from a trace'''
-#     var_assign, lev_vars = trace_analysis(trace, var_map, lev_map)
-
-#     v_assign = []
-#     candidate_connection = None
-#     new_var_assign = {}
-
-#     for p in var_assign:
-
-#         if p not in p.contract.relevant_ports | relevant_allspecs_ports:
-#             continue
-
-#         for v_p in var_assign[p]:
-
-#             if not _check_levels(p, v_p, lev_map, lev_vars):
-#                 continue
-
-#             if v_p not in v_p.contract.relevant_ports | relevant_allspecs_ports:
-#                 continue
-
-#             v_assign.append(Globally(Equivalence(p.literal, v_p.literal, merge_literals=False)))
-#             new_var_assign[p.unique_name] = v_p.unique_name
-#             break
-
-#     if len(v_assign) > 0:
-#         candidate_connection = reduce(lambda x, y: Conjunction(x, y, merge_literals=False), v_assign)
-
-#     return candidate_connection, new_var_assign
 
 def build_smv_module(module_formula, parameters, prefix=None, include_formula=TrueFormula()):
     '''
@@ -1234,29 +1109,6 @@ def verify_candidate(candidate, spec, no_loop=False):
                                        return_trace=True)
 
     return l_passed, trace
-
-
-# def assemble_checked_vars(trace_diff, monitored_vars, checked_vars):
-#     """
-#     Take the trace diff from trace_analysis and updates the checked_vars dict
-#     :param trace_diff:
-#     :param connected_contracts:
-#     :param checked_vars:
-#     :return:
-#     """
-
-#     # LOG.debug(checked_vars)
-#     for p in monitored_vars:
-
-#         lev, orig_p = monitored_vars[p]['orig']
-
-#         for v_p in trace_diff[p]:
-#             _, old_v_p = monitored_vars[p]['ports'][v_p]
-#             checked_vars[(lev, orig_p)].add(old_v_p.base_name)
-
-#     # LOG.debug(checked_vars)
-#     return checked_vars
-
 
 def print_model(locs, param_assign, inverse_location_vars, location_map, spec_contract, relevant_contracts, manager):
     '''

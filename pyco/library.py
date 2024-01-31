@@ -12,7 +12,6 @@ from pyco.contract import (RefinementMapping, PortMappingError, PortMapping,
                            CompositionMapping, NotARefinementError, BaseTypeBool, BaseTypeInt,
                             BaseTypeFloat, NotATypeError, ParameterInt, NotDeterministicError)
 from pyco import LOG
-from pyco.solver_interface import SMTManager
 from functools import reduce
 
 LOG.debug('in library')
@@ -51,7 +50,6 @@ class ContractLibrary(object):
         self.context = context
         self.name_attribute = Attribute(base_name, context)
 
-        self.smt_manager = SMTManager(self)
         self.distinct_ports_set = set()
 
     @property
@@ -152,14 +150,10 @@ class ContractLibrary(object):
             self.components[library_component] = []
             self.contract_map[library_component.contract.base_name] = library_component
             library_component.register_to_library(self)
-            library_component.assign_to_solver(self.smt_manager)
             self.hierarchy[library_component.contract.base_name] = 0
 
 
         for i in range(number_of_instances):
-            #num_elem = len(self.components[library_component])
-            #name = '%s_%d' % (library_component.base_name, num_elem)
-            #copied_comp = library_component.contract.copy(name)
             ccopy = library_component.contract.copy()
             self.components[library_component].append(ccopy)
             for (p1, p2) in library_component.distinct_set:
@@ -167,8 +161,6 @@ class ContractLibrary(object):
                                             ccopy.ports_dict[p2.base_name]))
 
 
-            # if name in self.component_map:
-            #     raise DuplicateNameError(name)
 
 
     def contract_with_siblings(self, contract):
@@ -594,22 +586,10 @@ class LibraryComponent(object):
 
         self.name_attribute = Attribute(base_name, self.context)
 
-        self.smt_model = None
-
         if verify and not self.contract.is_compatible():
             raise ContractAssignmentError('%s INCOMPATIBLE' % self.contract)
         if verify and not self.contract.is_consistent():
             raise ContractAssignmentError('%s INCONSISTENT' % self.contract)
-
-    def assign_to_solver(self, smt_manager):
-        '''
-        Registers component information to solver
-        '''
-        smt_manager.register_component(self)
-        #self.smt_model = smt_manager.get_component_model(self)
-
-        self.contract.assign_to_solver(smt_manager)
-
 
     @property
     def base_name(self):

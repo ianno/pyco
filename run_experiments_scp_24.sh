@@ -16,7 +16,7 @@ export PYTHONUNBUFFERED=1
 # library.verify_determinism(stop_if_fails=True)
 # was commented out, meaning that the check was not repeated for each experiment
 
-RESULTS_FOLDER="results_scp23"
+RESULTS_FOLDER="results_scp24"
 
 EDG_MOTOR_TEST_16=false
 EDG_MOTOR_TEST_24=false

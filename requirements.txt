@@ -1,6 +1,4 @@
 graphviz==0.20.1
-ply==3.11
-py==1.11.0
--e git+git@github.com:ianno/pycolite-dev.git@e4674604fb09cf70f543f0538f405384216d7b0e#egg=pycolite
+pycolite.egg==info
 pytest==7.4.3
-pytest-timeout==1.2.0           
+setuptools==68.2.2

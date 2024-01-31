@@ -58,7 +58,7 @@ def test_contract_contruction(inst_contract):
     Test the new style contructor
     '''
 
-    print inst_contract
+    print(inst_contract)
     assert True
 
 def test_contract_compatibility(inst_contract):
@@ -70,7 +70,7 @@ def test_contract_compatibility(inst_contract):
     elif type(inst_contract) is FalseContract:
         assert inst_contract.is_compatible()
     else:
-        print inst_contract.is_compatible()
+        print(inst_contract.is_compatible())
         assert True
 
 def test_contract_consistency(inst_contract):
@@ -82,6 +82,6 @@ def test_contract_consistency(inst_contract):
     elif inst_contract is FalseContract:
         assert not inst_contract.is_consistent()
     else:
-        print inst_contract.is_consistent()
+        print(inst_contract.is_consistent())
         assert True
 

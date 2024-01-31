@@ -51,7 +51,7 @@ def test_c():
     s = Sr('Sr')
 
     clusters = decompose_spec([s])
-    print clusters
+    print(clusters)
     assert len(clusters) == 2
 
 def test_d():
@@ -59,7 +59,7 @@ def test_d():
     s = Sd('Sd')
 
     clusters = decompose_spec([s])
-    print clusters
+    print(clusters)
     assert len(clusters) == 2
 
 
@@ -68,7 +68,7 @@ def test_sound0():
     s = Sound0('Sound0')
 
     clusters = decompose_spec([s])
-    print clusters
+    print(clusters)
     assert len(clusters) == 1
 
 def test_sound1():
@@ -76,5 +76,5 @@ def test_sound1():
     s = Sound1('Sound1')
 
     clusters = decompose_spec([s])
-    print clusters
+    print(clusters)
     assert len(clusters) == 2

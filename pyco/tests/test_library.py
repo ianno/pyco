@@ -116,8 +116,8 @@ def test_library_add(library_component, library):
     Test construction of a library woth only a single component
     '''
 
-    print 'test library c'
-    print library_component
+    print('test library c')
+    print(library_component)
 
     library.add(library_component)
     assert True

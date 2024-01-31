@@ -54,6 +54,10 @@ python design_example.py
 After synthesis, the tool generates a PDF file with the solution representation, and a text file with extension `.pyco`,
 containing the same information in ASCII friendly format.
 
+### SCP 24
+If you are looking for the code used for our SCP submission, look [here](https://github.com/ianno/pyco/tree/scp24). A reproducibility package is being built but that brunch contains code and data, and that should be sufficient by itself.
+That code in that branch is substantially different than the rest of this repo, and some commands referenced in this README might not work.
+
 ### FACS 2016
 This work has been developed as a supporting tool for a work presented at [Formal Aspects of Component Software - The 13th International Conference, Besançon, France - FACS 2016](http://events.femto-st.fr/facs2016/).
 

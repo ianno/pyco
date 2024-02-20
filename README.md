@@ -55,7 +55,7 @@ After synthesis, the tool generates a PDF file with the solution representation,
 containing the same information in ASCII friendly format.
 
 ### SCP 24
-If you are looking for the code used for our SCP submission, look [here](https://github.com/ianno/pyco/tree/scp24). That branch contains code and data generated from the experiments, and that should be sufficient to reproduce all the results of the paper.
+If you are looking for the code used for our SCP submission, look [at this branch](https://github.com/ianno/pyco/tree/scp24) (or this [pre-release](https://github.com/ianno/pyco/releases/tag/SCP24)). That branch contains code and data generated from the experiments, and that should be sufficient to reproduce all the results of the paper.
 That branch is substantially different than the rest of this repo, and some commands referenced in this README might not work.
 
 ### FACS 2016
